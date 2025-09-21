@@ -83,12 +83,33 @@
       "identity": null
     },
     "win": {
-      "target": "nsis",
-      "icon": "assets/icons/app-icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "msi",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icons/app-icon.ico",
+      "artifactName": "DeskMaster-${version}-${arch}.${ext}"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "assets/icons/app-icon-512.png"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icons/app-icon-512.png",
+      "artifactName": "DeskMaster-${version}-${arch}.${ext}",
+      "category": "Utility"
     }
   }
 }

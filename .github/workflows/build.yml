@@ -1,0 +1,192 @@
+name: Build and Release DeskMaster
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v2.0.0)'
+        required: true
+        default: 'v2.0.0'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # macOS builds
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+            artifact: DeskMaster-${{ github.event.inputs.version || github.ref_name }}-arm64.dmg
+          - os: macos-latest
+            platform: mac
+            arch: x64
+            artifact: DeskMaster-${{ github.event.inputs.version || github.ref_name }}-x64.dmg
+          # Windows builds
+          - os: windows-latest
+            platform: win
+            arch: x64
+            artifact: DeskMaster-${{ github.event.inputs.version || github.ref_name }}-x64.exe
+          - os: windows-latest
+            platform: win
+            arch: x64
+            artifact: DeskMaster-${{ github.event.inputs.version || github.ref_name }}-x64.msi
+          # Linux builds
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            artifact: DeskMaster-${{ github.event.inputs.version || github.ref_name }}-x64.AppImage
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            artifact: DeskMaster-${{ github.event.inputs.version || github.ref_name }}-x64.deb
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build React applications
+        run: npm run build-app
+
+      - name: Build for macOS (Apple Silicon)
+        if: matrix.platform == 'mac' && matrix.arch == 'arm64'
+        run: npx electron-builder --mac --arm64 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build for macOS (Intel)
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        run: npx electron-builder --mac --x64 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build for Windows (EXE)
+        if: matrix.platform == 'win' && matrix.artifact == '*.exe'
+        run: npx electron-builder --win --x64 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build for Windows (MSI)
+        if: matrix.platform == 'win' && matrix.artifact == '*.msi'
+        run: npx electron-builder --win --x64 --publish=never --config.win.target=msi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build for Linux (AppImage)
+        if: matrix.platform == 'linux' && matrix.artifact == '*.AppImage'
+        run: npx electron-builder --linux --x64 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build for Linux (DEB)
+        if: matrix.platform == 'linux' && matrix.artifact == '*.deb'
+        run: npx electron-builder --linux --x64 --publish=never --config.linux.target=deb
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS artifacts
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}-${{ github.event.inputs.version || github.ref_name }}
+          path: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+          retention-days: 30
+
+      - name: Upload Windows artifacts
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}-${{ github.event.inputs.version || github.ref_name }}
+          path: |
+            dist/*.exe
+            dist/*.msi
+            dist/*.exe.blockmap
+            dist/*.msi.blockmap
+          retention-days: 30
+
+      - name: Upload Linux artifacts
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}-${{ github.event.inputs.version || github.ref_name }}
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.AppImage.blockmap
+            dist/*.deb.blockmap
+          retention-days: 30
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          name: DeskMaster ${{ github.event.inputs.version || github.ref_name }}
+          body: |
+            ## DeskMaster ${{ github.event.inputs.version || github.ref_name }}
+            
+            ### 🚀 What's New
+            - Desktop productivity tool with system monitoring
+            - World clocks with multiple timezone support
+            - Real-time system statistics in tray
+            - Modern React + Tailwind CSS interface
+            
+            ### 📦 Downloads
+            
+            #### macOS
+            - **Apple Silicon (M1/M2/M3)**: `DeskMaster-*-arm64.dmg`
+            - **Intel Mac**: `DeskMaster-*-x64.dmg`
+            
+            #### Windows
+            - **Installer**: `DeskMaster-*-x64.exe`
+            - **MSI Package**: `DeskMaster-*-x64.msi`
+            
+            #### Linux
+            - **AppImage**: `DeskMaster-*-x64.AppImage`
+            - **Debian Package**: `DeskMaster-*-x64.deb`
+            
+            ### 🔧 Installation
+            1. Download the appropriate file for your platform
+            2. Follow the installation instructions for your OS
+            3. Launch DeskMaster and enjoy!
+            
+            ### 🐛 Issues
+            Report issues at: https://github.com/bewithdhanu/deskmaster/issues
+          files: |
+            artifacts/*/dist/*.dmg
+            artifacts/*/dist/*.exe
+            artifacts/*/dist/*.msi
+            artifacts/*/dist/*.AppImage
+            artifacts/*/dist/*.deb
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

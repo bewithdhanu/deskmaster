@@ -1,0 +1,178 @@
+name: Release DeskMaster
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v2.0.0)'
+        required: true
+        default: 'v2.0.0'
+
+jobs:
+  build-all:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build React applications
+        run: npm run build-app
+
+      - name: Build macOS (Apple Silicon + Intel)
+        if: matrix.os == 'macos-latest'
+        run: |
+          npx electron-builder --mac --arm64 --publish=never
+          npx electron-builder --mac --x64 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Windows (EXE + MSI)
+        if: matrix.os == 'windows-latest'
+        run: |
+          npx electron-builder --win --x64 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Linux (AppImage + DEB)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npx electron-builder --linux --x64 --publish=never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS artifacts
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-builds-${{ github.event.inputs.version || github.ref_name }}
+          path: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+          retention-days: 30
+
+      - name: Upload Windows artifacts
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds-${{ github.event.inputs.version || github.ref_name }}
+          path: |
+            dist/*.exe
+            dist/*.msi
+            dist/*.exe.blockmap
+            dist/*.msi.blockmap
+          retention-days: 30
+
+      - name: Upload Linux artifacts
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds-${{ github.event.inputs.version || github.ref_name }}
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.AppImage.blockmap
+            dist/*.deb.blockmap
+          retention-days: 30
+
+  create-release:
+    needs: build-all
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          name: DeskMaster ${{ github.event.inputs.version || github.ref_name }}
+          body: |
+            ## 🚀 DeskMaster ${{ github.event.inputs.version || github.ref_name }}
+            
+            ### ✨ Features
+            - **System Monitoring**: Real-time CPU, RAM, disk, and network statistics
+            - **World Clocks**: Multiple timezone support with moment.js
+            - **Tray Integration**: Live stats in system tray
+            - **Modern UI**: Built with React + Tailwind CSS
+            - **Cross-Platform**: Native performance on all platforms
+            
+            ### 📦 Downloads
+            
+            #### 🍎 macOS
+            - **Apple Silicon (M1/M2/M3)**: `DeskMaster-*-arm64.dmg` (182MB)
+            - **Intel Mac**: `DeskMaster-*-x64.dmg` (555MB)
+            
+            #### 🪟 Windows
+            - **Installer**: `DeskMaster-*-x64.exe` - Standard Windows installer
+            - **MSI Package**: `DeskMaster-*-x64.msi` - Enterprise deployment
+            
+            #### 🐧 Linux
+            - **AppImage**: `DeskMaster-*-x64.AppImage` - Portable, no installation required
+            - **Debian Package**: `DeskMaster-*-x64.deb` - For Ubuntu/Debian systems
+            
+            ### 🔧 Installation Instructions
+            
+            **macOS:**
+            1. Download the appropriate DMG for your Mac (ARM64 for M1/M2/M3, x64 for Intel)
+            2. Double-click to mount the DMG
+            3. Drag DeskMaster to Applications folder
+            4. Launch from Applications or Spotlight
+            
+            **Windows:**
+            1. Download either EXE or MSI file
+            2. Run the installer and follow the setup wizard
+            3. DeskMaster will be available in Start Menu
+            
+            **Linux:**
+            1. **AppImage**: Download, make executable (`chmod +x`), and run
+            2. **DEB**: Install with `sudo dpkg -i DeskMaster-*.deb`
+            
+            ### 🎯 What's New
+            - Beautiful new logo and branding
+            - Improved timezone handling with moment.js
+            - Enhanced tray icon with dynamic resizing
+            - Better window management and focus handling
+            - Cross-platform compatibility improvements
+            
+            ### 🐛 Bug Reports & Feature Requests
+            - **Issues**: [GitHub Issues](https://github.com/bewithdhanu/deskmaster/issues)
+            - **Repository**: [DeskMaster on GitHub](https://github.com/bewithdhanu/deskmaster)
+            
+            ### 📄 License
+            MIT License - Free for personal and commercial use
+            
+            ---
+            *Built with ❤️ using Electron, React, and Tailwind CSS*
+          files: |
+            artifacts/*/dist/*.dmg
+            artifacts/*/dist/*.exe
+            artifacts/*/dist/*.msi
+            artifacts/*/dist/*.AppImage
+            artifacts/*/dist/*.deb
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

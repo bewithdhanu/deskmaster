@@ -1,0 +1,84 @@
+name: CI - Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint || echo "No lint script found, skipping..."
+
+      - name: Build React applications
+        run: npm run build-app
+
+      - name: Test build
+        run: |
+          echo "✅ React build completed successfully"
+          echo "📁 Built files:"
+          ls -la dist/
+
+  build-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+        
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build React applications
+        run: npm run build-app
+
+      - name: Test macOS build
+        if: matrix.os == 'macos-latest'
+        run: |
+          npx electron-builder --mac --arm64 --publish=never --dir
+          echo "✅ macOS build test completed"
+
+      - name: Test Windows build
+        if: matrix.os == 'windows-latest'
+        run: |
+          npx electron-builder --win --x64 --publish=never --dir
+          echo "✅ Windows build test completed"
+
+      - name: Test Linux build
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npx electron-builder --linux --x64 --publish=never --dir
+          echo "✅ Linux build test completed"
+
+      - name: Upload build artifacts for testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-test-${{ matrix.os }}-${{ github.sha }}
+          path: |
+            dist/
+          retention-days: 7

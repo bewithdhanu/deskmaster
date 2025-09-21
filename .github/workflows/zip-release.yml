@@ -1,0 +1,151 @@
+name: Create ZIP Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v2.0.0)'
+        required: true
+        default: 'v2.0.0'
+      create_zip:
+        description: 'Create ZIP files for portable distribution'
+        type: boolean
+        default: true
+
+jobs:
+  create-zip:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build React applications
+        run: npm run build-app
+
+      - name: Build macOS (Apple Silicon + Intel)
+        if: matrix.os == 'macos-latest'
+        run: |
+          npx electron-builder --mac --arm64 --publish=never --dir
+          npx electron-builder --mac --x64 --publish=never --dir
+
+      - name: Build Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          npx electron-builder --win --x64 --publish=never --dir
+
+      - name: Build Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npx electron-builder --linux --x64 --publish=never --dir
+
+      - name: Create ZIP for macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd dist
+          # Create ZIP for Apple Silicon
+          if [ -d "mac-arm64" ]; then
+            zip -r "DeskMaster-${{ github.event.inputs.version }}-macOS-AppleSilicon.zip" mac-arm64/
+          fi
+          # Create ZIP for Intel
+          if [ -d "mac" ]; then
+            zip -r "DeskMaster-${{ github.event.inputs.version }}-macOS-Intel.zip" mac/
+          fi
+
+      - name: Create ZIP for Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd dist
+          if [ -d "win-unpacked" ]; then
+            powershell Compress-Archive -Path "win-unpacked\*" -DestinationPath "DeskMaster-${{ github.event.inputs.version }}-Windows.zip"
+          fi
+
+      - name: Create ZIP for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd dist
+          if [ -d "linux-unpacked" ]; then
+            zip -r "DeskMaster-${{ github.event.inputs.version }}-Linux.zip" linux-unpacked/
+          fi
+
+      - name: Upload ZIP artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zip-builds-${{ matrix.os }}-${{ github.event.inputs.version }}
+          path: |
+            dist/*.zip
+          retention-days: 30
+
+  create-zip-release:
+    needs: create-zip
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all ZIP artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./zip-artifacts
+
+      - name: Create ZIP Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version }}-zip
+          name: DeskMaster ${{ github.event.inputs.version }} - Portable ZIP
+          body: |
+            ## 📦 DeskMaster ${{ github.event.inputs.version }} - Portable ZIP Files
+            
+            ### 🚀 Portable Distribution
+            These ZIP files contain the unpacked DeskMaster application for portable use.
+            No installation required - just extract and run!
+            
+            ### 📁 Downloads
+            
+            #### 🍎 macOS
+            - **Apple Silicon (M1/M2/M3)**: `DeskMaster-*-macOS-AppleSilicon.zip`
+            - **Intel Mac**: `DeskMaster-*-macOS-Intel.zip`
+            
+            #### 🪟 Windows
+            - **Portable**: `DeskMaster-*-Windows.zip`
+            
+            #### 🐧 Linux
+            - **Portable**: `DeskMaster-*-Linux.zip`
+            
+            ### 🔧 Usage Instructions
+            
+            **All Platforms:**
+            1. Download the appropriate ZIP file for your platform
+            2. Extract the ZIP file to any location
+            3. Run the DeskMaster executable from the extracted folder
+            4. No installation or admin rights required!
+            
+            **Note:** These are portable versions. For full system integration (tray icons, auto-start, etc.), use the regular installers from the main release.
+            
+            ### 🎯 Features
+            - System monitoring and statistics
+            - World clocks with multiple timezones
+            - Modern React + Tailwind CSS interface
+            - Cross-platform compatibility
+            
+            ---
+            *Portable distribution of DeskMaster - Master your desktop experience!*
+          files: |
+            zip-artifacts/*/dist/*.zip
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
