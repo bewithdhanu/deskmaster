@@ -1,0 +1,43 @@
+name: Test Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test workflow trigger
+        run: |
+          echo "✅ Workflow triggered successfully!"
+          echo "Tag: ${{ github.ref_name }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Repository: ${{ github.repository }}"
+          
+      - name: Create test release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Test Release ${{ github.ref_name }}
+          body: |
+            ## Test Release ${{ github.ref_name }}
+            
+            This is a test release to verify GitHub Actions workflows are working.
+            
+            **Workflow Details:**
+            - Tag: ${{ github.ref_name }}
+            - Event: ${{ github.event_name }}
+            - Repository: ${{ github.repository }}
+            
+            If you see this, the workflows are working correctly! 🎉
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
