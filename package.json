@@ -25,7 +25,10 @@
     "performance",
     "productivity-tools"
   ],
-  "author": "DeskMaster",
+  "author": {
+    "name": "DeskMaster",
+    "email": "deskmaster@example.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "@babel/core": "^7.23.0",
@@ -109,7 +112,8 @@
       ],
       "icon": "assets/icons/app-icon-512.png",
       "artifactName": "DeskMaster-${version}-${arch}.${ext}",
-      "category": "Utility"
+      "category": "Utility",
+      "maintainer": "DeskMaster <deskmaster@example.com>"
     }
   }
 }
