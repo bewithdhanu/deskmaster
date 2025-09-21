@@ -19,6 +19,73 @@ npm run build-app
 npm start
 ```
 
+## 🏗️ Automated Builds with GitHub Actions
+
+DeskMaster includes comprehensive GitHub Actions workflows for automated building and releasing across all platforms.
+
+### 📦 Available Workflows
+
+#### 1. **Release Workflow** (`release.yml`)
+**Triggers:** Git tags (`v*`) or manual dispatch
+**Builds:**
+- 🍎 **macOS**: Apple Silicon (ARM64) + Intel (x64) DMG files
+- 🪟 **Windows**: EXE installer + MSI package
+- 🐧 **Linux**: AppImage + DEB package
+
+#### 2. **CI Workflow** (`ci.yml`)
+**Triggers:** Push to main/develop, Pull Requests
+**Purpose:** Test builds and ensure code quality
+
+#### 3. **ZIP Release Workflow** (`zip-release.yml`)
+**Triggers:** Manual dispatch only
+**Builds:** Portable ZIP files for all platforms (no installation required)
+
+### 🚀 How to Create a Release
+
+#### Option 1: Using Git Tags (Recommended)
+```bash
+# Create and push a tag
+git tag v2.0.0
+git push origin v2.0.0
+```
+This automatically triggers the release workflow and creates a GitHub release with all platform builds.
+
+#### Option 2: Manual Dispatch
+1. Go to **Actions** tab in your GitHub repository
+2. Select **"Release DeskMaster"** workflow
+3. Click **"Run workflow"**
+4. Enter version (e.g., `v2.0.0`)
+5. Click **"Run workflow"**
+
+#### Option 3: Create ZIP Release
+1. Go to **Actions** tab
+2. Select **"Create ZIP Release"** workflow
+3. Click **"Run workflow"**
+4. Enter version and confirm ZIP creation
+5. Portable ZIP files will be created for all platforms
+
+### 📁 Generated Artifacts
+
+Each release includes:
+
+**macOS:**
+- `DeskMaster-v2.0.0-arm64.dmg` (Apple Silicon - 182MB)
+- `DeskMaster-v2.0.0-x64.dmg` (Intel Mac - 555MB)
+
+**Windows:**
+- `DeskMaster-v2.0.0-x64.exe` (Standard installer)
+- `DeskMaster-v2.0.0-x64.msi` (Enterprise MSI)
+
+**Linux:**
+- `DeskMaster-v2.0.0-x64.AppImage` (Portable)
+- `DeskMaster-v2.0.0-x64.deb` (Debian package)
+
+**ZIP Releases:**
+- `DeskMaster-v2.0.0-macOS-AppleSilicon.zip`
+- `DeskMaster-v2.0.0-macOS-Intel.zip`
+- `DeskMaster-v2.0.0-Windows.zip`
+- `DeskMaster-v2.0.0-Linux.zip`
+
 ## 🛠️ Development
 
 ### Development Mode (with hot reload)
