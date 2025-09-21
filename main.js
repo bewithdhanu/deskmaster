@@ -26,6 +26,7 @@ function createTrayIconWindow() {
     frame: false,
     transparent: true,
     skipTaskbar: true,
+    icon: path.join(__dirname, 'assets/icons/app-icon-256.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -53,6 +54,7 @@ function createWindow() {
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
+    icon: path.join(__dirname, 'assets/icons/app-icon-256.png'),
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -226,9 +228,10 @@ app.whenReady().then(() => {
   createWindow()
   createTrayIconWindow()
 
-  // Create tray with empty image initially
-  tray = new Tray(nativeImage.createEmpty())
-  tray.setToolTip("System Monitor - Loading...")
+  // Create tray with our custom icon
+  const trayIconPath = path.join(__dirname, 'assets/icons/tray-icon-22.png')
+  tray = new Tray(trayIconPath)
+  tray.setToolTip("DeskMaster - Desktop Productivity Tool")
   tray.setContextMenu(createContextMenu())
   tray.setIgnoreDoubleClickEvents(true)
 
