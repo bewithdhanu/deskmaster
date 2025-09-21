@@ -1,0 +1,81 @@
+{
+  "name": "deskmaster",
+  "version": "2.0.0",
+  "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "dist": "electron-builder --publish=never",
+    "install-deps": "npm install electron systeminformation --save",
+    "build-react": "webpack --mode production",
+    "dev-react": "webpack serve --mode development",
+    "watch": "webpack --mode development --watch",
+    "build-app": "node build.js",
+    "dev-app": "node dev.js",
+    "test-app": "node test-app.js"
+  },
+  "keywords": [
+    "desktop-productivity",
+    "system-monitor",
+    "world-clocks",
+    "electron",
+    "tray",
+    "performance",
+    "productivity-tools"
+  ],
+  "author": "DeskMaster",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "@babel/preset-react": "^7.22.0",
+    "autoprefixer": "^10.4.21",
+    "babel-loader": "^9.1.0",
+    "css-loader": "^6.8.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
+    "electron-reload": "^2.0.0-alpha.1",
+    "postcss": "^8.4.0",
+    "postcss-loader": "^7.3.0",
+    "style-loader": "^3.3.0",
+    "tailwindcss": "^3.3.0",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0",
+    "webpack-dev-server": "^4.15.0"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.0",
+    "html2canvas": "^1.4.1",
+    "moment": "^2.30.1",
+    "moment-timezone": "^0.6.0",
+    "react": "^18.2.0",
+    "react-chartjs-2": "^5.2.0",
+    "react-dom": "^18.2.0",
+    "systeminformation": "^5.21.15"
+  },
+  "build": {
+    "appId": "com.systemmonitor.pro",
+    "productName": "System Monitor Pro",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "dist/**/*",
+      "settings.html",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

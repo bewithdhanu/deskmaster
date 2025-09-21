@@ -1,0 +1,191 @@
+/* Tray Icon Styles */
+:root {
+  --bg-primary: rgba(20, 20, 30, 0.95);
+  --bg-secondary: rgba(30, 30, 40, 0.95);
+  --bg-card: rgba(255, 255, 255, 0.1);
+  --border-color: rgba(255, 255, 255, 0.2);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.8);
+  --text-muted: rgba(255, 255, 255, 0.6);
+  --accent-green: #11ff00;
+  --accent-red: #ff1e00;
+  --accent-yellow: #ff8800;
+  --accent-net: #11ff00;
+  --accent-battery: #11ff00;
+  --alert-color: #ff4757;
+}
+
+[data-theme="light"] {
+  --bg-primary: rgba(248, 249, 250, 0.95);
+  --bg-secondary: rgba(255, 255, 255, 0.95);
+  --bg-card: rgba(0, 0, 0, 0.05);
+  --border-color: rgba(0, 0, 0, 0.15);
+  --text-primary: #2c3e50;
+  --text-secondary: rgba(44, 62, 80, 0.9);
+  --text-muted: rgba(44, 62, 80, 0.7);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: auto;
+  height: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: transparent;
+  color: var(--text-primary);
+  overflow: hidden;
+  position: relative;
+}
+
+.tray-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.title {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.stats-table {
+  border-collapse: separate;
+  border-spacing: 4px 0px;
+}
+
+.label-row {
+  height: 8px;
+}
+
+.value-row {
+  height: 10px;
+}
+
+.stat-cell {
+  text-align: center;
+  vertical-align: middle;
+  border: none;
+  background: transparent;
+  position: relative;
+}
+
+.stat-label {
+  font-size: 7px;
+  color: var(--text-primary);
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.stat-detail {
+  font-size: 6px;
+  color: var(--text-muted);
+}
+
+.cpu-cell { 
+  --accent-color: var(--accent-green);
+  width: 25px;
+  max-width: 25px; 
+  min-width: 25px; 
+}
+
+.ram-cell { 
+  --accent-color: var(--accent-green);
+  width: 25px;
+  max-width: 25px; 
+  min-width: 25px; 
+}
+
+.disk-cell { 
+  --accent-color: var(--accent-green);
+  width: 25px;
+  max-width: 25px; 
+  min-width: 25px; 
+}
+
+.net-cell { 
+  --accent-color: var(--accent-green);
+  width: 30px;
+  max-width: 30px; 
+  min-width: 30px; 
+}
+
+.battery-cell { 
+  --accent-color: var(--accent-green);
+  width: 25px;
+  max-width: 25px; 
+  min-width: 25px; 
+}
+
+.timezone-cell { 
+  --accent-color: var(--accent-green);
+  width: 70px;
+  max-width: 70px; 
+  min-width: 70px; 
+}
+
+.charging-indicator {
+  color: var(--accent-yellow);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.net-speed-text {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 2px;
+}
+
+.net-speed-value {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 2px;
+}
+
+.net-speed-unit {
+  display: flex;
+  align-items: center;
+  flex-direction: row;
+  gap: 2px;
+}
