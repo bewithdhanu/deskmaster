@@ -56,26 +56,39 @@
     "systeminformation": "^5.21.15"
   },
   "build": {
-    "appId": "com.systemmonitor.pro",
-    "productName": "System Monitor Pro",
+    "appId": "app.deskmaster",
+    "productName": "DeskMaster",
     "directories": {
       "output": "dist"
     },
     "files": [
       "main.js",
       "dist/**/*",
-      "settings.html",
-      "package.json"
+      "config.js",
+      "stats.js",
+      "package.json",
+      "assets/**/*"
     ],
+    "icon": "assets/icons/app-icon-512.png",
     "mac": {
       "category": "public.app-category.utilities",
-      "target": "dmg"
+      "target": {
+        "target": "dmg",
+        "arch": ["arm64", "x64"]
+      },
+      "icon": "assets/icons/app-icon-512.png",
+      "artifactName": "DeskMaster-${version}-${arch}.${ext}",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/icons/app-icon.ico"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "assets/icons/app-icon-512.png"
     }
   }
 }
