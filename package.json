@@ -64,6 +64,13 @@
     "directories": {
       "output": "dist"
     },
+    "compression": "maximum",
+    "removePackageScripts": true,
+    "removePackageKeywords": true,
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false,
+    "asarUnpack": [],
     "files": [
       "main.js",
       "dist/**/*",
@@ -83,7 +90,13 @@
       "artifactName": "DeskMaster-${version}-${arch}.${ext}",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "identity": null
+      "identity": null,
+      "compression": "maximum",
+      "removePackageScripts": true,
+      "removePackageKeywords": true,
+      "npmRebuild": false,
+      "nodeGypRebuild": false,
+      "buildDependenciesFromSource": false
     },
     "win": {
       "target": [
@@ -113,7 +126,7 @@
       "icon": "assets/icons/app-icon-512.png",
       "artifactName": "DeskMaster-${version}-${arch}.${ext}",
       "category": "Utility",
-      "maintainer": "DeskMaster <deskmaster@example.com>"
+      "maintainer": "Dhanu K <bewithdhanu@gmail.com>"
     }
   }
 }
