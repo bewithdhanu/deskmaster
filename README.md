@@ -1,233 +1,125 @@
-# DeskMaster - React + Tailwind CSS
+# DeskMaster
 
-DeskMaster is a comprehensive desktop productivity application that combines system monitoring, world clocks, and productivity tools in one unified experience. Built with React and Tailwind CSS.
+<div align="center">
+  <img src="assets/icons/app-icon-512.png" alt="DeskMaster Logo" width="128" height="128">
+  
+  **Master your desktop experience with system monitoring, world clocks, and productivity tools**
+  
+  [![macOS](https://img.shields.io/badge/macOS-10.12+-blue.svg)](https://www.apple.com/macos/)
+  [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+  [![Version](https://img.shields.io/badge/version-2.0.8-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
+</div>
 
-## 🚀 Quick Start
+## 📸 Screenshots
 
-### 1. Install Dependencies
-```bash
-npm install
-```
+<div align="center">
+  <img src="assets/screenshots/Desktop-screenshot-09-22-2025_06_25_PM.jpg" alt="DeskMaster Main Interface" width="600">
+  <p><em>Main application interface with system monitoring and world clocks</em></p>
+  
+  <img src="assets/screenshots/image-09-22-2025_06_26_PM.jpg" alt="DeskMaster Tray Interface" width="400">
+  <p><em>System tray with real-time statistics</em></p>
+</div>
 
-### 2. Build the React App
-```bash
-npm run build-app
-```
+## ✨ Features
 
-### 3. Run the Application
-```bash
-npm start
-```
+### 🖥️ **System Monitoring**
+- **Real-time CPU usage** with core details and temperature
+- **Memory monitoring** with used/total RAM display
+- **Storage tracking** across all drives
+- **Network activity** with upload/download speeds
+- **Battery status** (on laptops)
+- **Live updates** every second in the system tray
 
-## 🏗️ Automated Builds with GitHub Actions
+### 🌍 **World Clocks**
+- **Multiple timezone support** - add unlimited timezones
+- **Custom labels** for each timezone
+- **12/24 hour format** support
+- **Automatic DST handling**
+- **Quick timezone switching**
 
-DeskMaster includes comprehensive GitHub Actions workflows for automated building and releasing across all platforms.
+### 🎨 **Modern Interface**
+- **Dark/Light theme** support with system preference detection
+- **Responsive design** built with React and Tailwind CSS
+- **Smooth animations** and transitions
+- **Native macOS integration** with proper window management
 
-### 📦 Available Workflows
+### 🔧 **Productivity Tools**
+- **System tray integration** for quick access
+- **Auto-start option** (configurable)
+- **Minimal resource usage**
+- **Background operation** without interrupting workflow
 
-#### 1. **Release Workflow** (`release.yml`)
-**Triggers:** Git tags (`v*`) or manual dispatch
-**Builds:**
-- 🍎 **macOS**: Apple Silicon (ARM64) + Intel (x64) DMG files
+## 🚀 Installation
 
-#### 2. **CI Workflow** (`ci.yml`)
-**Triggers:** Push to main/develop, Pull Requests
-**Purpose:** Test builds and ensure code quality
+### Download for macOS
 
-#### 3. **ZIP Release Workflow** (`zip-release.yml`)
-**Triggers:** Manual dispatch only
-**Builds:** Portable ZIP files for macOS (no installation required)
+Choose the version that matches your Mac:
 
-### 🚀 How to Create a Release
+| Architecture | Download | Size |
+|-------------|----------|------|
+| **Apple Silicon** (M1/M2/M3) | [DeskMaster-arm64.dmg](https://github.com/bewithdhanu/deskmaster/releases/latest) | ~85 MB |
+| **Intel Mac** | [DeskMaster-x64.dmg](https://github.com/bewithdhanu/deskmaster/releases/latest) | ~90 MB |
 
-#### Option 1: Using Git Tags (Recommended)
-```bash
-# Create and push a tag
-git tag v2.0.0
-git push origin v2.0.0
-```
-This automatically triggers the release workflow and creates a GitHub release with macOS builds.
+### Installation Steps
 
-#### Option 2: Manual Dispatch
-1. Go to **Actions** tab in your GitHub repository
-2. Select **"Release DeskMaster"** workflow
-3. Click **"Run workflow"**
-4. Enter version (e.g., `v2.0.0`)
-5. Click **"Run workflow"**
+1. **Download** the appropriate DMG file for your Mac
+2. **Open** the DMG file
+3. **Drag** DeskMaster to your Applications folder
+4. **Launch** DeskMaster from Applications or Spotlight
+5. **Enjoy** your new desktop productivity tool!
 
-#### Option 3: Create ZIP Release
-1. Go to **Actions** tab
-2. Select **"Create ZIP Release"** workflow
-3. Click **"Run workflow"**
-4. Enter version and confirm ZIP creation
-5. Portable ZIP files will be created for macOS
+## 🎯 Quick Start
 
-### 📁 Generated Artifacts
+### First Launch
+1. DeskMaster will appear in your system tray (menu bar)
+2. Click the tray icon to open the main window
+3. Add your first timezone by clicking the "+" button
+4. Customize your timezone labels as needed
 
-Each release includes:
+### System Tray
+- **Click** the tray icon to open/close the main window
+- **Right-click** for additional options
+- **Hover** to see quick system stats
 
-**macOS:**
-- `DeskMaster-v2.0.0-arm64.dmg` (Apple Silicon - 182MB)
-- `DeskMaster-v2.0.0-x64.dmg` (Intel Mac - 555MB)
-**ZIP Releases:**
-- `DeskMaster-v2.0.0-macOS-AppleSilicon.zip`
-- `DeskMaster-v2.0.0-macOS-Intel.zip`
+### Adding Timezones
+1. Click the **"+"** button in the timezone section
+2. Search for your desired timezone
+3. Add a custom label (optional)
+4. Click **"Add Timezone"**
 
-## 🛠️ Development
+## ⚙️ Configuration
 
-### Development Mode (with hot reload)
-```bash
-npm run dev-app
-```
+### Themes
+- DeskMaster automatically detects your system theme preference
+- Switch between light and dark modes
+- Theme changes apply instantly across the entire application
 
-This will:
-- Start webpack in watch mode to rebuild on changes
-- Start Electron in development mode
-- Automatically reload when you make changes
+### Auto-Start
+- Enable auto-start to launch DeskMaster when you log in
+- Access this option through the system tray menu
+- Perfect for keeping your productivity tools always available
 
-### Manual Development Commands
-```bash
-# Build React app only
-npm run build-react
+## 🛠️ System Requirements
 
-# Watch for changes
-npm run watch
+- **macOS 10.12** (Sierra) or later
+- **Apple Silicon** (M1/M2/M3) or **Intel** processor
+- **50 MB** free disk space
+- **Internet connection** for timezone data (optional)
 
-# Start Electron in dev mode
-npm run dev
-```
+## 📱 Supported Platforms
 
-## 📁 Project Structure
+DeskMaster is currently available for:
+- ✅ **macOS** (Apple Silicon & Intel)
 
-```
-├── src/                          # React source code
-│   ├── components/               # React components
-│   │   ├── Header.js            # App header component
-│   │   ├── StatsManager.js      # System stats display
-│   │   ├── TimezoneManager.js   # World clocks functionality
-│   │   ├── TimezoneDropdown.js  # Timezone search dropdown
-│   │   └── TrayIcon.js          # Tray icon component
-│   ├── App.js                   # Main React app component
-│   ├── index.js                 # Main app entry point
-│   ├── tray.js                  # Tray icon entry point
-│   ├── index.css                # Main app Tailwind CSS styles
-│   └── tray.css                 # Tray icon CSS styles
-├── dist/                        # Built React apps (generated)
-│   ├── index.html              # Main app HTML file
-│   ├── tray-icon.html          # Tray icon HTML file
-│   ├── main.bundle.js          # Main app JavaScript bundle
-│   └── tray.bundle.js          # Tray icon JavaScript bundle
-├── webpack.config.js           # Webpack configuration
-├── tailwind.config.js          # Tailwind CSS configuration
-├── postcss.config.js           # PostCSS configuration
-├── build.js                    # Build script
-├── dev.js                      # Development script
-└── main.js                     # Electron main process
-```
+## 🐛 Issues & Support
 
-## 🎨 Styling
+- **Report bugs**: [GitHub Issues](https://github.com/bewithdhanu/deskmaster/issues)
+- **Feature requests**: [GitHub Discussions](https://github.com/bewithdhanu/deskmaster/discussions)
+- **Developer info**: [Development Guide](DEVELOPMENT.md)
 
-The application uses Tailwind CSS with custom color scheme:
+---
 
-- **Background**: Dark theme with transparency
-- **Cards**: Semi-transparent with hover effects
-- **Accent Colors**: 
-  - CPU: Red (`#ff6b6b`)
-  - Memory: Teal (`#4ecdc4`)
-  - Disk: Blue (`#45b7d1`)
-  - Network: Green (`#96ceb4`)
-  - Battery: Success green (`#51cf66`)
-
-## 🔧 Key Features
-
-### React Components
-- **Header**: App title and close button
-- **StatsManager**: Real-time system statistics display
-- **TimezoneManager**: World clocks with add/remove functionality
-- **TimezoneDropdown**: Searchable timezone selection
-- **TrayIcon**: System tray icon with live stats and timezone display
-
-### Electron Integration
-- IPC communication for real-time stats
-- Theme management
-- Window controls
-- Tray icon functionality with React rendering
-- Live system stats in system tray
-- Dynamic timezone display in tray
-- Automatic theme switching for tray icon
-
-## 📦 Build Process
-
-1. **Webpack** bundles React components and assets
-2. **Tailwind CSS** processes styles with PostCSS
-3. **Babel** transpiles JSX and modern JavaScript
-4. **Electron** loads the built React app
-
-## 🚀 Deployment
-
-```bash
-# Build for production
-npm run build-app
-
-# Create distributable
-npm run dist
-```
-
-## 🔄 Migration Notes
-
-### What Changed
-- ✅ Converted vanilla JS to React components
-- ✅ Replaced custom CSS with Tailwind CSS
-- ✅ Added webpack build system
-- ✅ Maintained all original functionality
-- ✅ Improved code organization and maintainability
-
-### What Stayed the Same
-- ✅ Electron main process (`main.js`)
-- ✅ IPC communication patterns
-- ✅ System monitoring functionality
-- ✅ Timezone management features
-- ✅ UI/UX design and behavior
-
-## 🐛 Troubleshooting
-
-### Build Issues
-```bash
-# Clear node_modules and reinstall
-rm -rf node_modules package-lock.json
-npm install
-
-# Rebuild React app
-npm run build-app
-```
-
-### Development Issues
-```bash
-# Check if webpack is running
-npm run watch
-
-# Check Electron logs
-npm run dev
-```
-
-## 📚 Dependencies
-
-### Production
-- React 18.2.0
-- React DOM 18.2.0
-- Chart.js 4.4.0
-- React Chart.js 2 5.2.0
-
-### Development
-- Webpack 5.88.0
-- Babel 7.23.0
-- Tailwind CSS 3.3.0
-- PostCSS 8.4.0
-
-## 🎯 Next Steps
-
-- [ ] Add unit tests with Jest
-- [ ] Implement error boundaries
-- [ ] Add TypeScript support
-- [ ] Optimize bundle size
-- [ ] Add PWA features
+<div align="center">
+  <p>Made with ❤️ by <a href="https://github.com/bewithdhanu">Dhanu K</a></p>
+  <p>⭐ Star this repo if you find it useful!</p>
+</div>
