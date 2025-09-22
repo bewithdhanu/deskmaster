@@ -58,7 +58,6 @@ function createTrayIconWindow() {
   trayIconWindow.loadFile("dist/tray-icon.html")
   
   trayIconWindow.webContents.on('did-finish-load', () => {
-    console.log('Tray icon window loaded')
     // Open DevTools for tray window debugging
     // trayIconWindow.webContents.openDevTools()
     updateTrayIcon()
@@ -152,13 +151,15 @@ async function updateTrayIcon() {
     const timezones = config.getTimezones();
 
     // Debug: Log timezone data
-    console.log('Tray timezones:', timezones.length, timezones.map(tz => tz.label));
 
+    // Get current system theme with better detection
+    const systemTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+    
     // Send current stats to tray icon window
     trayIconWindow.webContents.send('update-tray-stats', {
       ...currentStats,
       timezones: timezones,
-      theme: nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+      theme: systemTheme
     })
     // log all html contents of trayIconWindow
     // console.log(await trayIconWindow.webContents.executeJavaScript('document.documentElement.outerHTML'))
@@ -184,7 +185,6 @@ async function updateTrayIcon() {
         quality: 'best'
       })
       tray.setImage(resizedImage)
-      console.log("Resized image:", resizedImage.getSize())
     }
   } catch (error) {
     console.error('Error updating tray icon:', error)
@@ -400,8 +400,11 @@ app.whenReady().then(() => {
   })
 
   nativeTheme.on("updated", () => {
+    const theme = nativeTheme.shouldUseDarkColors ? "dark" : "light"
+    console.log("System theme changed:", theme)
+    
     if (win && win.webContents) {
-      win.webContents.send("theme-changed", nativeTheme.shouldUseDarkColors ? "dark" : "light")
+      win.webContents.send("theme-changed", theme)
     }
     // Update tray icon with new theme
     updateTrayIcon()

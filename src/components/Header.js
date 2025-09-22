@@ -8,20 +8,52 @@ const Header = () => {
   };
 
   return (
-    <div className="flex justify-between items-center p-4 bg-bg-secondary border-b border-border-color">
+    <div 
+      className="flex justify-between items-center p-4 border-b"
+      style={{
+        backgroundColor: 'var(--bg-secondary)',
+        borderBottomColor: 'var(--border-color)'
+      }}
+    >
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-accent-cpu rounded-lg flex items-center justify-center">
+        <div 
+          className="w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ backgroundColor: 'var(--accent-cpu)' }}
+        >
           <span className="text-white font-bold text-sm">DM</span>
         </div>
         <div>
-          <h1 className="text-lg font-bold text-text-primary">DeskMaster</h1>
-          <p className="text-xs text-text-muted">Master Your Desktop Experience</p>
+          <h1 
+            className="text-lg font-bold"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            DeskMaster
+          </h1>
+          <p 
+            className="text-xs"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            Master Your Desktop Experience
+          </p>
         </div>
       </div>
       <div className="flex items-center gap-2">
         <button
           onClick={handleClose}
-          className="w-8 h-8 bg-bg-card hover:bg-bg-card-hover border border-border-color rounded-lg flex items-center justify-center text-text-muted hover:text-text-primary transition-all duration-200"
+          className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            borderColor: 'var(--border-color)',
+            color: 'var(--text-muted)'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = 'var(--bg-card-hover)';
+            e.target.style.color = 'var(--text-primary)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = 'var(--bg-card)';
+            e.target.style.color = 'var(--text-muted)';
+          }}
           title="Close"
         >
           ×

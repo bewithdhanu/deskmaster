@@ -2,10 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS Variables for Theme Support */
+:root {
+  /* Default dark theme */
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #2d2d2d;
+  --bg-card: rgba(255, 255, 255, 0.1);
+  --bg-card-hover: rgba(255, 255, 255, 0.15);
+  --border-color: rgba(255, 255, 255, 0.2);
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.9);
+  --text-muted: rgba(255, 255, 255, 0.7);
+  --accent-cpu: #ff4757;
+  --accent-ram: #3742fa;
+  --accent-disk: #2ed573;
+  --accent-net: #ffa502;
+  --accent-battery: #2ed573;
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-card: rgba(0, 0, 0, 0.05);
+  --bg-card-hover: rgba(0, 0, 0, 0.1);
+  --border-color: rgba(0, 0, 0, 0.15);
+  --text-primary: #1a1a1a;
+  --text-secondary: rgba(26, 26, 26, 0.9);
+  --text-muted: rgba(26, 26, 26, 0.7);
+  --accent-cpu: #e74c3c;
+  --accent-ram: #3498db;
+  --accent-disk: #27ae60;
+  --accent-net: #f39c12;
+  --accent-battery: #27ae60;
+}
+
 /* Custom styles for System Monitor Pro */
 @layer base {
   body {
-    @apply bg-bg-primary text-text-primary font-sans;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     margin: 0;
     padding: 0;
     overflow: hidden;
@@ -18,56 +55,97 @@
 
 @layer components {
   .stat-card {
-    @apply bg-bg-card border border-border-color rounded-lg p-2 transition-all duration-300 relative overflow-hidden min-w-20 flex-1;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.375rem;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    min-width: 4rem;
+    flex: 1;
+    white-space: nowrap;
   }
 
   .stat-card:hover {
-    @apply bg-bg-card-hover transform -translate-y-0.5;
+    background-color: var(--bg-card-hover);
+    transform: translateY(-0.125rem);
   }
 
   .stat-card::before {
     content: '';
-    @apply absolute top-0 left-0 right-0 h-0.5 bg-accent-cpu opacity-80;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 0.125rem;
+    background-color: var(--accent-cpu);
+    opacity: 0.8;
   }
 
   .stat-label {
-    @apply text-xs text-text-secondary mb-1 uppercase tracking-wider;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .stat-value {
-    @apply text-base font-bold mb-1 text-text-primary;
+    font-size: 0.875rem;
+    font-weight: bold;
+    margin-bottom: 0.125rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .stat-detail {
-    @apply text-xs text-text-muted;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
   }
 
   .progress-bar {
-    @apply w-full h-1 bg-border-color rounded-sm overflow-hidden mt-1.5;
+    width: 100%;
+    height: 0.25rem;
+    background-color: var(--border-color);
+    border-radius: 0.125rem;
+    overflow: hidden;
+    margin-top: 0.375rem;
   }
 
   .progress-fill {
-    @apply h-full transition-all duration-500 rounded-sm;
+    height: 100%;
+    transition: all 0.5s ease;
+    border-radius: 0.125rem;
   }
 
   .cpu-card {
-    --accent-color: theme('colors.accent-cpu');
+    --accent-color: var(--accent-cpu);
   }
 
   .ram-card {
-    --accent-color: theme('colors.accent-ram');
+    --accent-color: var(--accent-ram);
   }
 
   .disk-card {
-    --accent-color: theme('colors.accent-disk');
+    --accent-color: var(--accent-disk);
   }
 
   .net-card {
-    --accent-color: theme('colors.accent-net');
+    --accent-color: var(--accent-net);
   }
 
   .battery-card {
-    --accent-color: theme('colors.success-color');
+    --accent-color: var(--accent-battery);
   }
 
   .temperature {
@@ -212,5 +290,76 @@
 
   .modal-actions {
     @apply flex gap-3 justify-end mt-6;
+  }
+
+  /* Timezone Item Styles */
+  .timezone-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    transition: all 0.2s ease;
+    background-color: var(--bg-card);
+  }
+
+  .timezone-item:hover {
+    background-color: var(--bg-card-hover);
+  }
+
+  .timezone-info {
+    flex: 1;
+  }
+
+  .timezone-label {
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+  }
+
+  .timezone-zone {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  .timezone-time-info {
+    text-align: right;
+    margin-right: 1rem;
+  }
+
+  .timezone-date {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.125rem;
+  }
+
+  .timezone-time {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+  }
+
+  .remove-timezone-btn {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+    transition: all 0.2s ease;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+
+  .remove-timezone-btn:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-card-hover);
   }
 }

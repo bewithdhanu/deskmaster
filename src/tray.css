@@ -20,7 +20,7 @@
   --bg-secondary: rgba(255, 255, 255, 0.95);
   --bg-card: rgba(0, 0, 0, 0.05);
   --border-color: rgba(0, 0, 0, 0.15);
-  --text-primary: #2c3e50;
+  --text-primary: #000000;
   --text-secondary: rgba(44, 62, 80, 0.9);
   --text-muted: rgba(44, 62, 80, 0.7);
 }

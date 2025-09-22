@@ -33,7 +33,13 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-bg-primary text-text-primary">
+    <div 
+      className="min-h-screen"
+      style={{
+        backgroundColor: 'var(--bg-primary)',
+        color: 'var(--text-primary)'
+      }}
+    >
       <Header />
       <div className="container mx-auto p-4">
         <StatsManager />

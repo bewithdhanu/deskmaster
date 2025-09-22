@@ -62,16 +62,7 @@ const StatsManager = () => {
         <StatCard
           label="CPU Usage"
           value={`${stats.cpu}%`}
-          detail={
-            <div>
-              {`${stats.cpuDetails.cores} cores @ ${stats.cpuDetails.speed}GHz`}
-              {stats.cpuDetails.temperature && (
-                <div className={`temperature ${getTemperatureClass(stats.cpuDetails.temperature)}`}>
-                  {stats.cpuDetails.temperature}°C
-                </div>
-              )}
-            </div>
-          }
+          detail={`${stats.cpuDetails.cores} cores @ ${stats.cpuDetails.speed}GHz${stats.cpuDetails.temperature ? ` ${stats.cpuDetails.temperature}°C` : ''}`}
           progressValue={stats.cpu}
           accentColor="cpu-card"
         />
