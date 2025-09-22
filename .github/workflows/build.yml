@@ -11,6 +11,11 @@ on:
         required: true
         default: 'v2.0.0'
 
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -94,7 +99,8 @@ jobs:
             ### 🐛 Issues
             Report issues at: https://github.com/bewithdhanu/deskmaster/issues
           files: |
-            artifacts/*/dist/*.dmg
+            artifacts/**/*.dmg
+            artifacts/**/*.dmg.blockmap
           draft: false
           prerelease: false
         env:
