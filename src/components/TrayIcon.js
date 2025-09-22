@@ -82,9 +82,9 @@ const TrayIcon = () => {
               <div className="stat-value">{stats.disk}%</div>
             </td>
             {stats.battery && (
-              <td className="stat-cell battery-cell">
+              <td className={`stat-cell battery-cell ${stats.battery.charging ? 'charging-battery-cell' : ''}`}>
                 <div className="stat-value">
-                  {stats.battery.charging ? '⚡' : ''}{stats.battery.percent}%
+                  <span style={{fontSize: '6px'}}>{stats.battery.charging ? '⚡' : ''}</span>{stats.battery.percent}%
                 </div>
               </td>
             )}

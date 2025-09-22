@@ -115,43 +115,35 @@ body {
 .cpu-cell { 
   --accent-color: var(--accent-green);
   width: 25px;
-  max-width: 25px; 
-  min-width: 25px; 
 }
 
 .ram-cell { 
   --accent-color: var(--accent-green);
   width: 25px;
-  max-width: 25px; 
-  min-width: 25px; 
 }
 
 .disk-cell { 
   --accent-color: var(--accent-green);
   width: 25px;
-  max-width: 25px; 
-  min-width: 25px; 
 }
 
 .net-cell { 
   --accent-color: var(--accent-green);
   width: 30px;
-  max-width: 30px; 
-  min-width: 30px; 
 }
 
 .battery-cell { 
   --accent-color: var(--accent-green);
   width: 25px;
-  max-width: 25px; 
-  min-width: 25px; 
+}
+
+.charging-battery-cell { 
+  width: 30px !important;
 }
 
 .timezone-cell { 
   --accent-color: var(--accent-green);
   width: 72px;
-  max-width: 72px; 
-  min-width: 72px; 
 }
 
 .charging-indicator {

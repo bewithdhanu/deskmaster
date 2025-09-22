@@ -15,10 +15,14 @@ if (process.env.NODE_ENV === 'production' || !process.env.NODE_ENV) {
 
 // Enable live reload for development
 if (process.env.NODE_ENV === 'development') {
-  require('electron-reload')(__dirname, {
-    electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
-    hardResetMethod: 'exit'
-  })
+  try {
+    require('electron-reload')(__dirname, {
+      electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
+      hardResetMethod: 'exit'
+    })
+  } catch (error) {
+    console.warn('Electron-reload not available:', error.message)
+  }
 }
 
 let tray = null
@@ -164,7 +168,7 @@ async function updateTrayIcon() {
     // log all html contents of trayIconWindow
     // console.log(await trayIconWindow.webContents.executeJavaScript('document.documentElement.outerHTML'))
 
-    const width = 105 + (timezones.length * 72) + (currentStats.battery ? 25 : 0) + ((4+timezones.length+(currentStats.battery ? 1 : 0))*4)
+    const width = 105 + (timezones.length * 72) + (currentStats.battery ? (currentStats.battery.charging ? 30 : 25) : 0) + ((4+timezones.length+(currentStats.battery ? 1 : 0))*4)
     const height = 17
     
     // Resize the tray window to accommodate all content
