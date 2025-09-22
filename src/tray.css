@@ -149,9 +149,9 @@ body {
 
 .timezone-cell { 
   --accent-color: var(--accent-green);
-  width: 70px;
-  max-width: 70px; 
-  min-width: 70px; 
+  width: 72px;
+  max-width: 72px; 
+  min-width: 72px; 
 }
 
 .charging-indicator {

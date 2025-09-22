@@ -1,0 +1,115 @@
+/* About Window Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.about-container {
+  width: 100%;
+  height: 100vh;
+  background: #ffffff;
+  color: #333333;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.about-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.app-logo {
+  margin-bottom: 16px;
+  display: block;
+}
+
+.app-logo img {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.app-icon-emoji {
+  font-size: 64px;
+  display: block;
+}
+
+.app-name {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  color: #333333;
+}
+
+.about-content {
+  text-align: center;
+  max-width: 300px;
+}
+
+.credits {
+  margin-bottom: 30px;
+}
+
+.credits p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #666666;
+  line-height: 1.5;
+}
+
+.version-info {
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.version-info p {
+  margin: 0;
+  font-size: 14px;
+  color: #666666;
+}
+
+/* Automatic dark mode support */
+@media (prefers-color-scheme: dark) {
+  .about-container {
+    background: #1e1e1e;
+    color: #ffffff;
+  }
+  
+  .app-name {
+    color: #ffffff;
+  }
+  
+  .credits p,
+  .version-info p {
+    color: #cccccc;
+  }
+  
+  .version-info {
+    border-top-color: #404040;
+  }
+}
+
+/* Ensure version is visible */
+.version-info p {
+  margin: 0;
+  font-size: 14px;
+  color: #666666;
+  font-weight: normal;
+}
+
+.version-info strong {
+  font-weight: 600;
+}

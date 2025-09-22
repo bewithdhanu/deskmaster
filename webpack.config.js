@@ -3,7 +3,8 @@ const path = require('path');
 module.exports = {
   entry: {
     main: './src/index.js',
-    tray: './src/tray.js'
+    tray: './src/tray.js',
+    about: './src/about.js'
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
