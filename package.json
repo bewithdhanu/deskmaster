@@ -73,7 +73,10 @@
     "asarUnpack": [],
     "files": [
       "main.js",
-      "dist/**/*",
+      "dist/main.bundle.js",
+      "dist/tray.bundle.js",
+      "dist/index.html",
+      "dist/tray-icon.html",
       "config.js",
       "stats.js",
       "package.json",
@@ -90,13 +93,7 @@
       "artifactName": "DeskMaster-${version}-${arch}.${ext}",
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "identity": null,
-      "compression": "maximum",
-      "removePackageScripts": true,
-      "removePackageKeywords": true,
-      "npmRebuild": false,
-      "nodeGypRebuild": false,
-      "buildDependenciesFromSource": false
+      "identity": null
     },
     "win": {
       "target": [
