@@ -11,17 +11,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-            platform: mac
-          - os: windows-latest
-            platform: win
-          - os: ubuntu-latest
-            platform: linux
-
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
@@ -45,35 +35,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload macOS artifacts
-        if: matrix.platform == 'mac'
         uses: actions/upload-artifact@v4
         with:
           name: macos-builds-${{ github.ref_name }}
           path: |
             dist/*.dmg
             dist/*.dmg.blockmap
-
-      - name: Upload Windows artifacts
-        if: matrix.platform == 'win'
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-builds-${{ github.ref_name }}
-          path: |
-            dist/*.exe
-            dist/*.msi
-            dist/*.exe.blockmap
-            dist/*.msi.blockmap
-
-      - name: Upload Linux artifacts
-        if: matrix.platform == 'linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-builds-${{ github.ref_name }}
-          path: |
-            dist/*.AppImage
-            dist/*.deb
-            dist/*.AppImage.blockmap
-            dist/*.deb.blockmap
 
   release:
     needs: build
@@ -99,9 +66,5 @@ jobs:
           generate_release_notes: true
           files: |
             macos-builds-${{ github.ref_name }}/*.dmg
-            windows-builds-${{ github.ref_name }}/*.exe
-            windows-builds-${{ github.ref_name }}/*.msi
-            linux-builds-${{ github.ref_name }}/*.AppImage
-            linux-builds-${{ github.ref_name }}/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

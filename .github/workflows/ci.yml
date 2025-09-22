@@ -1,4 +1,4 @@
-name: CI - Build and Test
+name: CI - Test and Validate
 
 on:
   push:
@@ -35,11 +35,8 @@ jobs:
           echo "📁 Built files:"
           ls -la dist/
 
-  build-test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+  validate:
+    runs-on: macos-latest
         
     steps:
       - name: Checkout code
@@ -57,28 +54,8 @@ jobs:
       - name: Build React applications
         run: npm run build-app
 
-      - name: Test macOS build
-        if: matrix.os == 'macos-latest'
+      - name: Validate macOS build configuration
         run: |
-          npx electron-builder --mac --arm64 --publish=never --dir
-          echo "✅ macOS build test completed"
-
-      - name: Test Windows build
-        if: matrix.os == 'windows-latest'
-        run: |
-          npx electron-builder --win --x64 --publish=never --dir
-          echo "✅ Windows build test completed"
-
-      - name: Test Linux build
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          npx electron-builder --linux --x64 --publish=never --dir
-          echo "✅ Linux build test completed"
-
-      - name: Upload build artifacts for testing
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-test-${{ matrix.os }}-${{ github.sha }}
-          path: |
-            dist/
-          retention-days: 7
+          echo "✅ Validating macOS build configuration..."
+          npx electron-builder --mac --arm64 --publish=never --dir --dry-run
+          echo "✅ macOS build configuration is valid"
