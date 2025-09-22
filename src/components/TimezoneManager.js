@@ -178,7 +178,10 @@ const TimezoneManager = () => {
                 <label className="form-label" htmlFor="timezone-search">
                   Timezone
                 </label>
-                <TimezoneDropdown onTimezoneSelect={handleTimezoneSelect} />
+                <TimezoneDropdown 
+                  onTimezoneSelect={handleTimezoneSelect} 
+                  selectedTimezone={selectedTimezone}
+                />
               </div>
               <div className="form-group">
                 <label className="form-label" htmlFor="timezone-label">

@@ -70,20 +70,18 @@ function createWindow() {
   win.webContents.on('did-finish-load', () => {
     // TODO 
   })
-
-  let blurHandlerActive = false;
   
   win.on("blur", () => {
-    if (!blurHandlerActive) return;
+    console.log("Window blurred")
     setTimeout(() => {
       if (!win.isFocused()) {
+        console.log("Window is not focused, hiding")
         win.hide()
       }
     }, 100)
   })
 
   win.on("hide", () => {
-    blurHandlerActive = false;
     if (statsInterval) clearInterval(statsInterval)
   })
 }
@@ -206,11 +204,6 @@ function showWindow() {
   win.setPosition(Math.round(x), Math.round(y))
   win.show()
   win.focus()
-  
-  // Enable blur handler after a short delay to prevent immediate hiding
-  setTimeout(() => {
-    blurHandlerActive = true;
-  }, 500);
   
   sendDetailedStatsToRenderer()
   statsInterval = setInterval(() => {sendDetailedStatsToRenderer()}, 1000)

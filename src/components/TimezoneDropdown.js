@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import moment from 'moment-timezone';
 
-const TimezoneDropdown = ({ onTimezoneSelect }) => {
+const TimezoneDropdown = ({ onTimezoneSelect, selectedTimezone = null }) => {
   const [allTimezones, setAllTimezones] = useState([]);
   const [filteredTimezones, setFilteredTimezones] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -77,7 +77,7 @@ const TimezoneDropdown = ({ onTimezoneSelect }) => {
 
   const selectTimezone = (timezone) => {
     onTimezoneSelect(timezone);
-    setSearchTerm('');
+    setSearchTerm(timezone);
     setShowDropdown(false);
     setSelectedIndex(-1);
   };
@@ -86,6 +86,10 @@ const TimezoneDropdown = ({ onTimezoneSelect }) => {
     const value = e.target.value;
     setSearchTerm(value);
     setShowDropdown(value.length > 0);
+    // Clear selected timezone when user starts typing
+    if (selectedTimezone && value !== selectedTimezone) {
+      onTimezoneSelect(null);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -135,7 +139,7 @@ const TimezoneDropdown = ({ onTimezoneSelect }) => {
         className="form-input"
         placeholder="Search timezone or city..."
         autoComplete="off"
-        value={searchTerm}
+        value={selectedTimezone || searchTerm}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onFocus={() => setShowDropdown(searchTerm.length > 0)}
