@@ -1,0 +1,257 @@
+# DeskMaster - Desktop Productivity App
+
+## Project Overview
+DeskMaster is a comprehensive desktop productivity application built with Electron and React. It provides system monitoring, world clocks, and productivity tools through a system tray interface.
+
+## Architecture
+
+### Core Technologies
+- **Electron** (v27.3.11) - Desktop app framework
+- **React** (v18.2.0) - UI framework with hooks
+- **Node.js** - Backend runtime
+- **Webpack** - Module bundler for React components
+- **TailwindCSS** - Utility-first CSS framework
+- **Chart.js** - Data visualization
+- **Moment.js** - Date/time manipulation
+
+### Key Dependencies
+- `systeminformation` - System stats collection
+- `html2canvas` - Screenshot generation for tray icons
+- `auto-launch` - Auto-start functionality
+- `moment-timezone` - Timezone handling
+- `electron-builder` - App packaging
+
+## Project Structure
+
+```
+dhanu-tools/
+├── main.js                 # Main Electron process
+├── stats.js               # System stats collection module
+├── config.js              # Configuration management
+├── src/                    # React source code
+│   ├── App.js             # Main React app
+│   ├── index.js           # React entry point
+│   └── components/        # React components
+│       ├── Header.js      # App header
+│       ├── StatsManager.js # System stats display
+│       ├── TimezoneManager.js # World clocks
+│       ├── TrayIcon.js    # Tray icon component
+│       └── About.js       # About dialog
+├── dist/                   # Built files
+├── assets/                 # Icons and resources
+└── package.json           # Dependencies and scripts
+```
+
+## Development Workflow
+
+### Development Commands
+- `npm run dev` - Run Electron in development mode with live reload
+- `npm run dev-app` - Run with webpack watch + electron
+- `npm run build-react` - Build React components
+- `npm run watch` - Watch mode for React changes
+
+### Build Commands
+- `npm run build-mac-arm64` - Build for Apple Silicon
+- `npm run build-mac-x64` - Build for Intel Macs
+- `npm run build-mac-universal` - Universal binary
+- `npm run build` - Build for all platforms
+- `npm run dist` - Build and package
+
+## Key Features
+
+### System Monitoring
+- Real-time CPU, RAM, disk, and network usage
+- Temperature monitoring
+- Battery status (when available)
+- Performance charts and graphs
+- Process management
+
+### World Clocks
+- Multiple timezone support
+- Custom timezone management
+- Real-time clock updates
+- Timezone configuration persistence
+
+### Tray Integration
+- System tray icon with live stats
+- Custom tray icon generation using html2canvas
+- Click to show/hide main window
+- Right-click context menu
+
+## Technical Patterns
+
+### State Management
+- React hooks (useState, useEffect) for component state
+- IPC communication between main and renderer processes
+- Configuration persistence using JSON files
+- Real-time data updates via intervals
+
+### IPC Communication
+```javascript
+// Main process to renderer
+win.webContents.send('detailed-stats-update', stats)
+trayIconWindow.webContents.send('update-tray-stats', stats)
+
+// Renderer to main process
+ipcRenderer.send('hide-window')
+ipcRenderer.on('theme-changed', handleThemeChange)
+```
+
+### Data Flow
+1. **Stats Collection**: `stats.js` collects system information
+2. **Main Process**: `main.js` orchestrates data flow and window management
+3. **React Components**: Display data and handle user interactions
+4. **Configuration**: `config.js` manages persistent settings
+
+### Theme System
+- CSS custom properties for theming
+- Dark/light mode support
+- System theme detection
+- Theme persistence across sessions
+
+## Code Style Guidelines
+
+### JavaScript/Node.js
+- Use modern ES6+ features
+- Prefer async/await over callbacks
+- Handle errors gracefully with try/catch
+- Use descriptive variable names
+- Comment complex logic
+
+### React Components
+- Use functional components with hooks
+- Keep components focused and single-purpose
+- Use proper dependency arrays in useEffect
+- Clean up event listeners in useEffect cleanup
+- Use meaningful prop names
+
+### CSS/Styling
+- Use TailwindCSS utility classes
+- CSS custom properties for theming
+- Responsive design principles
+- Consistent spacing and typography
+- Dark/light mode support
+
+## File-Specific Guidelines
+
+### main.js
+- Main Electron process entry point
+- Window and tray management
+- IPC handlers
+- Auto-launch configuration
+- Development vs production logic
+
+### stats.js
+- System information collection
+- Performance data storage
+- Data formatting utilities
+- Real-time stats updates
+
+### config.js
+- Configuration persistence
+- Timezone management
+- Settings storage/retrieval
+- Default configuration handling
+
+### React Components
+- Functional components with hooks
+- Proper event handling
+- Theme integration
+- IPC communication
+- Clean component structure
+
+## Development Best Practices
+
+### Error Handling
+- Always wrap async operations in try/catch
+- Provide fallback values for missing data
+- Log errors appropriately
+- Handle edge cases gracefully
+
+### Performance
+- Use intervals efficiently
+- Clean up resources properly
+- Optimize re-renders
+- Minimize IPC calls
+
+### Security
+- Validate IPC data
+- Sanitize user inputs
+- Use secure defaults
+- Handle file system operations safely
+
+## Build Configuration
+
+### Electron Builder
+- Multi-platform support (macOS ARM64, x64, universal)
+- App signing and notarization
+- Icon and metadata configuration
+- File inclusion/exclusion
+
+### Webpack
+- React component bundling
+- Development server
+- Hot reloading
+- Production optimizations
+
+## Common Tasks
+
+### Adding New System Stats
+1. Update `stats.js` to collect new data
+2. Modify `currentStats` object structure
+3. Update React components to display data
+4. Handle data formatting and display
+
+### Adding New Timezones
+1. Use `config.js` timezone functions
+2. Update React timezone components
+3. Handle timezone validation
+4. Persist configuration changes
+
+### Styling Changes
+1. Use TailwindCSS utilities
+2. Update CSS custom properties for theming
+3. Ensure dark/light mode compatibility
+4. Test responsive behavior
+
+### IPC Communication
+1. Define clear message channels
+2. Handle data serialization
+3. Implement proper error handling
+4. Clean up event listeners
+
+## Debugging Tips
+
+### Development Mode
+- Use `npm run dev` for live reloading
+- Check console for errors
+- Use Electron DevTools
+- Monitor IPC communication
+
+### Build Issues
+- Check file paths in build configuration
+- Verify all dependencies are included
+- Test on target platforms
+- Check signing and notarization
+
+### Performance Issues
+- Monitor interval frequencies
+- Check memory usage
+- Optimize re-renders
+- Profile system calls
+
+## Testing Strategy
+
+### Manual Testing
+- Test all system stats accuracy
+- Verify timezone functionality
+- Check theme switching
+- Test tray interactions
+
+### Build Testing
+- Test on different architectures
+- Verify app signing
+- Check auto-launch functionality
+- Test configuration persistence
+
+Remember: This is a desktop productivity app focused on system monitoring and timezone management. Always consider the user experience and system performance when making changes.

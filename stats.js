@@ -62,7 +62,10 @@ async function updateTrayStats() {
 
     const cpuUsage = Math.round(cpu.currentLoad);
     const memUsage = Math.round((mem.active / mem.total) * 100);
-    const diskUsage = fs[0] ? Math.round((fs[0].used / fs[0].size) * 100) : 0;
+    // Find the main data drive - prioritize /System/Volumes/Data (main user data)
+    const mainDrive = fs.find(drive => drive.mount === '/System/Volumes/Data') || 
+                      fs.find(drive => drive.mount === '/') || fs[0];
+    const diskUsage = mainDrive ? Math.round((mainDrive.used / mainDrive.size) * 100) : 0;
     const netSpeedKbs = net[0] ? Math.round((net[0].rx_sec + net[0].tx_sec) / 1024) : 0;
     const netSpeedHuman = formatBytes((net[0] ? (net[0].rx_sec + net[0].tx_sec) : 0));
 
@@ -102,11 +105,15 @@ async function getDetailedStats() {
     const netSpeedKbs = net[0] ? Math.round((net[0].rx_sec + net[0].tx_sec) / 1024) : 0;
     const netSpeedHuman = formatBytes((net[0] ? (net[0].rx_sec + net[0].tx_sec) : 0));
 
+    // Find the main data drive - prioritize /System/Volumes/Data (main user data)
+    const mainDrive = fs.find(drive => drive.mount === '/System/Volumes/Data') || 
+                      fs.find(drive => drive.mount === '/') || fs[0];
+
     const stats = {
       // Basic stats
       cpu: Math.round(cpu.currentLoad),
       ram: Math.round((mem.active / mem.total) * 100),
-      disk: fs[0] ? Math.round((fs[0].used / fs[0].size) * 100) : 0,
+      disk: mainDrive ? Math.round((mainDrive.used / mainDrive.size) * 100) : 0,
       net: { kbs: netSpeedKbs, human: netSpeedHuman },
 
       // Detailed memory (only used fields)
@@ -122,11 +129,11 @@ async function getDetailedStats() {
         temperature: temp.main ? Math.round(temp.main) : null,
       },
 
-      // Storage details (only first drive used)
-      storageDetails: fs.slice(0, 1).map((drive) => ({
-        total: Math.round(drive.size / 1024 / 1024 / 1024),
-        used: Math.round(drive.used / 1024 / 1024 / 1024),
-      })),
+      // Storage details (main drive with better precision)
+      storageDetails: mainDrive ? [{
+        total: Math.round((mainDrive.size / 1024 / 1024 / 1024) * 10) / 10,
+        used: Math.round((mainDrive.used / 1024 / 1024 / 1024) * 10) / 10,
+      }] : [{ total: 0, used: 0 }],
 
       // Network details (only first interface used)
       networkDetails: net.slice(0, 1).map((iface) => ({
