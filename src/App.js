@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import StatsManager from './components/StatsManager';
+import Home from './components/Home';
 import TimezoneManager from './components/TimezoneManager';
-import Header from './components/Header';
+import Settings from './components/Settings';
+import Navigation from './components/Navigation';
 
 const { ipcRenderer } = window.require('electron');
 
 function App() {
   const [currentTheme, setCurrentTheme] = useState('dark');
+  const [activeTab, setActiveTab] = useState('home');
 
   useEffect(() => {
     // Apply initial theme
@@ -32,18 +34,24 @@ function App() {
     document.body.setAttribute('data-theme', theme);
   };
 
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'home':
+        return <Home />;
+      case 'world-clocks':
+        return <TimezoneManager onNavigateToSettings={() => setActiveTab('settings')} />;
+      case 'settings':
+        return <Settings />;
+      default:
+        return <Home />;
+    }
+  };
+
   return (
-    <div 
-      className="min-h-screen"
-      style={{
-        backgroundColor: 'var(--bg-primary)',
-        color: 'var(--text-primary)'
-      }}
-    >
-      <Header />
-      <div className="container mx-auto p-4">
-        <StatsManager />
-        <TimezoneManager />
+    <div className="h-screen flex flex-col bg-theme-primary text-theme-primary">
+      <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <div className="flex-1 overflow-hidden">
+        {renderContent()}
       </div>
     </div>
   );

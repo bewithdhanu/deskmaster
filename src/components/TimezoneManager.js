@@ -1,24 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import moment from 'moment-timezone';
-import TimezoneDropdown from './TimezoneDropdown';
 
 const { ipcRenderer } = window.require('electron');
 
-const TimezoneManager = () => {
+const TimezoneManager = ({ onNavigateToSettings }) => {
   const [timezones, setTimezones] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [selectedTimezone, setSelectedTimezone] = useState(null);
-  const [timezoneLabel, setTimezoneLabel] = useState('');
+  const [settings, setSettings] = useState({
+    timezones: [],
+    datetimeFormat: 'HH:mm:ss'
+  });
   const [updateInterval, setUpdateInterval] = useState(null);
 
   useEffect(() => {
-    // Load timezones from main process
-    loadTimezones();
-
     // Listen for timezone updates
     const handleTimezoneUpdate = (event, data) => {
       if (data.timezones) {
         setTimezones(data.timezones);
+      }
+      if (data.settings) {
+        setSettings(data.settings);
       }
     };
 
@@ -33,31 +33,6 @@ const TimezoneManager = () => {
     };
   }, []);
 
-  const loadTimezones = () => {
-    ipcRenderer.send('get-timezones');
-  };
-
-  const saveTimezones = (newTimezones) => {
-    ipcRenderer.send('save-timezones', newTimezones);
-  };
-
-  const addTimezone = (label, timezone) => {
-    const newTimezone = {
-      id: Date.now(),
-      label: label.trim(),
-      timezone: timezone
-    };
-
-    const newTimezones = [...timezones, newTimezone];
-    setTimezones(newTimezones);
-    saveTimezones(newTimezones);
-  };
-
-  const removeTimezone = (id) => {
-    const newTimezones = timezones.filter(tz => tz.id !== id);
-    setTimezones(newTimezones);
-    saveTimezones(newTimezones);
-  };
 
   const startTimeUpdates = () => {
     const interval = setInterval(() => {
@@ -100,7 +75,7 @@ const TimezoneManager = () => {
 
   const formatTime = (timezone) => {
     try {
-      return moment().tz(timezone).format('HH:mm:ss');
+      return moment().tz(timezone).format(settings.datetimeFormat);
     } catch (error) {
       console.warn(`Failed to format time for ${timezone}:`, error);
       return 'Invalid';
@@ -117,103 +92,59 @@ const TimezoneManager = () => {
   };
 
   return (
-    <div className="mb-4">
-      {/* Timezone Section */}
-      <div 
-        className="border rounded-lg p-4"
-        style={{
-          backgroundColor: 'var(--bg-secondary)',
-          borderColor: 'var(--border-color)'
-        }}
-      >
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🌍</span>
-            <h2 
-              className="text-lg font-semibold"
-              style={{ color: 'var(--text-primary)' }}
+    <div className="h-full flex flex-col bg-theme-primary">
+      <div className="flex flex-col items-center px-4 py-12 text-center">
+        <h1 className="text-5xl font-bold text-theme-primary mb-3">
+          World Clocks
+        </h1>
+        <p className="text-xl text-theme-muted">
+          Manage your timezone clocks
+        </p>
+      </div>
+      
+      <div className="flex-1 px-6 pb-6 overflow-y-auto">
+        <div className="flex justify-center mb-8">
+          <div className="text-center">
+            <p className="text-theme-muted mb-4">
+              Manage timezones in the Settings page
+            </p>
+            <button
+              onClick={onNavigateToSettings}
+              className="px-6 py-3 bg-theme-secondary hover:bg-theme-card-hover text-theme-primary font-medium rounded-lg transition-colors duration-200"
             >
-              World Clocks
-            </h2>
+              Go to Settings
+            </button>
           </div>
-          <button
-            onClick={openModal}
-            className="text-white px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200"
-            style={{ backgroundColor: 'var(--accent-cpu)' }}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#dc2626'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = 'var(--accent-cpu)'}
-          >
-            + Add Timezone
-          </button>
         </div>
 
-        <div className="space-y-2">
+        <div className="flex flex-col gap-4">
           {timezones.length === 0 ? (
-            <div 
-              className="text-center py-8"
-              style={{ color: 'var(--text-muted)' }}
-            >
+            <div className="text-center py-12 text-theme-muted">
               <p>No timezones added yet.</p>
-              <p className="text-sm">Click "Add Timezone" to get started.</p>
+              <p>Go to Settings to add timezones.</p>
             </div>
           ) : (
             timezones.map((tz) => (
               <div 
                 key={tz.id} 
-                className="timezone-item"
-                style={{
-                  backgroundColor: 'var(--bg-card)',
-                  borderColor: 'var(--border-color)',
-                  color: 'var(--text-primary)'
-                }}
+                className="bg-theme-secondary border border-theme rounded-lg p-4 flex justify-between items-center hover:bg-theme-card-hover transition-colors duration-200"
               >
-                <div className="timezone-info">
-                  <div 
-                    className="timezone-label"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
+                <div className="flex-1">
+                  <div className="text-theme-primary font-medium">
                     {tz.label}
                   </div>
-                  <div 
-                    className="timezone-zone"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
+                  <div className="text-theme-muted text-sm">
                     {tz.timezone}
                   </div>
                 </div>
-                <div className="timezone-time-info">
-                  <div 
-                    className="timezone-date"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
+                <div className="text-right mr-4">
+                  <div className="text-theme-muted text-sm">
                     {formatDate(tz.timezone)}
                   </div>
-                  <div 
-                    className="timezone-time"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
+                  <div className="text-theme-primary font-mono text-lg">
                     {formatTime(tz.timezone)}
                   </div>
                 </div>
-                <button
-                  onClick={() => removeTimezone(tz.id)}
-                  className="remove-timezone-btn"
-                  style={{
-                    color: 'var(--text-muted)',
-                    backgroundColor: 'transparent'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.color = 'var(--text-primary)';
-                    e.target.style.backgroundColor = 'var(--bg-card-hover)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.color = 'var(--text-muted)';
-                    e.target.style.backgroundColor = 'transparent';
-                  }}
-                  title="Remove timezone"
-                >
-                  ×
-                </button>
               </div>
             ))
           )}
@@ -221,190 +152,6 @@ const TimezoneManager = () => {
       </div>
 
       {/* Add Timezone Modal */}
-      {showModal && (
-        <div 
-          className="modal" 
-          onClick={closeModal}
-          style={{
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000
-          }}
-        >
-          <div 
-            className="modal-content" 
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              borderColor: 'var(--border-color)',
-              color: 'var(--text-primary)',
-              border: '1px solid',
-              borderRadius: '0.5rem',
-              padding: '1.5rem',
-              maxWidth: '500px',
-              width: '90%',
-              maxHeight: '80vh',
-              overflow: 'auto'
-            }}
-          >
-            <div 
-              className="modal-header"
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '1rem'
-              }}
-            >
-              <div 
-                className="modal-title"
-                style={{
-                  fontSize: '1.25rem',
-                  fontWeight: '600',
-                  color: 'var(--text-primary)'
-                }}
-              >
-                Add Timezone
-              </div>
-              <button 
-                className="close-modal" 
-                onClick={closeModal}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '1.5rem',
-                  cursor: 'pointer',
-                  color: 'var(--text-muted)',
-                  padding: '0.25rem'
-                }}
-                onMouseEnter={(e) => e.target.style.color = 'var(--text-primary)'}
-                onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}
-              >
-                &times;
-              </button>
-            </div>
-            <form onSubmit={handleFormSubmit}>
-              <div 
-                className="form-group"
-                style={{ marginBottom: '1rem' }}
-              >
-                <label 
-                  className="form-label" 
-                  htmlFor="timezone-search"
-                  style={{
-                    display: 'block',
-                    marginBottom: '0.5rem',
-                    color: 'var(--text-primary)',
-                    fontWeight: '500'
-                  }}
-                >
-                  Timezone
-                </label>
-                <TimezoneDropdown 
-                  onTimezoneSelect={handleTimezoneSelect} 
-                  selectedTimezone={selectedTimezone}
-                />
-              </div>
-              <div 
-                className="form-group"
-                style={{ marginBottom: '1.5rem' }}
-              >
-                <label 
-                  className="form-label" 
-                  htmlFor="timezone-label"
-                  style={{
-                    display: 'block',
-                    marginBottom: '0.5rem',
-                    color: 'var(--text-primary)',
-                    fontWeight: '500'
-                  }}
-                >
-                  Label
-                </label>
-                <input
-                  type="text"
-                  id="timezone-label"
-                  className="form-input"
-                  placeholder="e.g., New York, London"
-                  value={timezoneLabel}
-                  onChange={(e) => setTimezoneLabel(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '0.375rem',
-                    backgroundColor: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    fontSize: '0.875rem'
-                  }}
-                />
-              </div>
-              <div 
-                className="modal-actions"
-                style={{
-                  display: 'flex',
-                  gap: '0.75rem',
-                  justifyContent: 'flex-end'
-                }}
-              >
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={closeModal}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '0.375rem',
-                    backgroundColor: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem'
-                  }}
-                  onMouseEnter={(e) => e.target.style.backgroundColor = 'var(--bg-card-hover)'}
-                  onMouseLeave={(e) => e.target.style.backgroundColor = 'var(--bg-secondary)'}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={!selectedTimezone || !timezoneLabel.trim()}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    border: 'none',
-                    borderRadius: '0.375rem',
-                    backgroundColor: 'var(--accent-cpu)',
-                    color: 'white',
-                    cursor: 'pointer',
-                    fontSize: '0.875rem',
-                    opacity: (!selectedTimezone || !timezoneLabel.trim()) ? 0.5 : 1
-                  }}
-                  onMouseEnter={(e) => {
-                    if (selectedTimezone && timezoneLabel.trim()) {
-                      e.target.style.backgroundColor = '#dc2626';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (selectedTimezone && timezoneLabel.trim()) {
-                      e.target.style.backgroundColor = 'var(--accent-cpu)';
-                    }
-                  }}
-                >
-                  Add Timezone
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
     </div>
   );

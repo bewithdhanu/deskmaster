@@ -131,7 +131,7 @@ const TimezoneDropdown = ({ onTimezoneSelect, selectedTimezone = null }) => {
   };
 
   return (
-    <div className="timezone-search-container" ref={dropdownRef}>
+    <div className="relative" ref={dropdownRef}>
       <input
         ref={inputRef}
         type="text"
@@ -142,78 +142,30 @@ const TimezoneDropdown = ({ onTimezoneSelect, selectedTimezone = null }) => {
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onFocus={() => setShowDropdown(searchTerm.length > 0)}
-        style={{
-          width: '100%',
-          padding: '0.75rem',
-          border: '1px solid var(--border-color)',
-          borderRadius: '0.375rem',
-          backgroundColor: 'var(--bg-secondary)',
-          color: 'var(--text-primary)',
-          fontSize: '0.875rem'
-        }}
+        className="w-full px-3 py-3 border border-theme rounded-md bg-theme-secondary text-theme-primary text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
       />
       
       {showDropdown && filteredTimezones.length > 0 && (
-        <div 
-          className="timezone-dropdown"
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            backgroundColor: 'var(--bg-primary)',
-            border: '1px solid var(--border-color)',
-            borderTop: 'none',
-            borderRadius: '0 0 0.375rem 0.375rem',
-            maxHeight: '12rem',
-            overflowY: 'auto',
-            zIndex: 50,
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-          }}
-        >
+        <div className="absolute top-full left-0 right-0 bg-theme-secondary border border-theme border-t-0 rounded-b-md max-h-48 overflow-y-auto z-50 shadow-lg">
           {filteredTimezones.map((timezone, index) => (
             <div
               key={timezone}
-              className={`timezone-option ${index === selectedIndex ? 'selected' : ''}`}
+              className={`px-3 py-3 cursor-pointer border-b border-theme transition-all duration-200 ${
+                index === selectedIndex 
+                  ? 'bg-red-500 text-white' 
+                  : 'hover:bg-theme-card-hover text-theme-primary'
+              }`}
               onClick={() => selectTimezone(timezone)}
-              onMouseEnter={(e) => {
-                setSelectedIndex(index);
-                if (index !== selectedIndex) {
-                  e.target.style.backgroundColor = 'var(--bg-card-hover)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (index !== selectedIndex) {
-                  e.target.style.backgroundColor = 'transparent';
-                }
-              }}
-              style={{
-                padding: '0.75rem',
-                cursor: 'pointer',
-                borderBottom: '1px solid var(--border-color)',
-                transition: 'all 0.2s ease',
-                backgroundColor: index === selectedIndex ? 'var(--accent-cpu)' : 'transparent',
-                color: index === selectedIndex ? 'white' : 'var(--text-primary)'
-              }}
+              onMouseEnter={() => setSelectedIndex(index)}
             >
-              <div 
-                className="timezone-name"
-                style={{
-                  fontWeight: '600',
-                  fontSize: '0.875rem',
-                  color: index === selectedIndex ? 'white' : 'var(--text-primary)'
-                }}
-              >
+              <div className={`font-semibold text-sm ${
+                index === selectedIndex ? 'text-white' : 'text-theme-primary'
+              }`}>
                 {formatTimezoneName(timezone)}
               </div>
-              <div 
-                className="timezone-details"
-                style={{
-                  fontSize: '0.75rem',
-                  marginTop: '0.125rem',
-                  color: index === selectedIndex ? 'rgba(255, 255, 255, 0.8)' : 'var(--text-muted)'
-                }}
-              >
+              <div className={`text-xs mt-1 ${
+                index === selectedIndex ? 'text-red-100' : 'text-theme-muted'
+              }`}>
                 {getTimezoneDetails(timezone)}
               </div>
             </div>
