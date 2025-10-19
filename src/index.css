@@ -37,7 +37,44 @@
   --accent-battery: #27ae60;
 }
 
-/* Custom styles for System Monitor Pro */
+/* System theme detection */
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-card: rgba(0, 0, 0, 0.05);
+    --bg-card-hover: rgba(0, 0, 0, 0.1);
+    --border-color: rgba(0, 0, 0, 0.15);
+    --text-primary: #1a1a1a;
+    --text-secondary: rgba(26, 26, 26, 0.9);
+    --text-muted: rgba(26, 26, 26, 0.7);
+    --accent-cpu: #e74c3c;
+    --accent-ram: #3498db;
+    --accent-disk: #27ae60;
+    --accent-net: #f39c12;
+    --accent-battery: #27ae60;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-theme="system"] {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --bg-card: rgba(255, 255, 255, 0.1);
+    --bg-card-hover: rgba(255, 255, 255, 0.15);
+    --border-color: rgba(255, 255, 255, 0.2);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.9);
+    --text-muted: rgba(255, 255, 255, 0.7);
+    --accent-cpu: #ff4757;
+    --accent-ram: #3742fa;
+    --accent-disk: #2ed573;
+    --accent-net: #ffa502;
+    --accent-battery: #2ed573;
+  }
+}
+
+/* Base styles */
 @layer base {
   body {
     background-color: var(--bg-primary);
@@ -45,7 +82,10 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     margin: 0;
     padding: 0;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: 100vh;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   * {
@@ -53,313 +93,192 @@
   }
 }
 
-@layer components {
-  .stat-card {
+/* Theme-aware TailwindCSS classes */
+@layer utilities {
+  .bg-theme-primary {
+    background-color: var(--bg-primary);
+  }
+  
+  .bg-theme-secondary {
+    background-color: var(--bg-secondary);
+  }
+  
+  .bg-theme-card {
     background-color: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 0.5rem;
-    padding: 0.375rem;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-    min-width: 4rem;
-    flex: 1;
-    white-space: nowrap;
   }
-
-  .stat-card:hover {
+  
+  .bg-theme-card-hover {
     background-color: var(--bg-card-hover);
-    transform: translateY(-0.125rem);
   }
-
-  .stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 0.125rem;
-    background-color: var(--accent-cpu);
-    opacity: 0.8;
+  
+  .text-theme-primary {
+    color: var(--text-primary);
   }
-
-  .stat-label {
-    font-size: 0.75rem;
+  
+  .text-theme-secondary {
     color: var(--text-secondary);
-    margin-bottom: 0.125rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
-
-  .stat-value {
-    font-size: 0.875rem;
-    font-weight: bold;
-    margin-bottom: 0.125rem;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .stat-detail {
-    font-size: 0.75rem;
+  
+  .text-theme-muted {
     color: var(--text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.2;
+  }
+  
+  .border-theme {
+    border-color: var(--border-color);
+  }
+  
+  .accent-cpu {
+    color: var(--accent-cpu);
+  }
+  
+  .accent-ram {
+    color: var(--accent-ram);
+  }
+  
+  .accent-disk {
+    color: var(--accent-disk);
+  }
+  
+  .accent-net {
+    color: var(--accent-net);
+  }
+  
+  .accent-battery {
+    color: var(--accent-battery);
+  }
+}
+
+/* Custom components that still need CSS variables */
+@layer components {
+  /* Header component styles */
+  .header-container {
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
   }
 
-  .progress-bar {
-    width: 100%;
-    height: 0.25rem;
-    background-color: var(--border-color);
-    border-radius: 0.125rem;
-    overflow: hidden;
-    margin-top: 0.375rem;
-  }
-
-  .progress-fill {
-    height: 100%;
-    transition: all 0.5s ease;
-    border-radius: 0.125rem;
-  }
-
-  .cpu-card {
-    --accent-color: var(--accent-cpu);
-  }
-
-  .ram-card {
-    --accent-color: var(--accent-ram);
-  }
-
-  .disk-card {
-    --accent-color: var(--accent-disk);
-  }
-
-  .net-card {
-    --accent-color: var(--accent-net);
-  }
-
-  .battery-card {
-    --accent-color: var(--accent-battery);
-  }
-
-  .temperature {
-    @apply font-semibold;
-  }
-
-  .temperature.normal {
-    @apply text-success-color;
-  }
-
-  .temperature.warm {
-    @apply text-warning-color;
-  }
-
-  .temperature.hot {
-    @apply text-alert-color;
-  }
-
-  .timezone-item {
-    @apply flex justify-between items-center p-2 bg-bg-secondary border border-border-color rounded-md transition-all duration-200;
-  }
-
-  .timezone-item:hover {
-    @apply bg-bg-card-hover;
-  }
-
-  .timezone-info {
-    @apply flex flex-col w-1/2 gap-0.5;
-  }
-
-  .timezone-time-info {
-    @apply flex flex-col gap-0.5 w-1/2;
-  }
-
-  .timezone-label {
-    @apply text-xs font-semibold text-text-primary;
-  }
-
-  .timezone-zone {
-    @apply text-xs text-text-muted;
-  }
-
-  .timezone-date {
-    @apply text-xs text-text-muted mb-0.5;
-  }
-
-  .timezone-time {
-    @apply text-sm font-bold text-accent-cpu font-mono;
-  }
-
-  .remove-timezone-btn {
-    @apply bg-alert-color border-none rounded w-6 h-6 text-white cursor-pointer flex items-center justify-center text-sm transition-all duration-200;
-  }
-
-  .remove-timezone-btn:hover {
-    @apply bg-red-500 transform scale-110;
-  }
-
-  .modal {
-    @apply fixed inset-0 bg-black bg-opacity-50 z-50 backdrop-blur-sm;
-  }
-
-  .modal-content {
-    @apply absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-bg-primary border border-border-color rounded-lg p-6 w-96 max-w-full mx-4;
-  }
-
-  .modal-header {
-    @apply flex justify-between items-center mb-4;
-  }
-
-  .modal-title {
-    @apply text-lg font-semibold text-text-primary;
-  }
-
-  .close-modal {
-    @apply text-text-muted hover:text-text-primary text-xl cursor-pointer;
-  }
-
-  .form-group {
-    @apply mb-4;
-  }
-
-  .form-label {
-    @apply block text-sm font-medium text-text-secondary mb-2;
-  }
-
-  .form-input {
-    @apply w-full px-3 py-2 bg-bg-secondary border border-border-color rounded-md text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-accent-cpu focus:border-transparent;
-  }
-
-  .timezone-search-container {
-    @apply relative;
-  }
-
-  .timezone-dropdown {
-    @apply absolute top-full left-0 right-0 bg-bg-primary border border-border-color border-t-0 rounded-b-md max-h-48 overflow-y-auto z-50 shadow-lg;
-  }
-
-  .timezone-option {
-    @apply px-3 py-2 cursor-pointer border-b border-border-color transition-colors duration-200;
-  }
-
-  .timezone-option:last-child {
-    @apply border-b-0;
-  }
-
-  .timezone-option:hover {
-    @apply bg-bg-card-hover;
-  }
-
-  .timezone-option.selected {
-    @apply bg-accent-cpu text-white;
-  }
-
-  .timezone-name {
-    @apply font-semibold text-sm text-text-primary;
-  }
-
-  .timezone-option.selected .timezone-name {
-    @apply text-white;
-  }
-
-  .timezone-details {
-    @apply text-xs text-text-muted mt-0.5;
-  }
-
-  .timezone-option.selected .timezone-details {
-    @apply text-white text-opacity-80;
-  }
-
-  .btn {
-    @apply px-4 py-2 rounded-md font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
-  }
-
-  .btn-primary {
-    @apply bg-accent-cpu text-white hover:bg-red-600 focus:ring-accent-cpu;
-  }
-
-  .btn-secondary {
-    @apply bg-bg-secondary text-text-primary border border-border-color hover:bg-bg-card-hover focus:ring-border-color;
-  }
-
-  .modal-actions {
-    @apply flex gap-3 justify-end mt-6;
-  }
-
-  /* Timezone Item Styles */
-  .timezone-item {
+  /* About component styles */
+  .about-container {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--bg-primary);
+  }
+
+  .about-header {
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    padding: 0.75rem;
-    border: 1px solid var(--border-color);
-    border-radius: 0.5rem;
-    margin-bottom: 0.5rem;
-    transition: all 0.2s ease;
-    background-color: var(--bg-card);
+    padding: 3rem 1rem 2rem 1rem;
+    text-align: center;
   }
 
-  .timezone-item:hover {
-    background-color: var(--bg-card-hover);
-  }
-
-  .timezone-info {
-    flex: 1;
-  }
-
-  .timezone-label {
-    font-weight: 600;
-    font-size: 0.875rem;
-    margin-bottom: 0.25rem;
-    color: var(--text-primary);
-  }
-
-  .timezone-zone {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-  }
-
-  .timezone-time-info {
-    text-align: right;
-    margin-right: 1rem;
-  }
-
-  .timezone-date {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-bottom: 0.125rem;
-  }
-
-  .timezone-time {
-    font-weight: 600;
-    font-size: 0.875rem;
-    color: var(--text-primary);
-  }
-
-  .remove-timezone-btn {
-    background: none;
-    border: none;
-    font-size: 1.25rem;
-    cursor: pointer;
-    padding: 0.25rem;
-    border-radius: 0.25rem;
-    transition: all 0.2s ease;
-    width: 2rem;
-    height: 2rem;
+  .app-logo {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 4rem;
+    height: 4rem;
+    background-color: var(--accent-cpu);
+    border-radius: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .app-icon-emoji {
+    font-size: 2rem;
+  }
+
+  .app-name {
+    font-size: 3rem;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.2;
+    color: var(--text-primary);
+  }
+
+  .about-content {
+    flex: 1;
+    padding: 0 1.5rem 1.5rem 1.5rem;
+    overflow-y: auto;
+  }
+
+  .credits {
+    text-align: center;
+    margin-bottom: 2rem;
+  }
+
+  .version-info {
+    text-align: center;
     color: var(--text-muted);
   }
 
-  .remove-timezone-btn:hover {
+  /* Tray icon styles */
+  .tray-container {
+    background-color: var(--bg-primary);
     color: var(--text-primary);
-    background-color: var(--bg-card-hover);
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 10px;
+    line-height: 1;
+    padding: 2px;
+  }
+
+  .stats-table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  .label-row {
+    height: 8px;
+  }
+
+  .value-row {
+    height: 9px;
+  }
+
+  .stat-cell {
+    padding: 0;
+    margin: 0;
+    text-align: center;
+    vertical-align: middle;
+    border: none;
+  }
+
+  .cpu-cell {
+    background-color: var(--accent-cpu);
+    color: white;
+  }
+
+  .ram-cell {
+    background-color: var(--accent-ram);
+    color: white;
+  }
+
+  .disk-cell {
+    background-color: var(--accent-disk);
+    color: white;
+  }
+
+  .net-cell {
+    background-color: var(--accent-net);
+    color: white;
+  }
+
+  .battery-cell {
+    background-color: var(--accent-battery);
+    color: white;
+  }
+
+  .timezone-cell {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+  }
+
+  .stat-label {
+    font-weight: bold;
+    font-size: 8px;
+  }
+
+  .stat-value {
+    font-weight: bold;
+    font-size: 9px;
   }
 }

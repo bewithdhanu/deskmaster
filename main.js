@@ -32,6 +32,21 @@ let aboutWindow = null
 let statsInterval = null
 let trayUpdateInterval = null
 
+// Settings management
+let appSettings = {
+  stats: {
+    cpu: true,
+    ram: true,
+    disk: true,
+    network: true,
+    battery: true
+  },
+  timezones: [],
+  datetimeFormat: 'HH:mm:ss',
+  autoStart: false,
+  theme: 'system'
+}
+
 // Auto-launch configuration (only in production)
 let autoLauncher = null
 if (AutoLaunch) {
@@ -106,15 +121,24 @@ function createAboutWindow() {
 }
 
 function createWindow() {
+  const { screen } = require('electron');
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+  
+  // Calculate 80% of screen size with max dimensions
+  const windowWidth = Math.min(Math.floor(screenWidth * 0.8), 1100);
+  const windowHeight = Math.min(Math.floor(screenHeight * 0.8), 700);
+  
   win = new BrowserWindow({
-    width: 480,
-    height: 680,
+    width: windowWidth,
+    height: windowHeight,
     show: false,
-    frame: false,
-    resizable: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
+    frame: true,
+    resizable: true,
+    transparent: false,
+    alwaysOnTop: false,
+    skipTaskbar: false,
+    title: 'DeskMaster - Desktop Productivity Tool',
     icon: path.join(__dirname, 'assets/icons/app-icon-256.png'),
     webPreferences: {
       nodeIntegration: true,
@@ -132,16 +156,6 @@ function createWindow() {
     // TODO 
   })
   
-  win.on("blur", () => {
-    console.log("Window blurred")
-    setTimeout(() => {
-      if (!win.isFocused()) {
-        console.log("Window is not focused, hiding")
-        win.hide()
-      }
-    }, 100)
-  })
-
   win.on("hide", () => {
     if (statsInterval) clearInterval(statsInterval)
   })
@@ -163,13 +177,28 @@ async function updateTrayIcon() {
     trayIconWindow.webContents.send('update-tray-stats', {
       ...currentStats,
       timezones: timezones,
-      theme: systemTheme
+      theme: systemTheme,
+      settings: appSettings
     })
     // log all html contents of trayIconWindow
     // console.log(await trayIconWindow.webContents.executeJavaScript('document.documentElement.outerHTML'))
 
-    const width = 105 + (timezones.length * 72) + (currentStats.battery ? (currentStats.battery.charging ? 30 : 25) : 0) + ((4+timezones.length+(currentStats.battery ? 1 : 0))*4)
-    const height = 17
+    // Calculate dynamic width based on enabled stats
+    let enabledStatsCount = 0;
+    if (appSettings.stats.cpu) enabledStatsCount++;
+    if (appSettings.stats.ram) enabledStatsCount++;
+    if (appSettings.stats.disk) enabledStatsCount++;
+    if (appSettings.stats.network) enabledStatsCount++;
+    if (appSettings.stats.battery && currentStats.battery) enabledStatsCount++;
+    
+    // Base width for stats + timezones + padding
+    const baseWidth = 20; // Base padding
+    const statWidth = enabledStatsCount * 18; // Each stat takes ~18px
+    const timezoneWidth = timezones.length * 72; // Each timezone takes ~72px
+    const padding = (enabledStatsCount + timezones.length) * 4; // 4px padding between items
+    
+    const width = baseWidth + statWidth + timezoneWidth + padding;
+    const height = 17;
     
     // Resize the tray window to accommodate all content
     trayIconWindow.setSize(Math.ceil(width), height)
@@ -206,6 +235,8 @@ async function sendDetailedStatsToRenderer() {
     // Add theme info to stats object
     detailedStats.theme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
     detailedStats.timezones = timezones;
+    detailedStats.settings = appSettings;
+
 
     win.webContents.send("detailed-stats-update", detailedStats);
   } catch (error) {
@@ -328,28 +359,6 @@ async function updateContextMenu() {
 }
 
 function showWindow() {
-  const bounds = tray.getBounds()
-  const windowBounds = win.getBounds()
-
-  // Position window near tray icon
-  let x = bounds.x - windowBounds.width / 2 + bounds.width / 2
-  let y = bounds.y + bounds.height + 4
-
-  // Adjust for screen boundaries
-  const { screen } = require("electron")
-  const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y })
-
-  if (x + windowBounds.width > display.workArea.x + display.workArea.width) {
-    x = display.workArea.x + display.workArea.width - windowBounds.width - 10
-  }
-  if (x < display.workArea.x) {
-    x = display.workArea.x + 10
-  }
-  if (y + windowBounds.height > display.workArea.y + display.workArea.height) {
-    y = bounds.y - windowBounds.height - 4
-  }
-
-  win.setPosition(Math.round(x), Math.round(y))
   win.show()
   win.focus()
   
@@ -358,13 +367,11 @@ function showWindow() {
 }
 
 app.whenReady().then(() => {
-  // Hide from Dock (macOS only)
-  if (process.platform === "darwin") {
-    app.dock.hide()
-  }
-
   // Load configuration from storage
   config.loadConfig()
+  
+  // Initialize settings with existing timezone config
+  appSettings.timezones = config.getTimezones()
 
   createWindow()
   createTrayIconWindow()
@@ -448,9 +455,6 @@ ipcMain.on("exit-app", () => {
   app.quit()
 })
 
-ipcMain.on("hide-window", () => {
-  win.hide()
-})
 
 // IPC handler for About window
 ipcMain.on('close-about-window', () => {
@@ -466,6 +470,50 @@ ipcMain.handle('get-app-version', () => {
 ipcMain.handle('get-app-icon-path', () => {
   return path.join(__dirname, 'assets/icons/app-icon-256.png')
 })
+
+// Settings IPC handlers
+ipcMain.handle('get-settings', () => {
+  return appSettings
+})
+
+ipcMain.handle('update-settings', (event, newSettings) => {
+  appSettings = { ...appSettings, ...newSettings }
+  
+  // Update timezones in config if they changed
+  if (newSettings.timezones) {
+    config.setTimezones(newSettings.timezones)
+  }
+  
+  // Notify all windows about settings update
+  if (win && win.webContents) {
+    win.webContents.send('settings-updated', appSettings)
+  }
+  if (trayIconWindow && trayIconWindow.webContents) {
+    trayIconWindow.webContents.send('settings-updated', appSettings)
+  }
+  
+  return appSettings
+})
+
+ipcMain.handle('toggle-auto-start', async (event, enabled) => {
+  if (!autoLauncher) {
+    console.log('Auto-start not available in development mode')
+    return false
+  }
+  
+  try {
+    if (enabled) {
+      await autoLauncher.enable()
+    } else {
+      await autoLauncher.disable()
+    }
+    return true
+  } catch (error) {
+    console.error('Error toggling auto-start:', error)
+    return false
+  }
+})
+
 
 app.on("window-all-closed", (e) => {
   e.preventDefault()

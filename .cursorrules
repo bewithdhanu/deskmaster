@@ -35,6 +35,7 @@ dhanu-tools/
 │       ├── Header.js      # App header
 │       ├── StatsManager.js # System stats display
 │       ├── TimezoneManager.js # World clocks
+│       ├── CronManager.js  # Cron job management
 │       ├── TrayIcon.js    # Tray icon component
 │       └── About.js       # About dialog
 ├── dist/                   # Built files
@@ -132,6 +133,33 @@ ipcRenderer.on('theme-changed', handleThemeChange)
 - Consistent spacing and typography
 - Dark/light mode support
 
+#### Color Scheme & Design System
+**CSS Variables (defined in src/index.css):**
+- `--bg-primary: #1a1a1a` (dark) / `#ffffff` (light) - Main background
+- `--bg-secondary: #2d2d2d` (dark) / `#f8f9fa` (light) - Secondary background
+- `--bg-card: rgba(255, 255, 255, 0.1)` (dark) / `rgba(0, 0, 0, 0.05)` (light) - Card background
+- `--bg-card-hover: rgba(255, 255, 255, 0.15)` (dark) / `rgba(0, 0, 0, 0.1)` (light) - Card hover
+- `--border-color: rgba(255, 255, 255, 0.2)` (dark) / `rgba(0, 0, 0, 0.15)` (light) - Border color
+- `--text-primary: #ffffff` (dark) / `#1a1a1a` (light) - Primary text
+- `--text-secondary: rgba(255, 255, 255, 0.9)` (dark) / `rgba(26, 26, 26, 0.9)` (light) - Secondary text
+- `--text-muted: rgba(255, 255, 255, 0.7)` (dark) / `rgba(26, 26, 26, 0.7)` (light) - Muted text
+
+**Accent Colors:**
+- `--accent-cpu: #ff4757` (dark) / `#e74c3c` (light) - CPU accent
+- `--accent-ram: #3742fa` (dark) / `#3498db` (light) - RAM accent
+- `--accent-disk: #2ed573` (dark) / `#27ae60` (light) - Disk accent
+- `--accent-net: #ffa502` (dark) / `#f39c12` (light) - Network accent
+- `--accent-battery: #2ed573` (dark) / `#27ae60` (light) - Battery accent
+
+**Component Styling Guidelines:**
+- All components should use CSS custom properties for colors
+- Cards should have `background-color: var(--bg-card)` and `border: 1px solid var(--border-color)`
+- Hover states should use `background-color: var(--bg-card-hover)`
+- Text should use `color: var(--text-primary)`, `var(--text-secondary)`, or `var(--text-muted)`
+- Buttons should follow the existing `.btn`, `.btn-primary`, `.btn-secondary` classes
+- Form elements should use `.form-input`, `.form-label`, `.form-group` classes
+- Modals should use `.modal`, `.modal-content`, `.modal-header` classes
+
 ## File-Specific Guidelines
 
 ### main.js
@@ -159,6 +187,13 @@ ipcRenderer.on('theme-changed', handleThemeChange)
 - Theme integration
 - IPC communication
 - Clean component structure
+
+### CronManager Component
+- Manages cron job creation, editing, and deletion
+- Supports both preset schedules and custom cron expressions
+- Integrates with system crontab for real job execution
+- Uses consistent styling with other components
+- Follows the established design system with CSS custom properties
 
 ## Development Best Practices
 
@@ -255,3 +290,127 @@ ipcRenderer.on('theme-changed', handleThemeChange)
 - Test configuration persistence
 
 Remember: This is a desktop productivity app focused on system monitoring and timezone management. Always consider the user experience and system performance when making changes.
+
+
+
+## Git Workflow Rules
+
+### Pull Request Process (MANDATORY)
+When making any changes to the codebase, follow this exact workflow:
+
+1. **NEVER commit directly to master branch**
+2. **Always create a feature branch** for new changes
+3. **Create a proper Pull Request** with detailed description
+4. **Review and merge** the PR through GitHub
+
+### Step-by-Step Process:
+
+#### 1. Create Feature Branch
+```bash
+git checkout -b feature/descriptive-branch-name
+```
+
+#### 2. Make Changes and Commit
+```bash
+git add .
+git commit -m "feat: descriptive commit message
+
+- Detailed bullet points of changes
+- Include benefits and impact
+- Reference any issues or requirements"
+```
+
+#### 3. Push Feature Branch
+```bash
+git push origin feature/descriptive-branch-name
+```
+
+#### 4. Create Pull Request
+Use GitHub CLI to create PR with detailed description:
+```bash
+gh pr create --title "feat: descriptive title" --body "## Description
+Detailed description of changes
+
+## Changes
+- ✅ Change 1
+- ✅ Change 2
+- ✅ Change 3
+
+## Benefits
+- Benefit 1
+- Benefit 2
+
+## Testing
+- [x] Test 1
+- [x] Test 2
+
+## Impact
+- Risk assessment
+- Compatibility notes" --base master
+```
+
+#### 5. Merge Pull Request
+```bash
+gh pr merge [PR_NUMBER] --merge --delete-branch
+```
+
+#### 6. Clean Up
+```bash
+git checkout master
+git pull origin master
+```
+
+### Commit Message Format
+Follow conventional commits format:
+- `feat:` for new features
+- `fix:` for bug fixes
+- `docs:` for documentation changes
+- `refactor:` for code refactoring
+- `test:` for test additions/changes
+
+### Branch Naming Convention
+- `feature/descriptive-name` for new features
+- `fix/descriptive-name` for bug fixes
+- `hotfix/descriptive-name` for urgent fixes
+
+### Pull Request Requirements
+Every PR must include:
+- Clear title with conventional commit prefix
+- Detailed description with sections:
+  - Description
+  - Changes (with checkboxes)
+  - Benefits
+  - Testing checklist
+  - Impact assessment
+- All tests passing
+- Code review approval
+
+### Emergency Hotfix Process
+For urgent production fixes:
+1. Create `hotfix/descriptive-name` branch from master
+2. Make minimal necessary changes
+3. Create PR with `hotfix:` prefix
+4. Fast-track review and merge
+5. Deploy immediately
+
+### Code Quality Rules
+- All code must be properly formatted
+- Include comprehensive logging
+- Add error handling for all external calls
+- Write descriptive commit messages
+- Update documentation when needed
+
+## Enforcement
+- **NO DIRECT COMMITS TO MASTER** - This will be enforced through branch protection rules
+- All changes must go through PR process
+- Code review required for all PRs
+- Automated testing must pass before merge
+
+## Tools Required
+- GitHub CLI (`gh`) for PR management
+- Git for version control
+- Python linting tools
+- FastAPI testing framework
+
+---
+*This file ensures consistent development practices and maintains code quality across the  project.*
