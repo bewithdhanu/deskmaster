@@ -39,7 +39,7 @@ function App() {
       case 'home':
         return <Home />;
       case 'world-clocks':
-        return <TimezoneManager onNavigateToSettings={() => setActiveTab('settings')} />;
+        return <TimezoneManager />;
       case 'settings':
         return <Settings />;
       default:

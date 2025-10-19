@@ -1,7 +1,7 @@
-# DeskMaster - Desktop Productivity App
+# Deskmain - Desktop Productivity App
 
 ## Project Overview
-DeskMaster is a comprehensive desktop productivity application built with Electron and React. It provides system monitoring, world clocks, and productivity tools through a system tray interface.
+Deskmain is a comprehensive desktop productivity application built with Electron and React. It provides system monitoring, world clocks, and productivity tools through a system tray interface.
 
 ## Architecture
 
@@ -298,10 +298,11 @@ Remember: This is a desktop productivity app focused on system monitoring and ti
 ### Pull Request Process (MANDATORY)
 When making any changes to the codebase, follow this exact workflow:
 
-1. **NEVER commit directly to master branch**
+1. **NEVER commit directly to main branch**
 2. **Always create a feature branch** for new changes
 3. **Create a proper Pull Request** with detailed description
 4. **Review and merge** the PR through GitHub
+
 
 ### Step-by-Step Process:
 
@@ -346,7 +347,7 @@ Detailed description of changes
 
 ## Impact
 - Risk assessment
-- Compatibility notes" --base master
+- Compatibility notes" --base main
 ```
 
 #### 5. Merge Pull Request
@@ -356,8 +357,8 @@ gh pr merge [PR_NUMBER] --merge --delete-branch
 
 #### 6. Clean Up
 ```bash
-git checkout master
-git pull origin master
+git checkout main
+git pull origin main
 ```
 
 ### Commit Message Format
@@ -387,7 +388,7 @@ Every PR must include:
 
 ### Emergency Hotfix Process
 For urgent production fixes:
-1. Create `hotfix/descriptive-name` branch from master
+1. Create `hotfix/descriptive-name` branch from main
 2. Make minimal necessary changes
 3. Create PR with `hotfix:` prefix
 4. Fast-track review and merge
@@ -401,7 +402,7 @@ For urgent production fixes:
 - Update documentation when needed
 
 ## Enforcement
-- **NO DIRECT COMMITS TO MASTER** - This will be enforced through branch protection rules
+- **NO DIRECT COMMITS TO main** - This will be enforced through branch protection rules
 - All changes must go through PR process
 - Code review required for all PRs
 - Automated testing must pass before merge
