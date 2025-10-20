@@ -1,417 +1,317 @@
-# Deskmain - Desktop Productivity App
+# 🖥️ **DeskMaster – Desktop Productivity Application**
 
-## Project Overview
-Deskmain is a comprehensive desktop productivity application built with Electron and React. It provides system monitoring, world clocks, and productivity tools through a system tray interface.
+### **Comprehensive system monitoring, timezone management, and settings control – all from your desktop.**
 
-## Architecture
+---
 
-### Core Technologies
-- **Electron** (v27.3.11) - Desktop app framework
-- **React** (v18.2.0) - UI framework with hooks
-- **Node.js** - Backend runtime
-- **Webpack** - Module bundler for React components
-- **TailwindCSS** - Utility-first CSS framework
-- **Chart.js** - Data visualization
-- **Moment.js** - Date/time manipulation
+## 🚀 **1. Project Overview**
 
-### Key Dependencies
-- `systeminformation` - System stats collection
-- `html2canvas` - Screenshot generation for tray icons
-- `auto-launch` - Auto-start functionality
-- `moment-timezone` - Timezone handling
-- `electron-builder` - App packaging
+**DeskMaster** is a cross-platform productivity desktop application built with **Electron + React**, designed for system monitoring, multi-timezone management, and seamless tray-based interactions.
 
-## Project Structure
+### **Core Stack**
+
+| Layer         | Technology                  |
+| ------------- | --------------------------- |
+| Framework     | Electron v27                |
+| Frontend      | React v18 + TailwindCSS     |
+| Backend       | Node.js                     |
+| Bundler       | Webpack                     |
+| Visualization | Chart.js                    |
+| Date/Time     | Moment.js + moment-timezone |
+
+---
+
+## 🧩 **2. Key Features**
+
+### 🖥️ **System Monitoring**
+
+* Real-time CPU, RAM, disk, and network tracking
+* Temperature & battery indicators
+* Performance graphs using Chart.js
+* Configurable visibility for each metric
+
+### 🌍 **World Clocks**
+
+* Multiple timezone support with custom labels
+* Interactive timeline (15-min intervals)
+* Drag to adjust all clocks synchronously
+* Custom date-time formats & persistence
+
+### ⚙️ **Settings Management**
+
+* Responsive grid (1–4 columns)
+* Toggles for all system stats
+* Timezone add/edit/remove
+* Theme, auto-launch, and format preferences
+
+### 🧭 **Tray Integration**
+
+* Live system tray stats
+* Theme-aware tray icons via `html2canvas`
+* Show/hide toggle on click, context menu support
+
+### 🎨 **User Interface**
+
+* Dark/light/system themes with CSS variables
+* Smooth transitions & custom scrollbars
+* Persistent navigation tabs
+* TailwindCSS-based modern design system
+
+---
+
+## 🧠 **3. Architecture Overview**
+
+### **Structure**
 
 ```
 dhanu-tools/
-├── main.js                 # Main Electron process
-├── stats.js               # System stats collection module
-├── config.js              # Configuration management
-├── src/                    # React source code
-│   ├── App.js             # Main React app
-│   ├── index.js           # React entry point
-│   └── components/        # React components
-│       ├── Header.js      # App header
-│       ├── StatsManager.js # System stats display
-│       ├── TimezoneManager.js # World clocks
-│       ├── CronManager.js  # Cron job management
-│       ├── TrayIcon.js    # Tray icon component
-│       └── About.js       # About dialog
-├── dist/                   # Built files
-├── assets/                 # Icons and resources
-└── package.json           # Dependencies and scripts
+├── main.js               # Electron main process
+├── stats.js              # System info collection
+├── config.js             # Persistent configuration
+├── src/                  # React source
+│   ├── components/       # UI modules
+│   └── index.js          # React entry
+├── assets/               # Icons & resources
+└── package.json
 ```
 
-## Development Workflow
-
-### Development Commands
-- `npm run dev` - Run Electron in development mode with live reload
-- `npm run dev-app` - Run with webpack watch + electron
-- `npm run build-react` - Build React components
-- `npm run watch` - Watch mode for React changes
-
-### Build Commands
-- `npm run build-mac-arm64` - Build for Apple Silicon
-- `npm run build-mac-x64` - Build for Intel Macs
-- `npm run build-mac-universal` - Universal binary
-- `npm run build` - Build for all platforms
-- `npm run dist` - Build and package
-
-## Key Features
-
-### System Monitoring
-- Real-time CPU, RAM, disk, and network usage
-- Temperature monitoring
-- Battery status (when available)
-- Performance charts and graphs
-- Process management
-
-### World Clocks
-- Multiple timezone support
-- Custom timezone management
-- Real-time clock updates
-- Timezone configuration persistence
-
-### Tray Integration
-- System tray icon with live stats
-- Custom tray icon generation using html2canvas
-- Click to show/hide main window
-- Right-click context menu
-
-## Technical Patterns
-
-### State Management
-- React hooks (useState, useEffect) for component state
-- IPC communication between main and renderer processes
-- Configuration persistence using JSON files
-- Real-time data updates via intervals
-
-### IPC Communication
-```javascript
-// Main process to renderer
-win.webContents.send('detailed-stats-update', stats)
-trayIconWindow.webContents.send('update-tray-stats', stats)
-
-// Renderer to main process
-ipcRenderer.send('hide-window')
-ipcRenderer.on('theme-changed', handleThemeChange)
-```
-
-### Data Flow
-1. **Stats Collection**: `stats.js` collects system information
-2. **Main Process**: `main.js` orchestrates data flow and window management
-3. **React Components**: Display data and handle user interactions
-4. **Configuration**: `config.js` manages persistent settings
-
-### Theme System
-- CSS custom properties for theming
-- Dark/light mode support
-- System theme detection
-- Theme persistence across sessions
-
-## Code Style Guidelines
-
-### JavaScript/Node.js
-- Use modern ES6+ features
-- Prefer async/await over callbacks
-- Handle errors gracefully with try/catch
-- Use descriptive variable names
-- Comment complex logic
-
-### React Components
-- Use functional components with hooks
-- Keep components focused and single-purpose
-- Use proper dependency arrays in useEffect
-- Clean up event listeners in useEffect cleanup
-- Use meaningful prop names
-
-### CSS/Styling
-- Use TailwindCSS utility classes
-- CSS custom properties for theming
-- Responsive design principles
-- Consistent spacing and typography
-- Dark/light mode support
-
-#### Color Scheme & Design System
-**CSS Variables (defined in src/index.css):**
-- `--bg-primary: #1a1a1a` (dark) / `#ffffff` (light) - Main background
-- `--bg-secondary: #2d2d2d` (dark) / `#f8f9fa` (light) - Secondary background
-- `--bg-card: rgba(255, 255, 255, 0.1)` (dark) / `rgba(0, 0, 0, 0.05)` (light) - Card background
-- `--bg-card-hover: rgba(255, 255, 255, 0.15)` (dark) / `rgba(0, 0, 0, 0.1)` (light) - Card hover
-- `--border-color: rgba(255, 255, 255, 0.2)` (dark) / `rgba(0, 0, 0, 0.15)` (light) - Border color
-- `--text-primary: #ffffff` (dark) / `#1a1a1a` (light) - Primary text
-- `--text-secondary: rgba(255, 255, 255, 0.9)` (dark) / `rgba(26, 26, 26, 0.9)` (light) - Secondary text
-- `--text-muted: rgba(255, 255, 255, 0.7)` (dark) / `rgba(26, 26, 26, 0.7)` (light) - Muted text
-
-**Accent Colors:**
-- `--accent-cpu: #ff4757` (dark) / `#e74c3c` (light) - CPU accent
-- `--accent-ram: #3742fa` (dark) / `#3498db` (light) - RAM accent
-- `--accent-disk: #2ed573` (dark) / `#27ae60` (light) - Disk accent
-- `--accent-net: #ffa502` (dark) / `#f39c12` (light) - Network accent
-- `--accent-battery: #2ed573` (dark) / `#27ae60` (light) - Battery accent
-
-**Component Styling Guidelines:**
-- All components should use CSS custom properties for colors
-- Cards should have `background-color: var(--bg-card)` and `border: 1px solid var(--border-color)`
-- Hover states should use `background-color: var(--bg-card-hover)`
-- Text should use `color: var(--text-primary)`, `var(--text-secondary)`, or `var(--text-muted)`
-- Buttons should follow the existing `.btn`, `.btn-primary`, `.btn-secondary` classes
-- Form elements should use `.form-input`, `.form-label`, `.form-group` classes
-- Modals should use `.modal`, `.modal-content`, `.modal-header` classes
-
-## File-Specific Guidelines
-
-### main.js
-- Main Electron process entry point
-- Window and tray management
-- IPC handlers
-- Auto-launch configuration
-- Development vs production logic
-
-### stats.js
-- System information collection
-- Performance data storage
-- Data formatting utilities
-- Real-time stats updates
-
-### config.js
-- Configuration persistence
-- Timezone management
-- Settings storage/retrieval
-- Default configuration handling
-
-### React Components
-- Functional components with hooks
-- Proper event handling
-- Theme integration
-- IPC communication
-- Clean component structure
-
-### CronManager Component
-- Manages cron job creation, editing, and deletion
-- Supports both preset schedules and custom cron expressions
-- Integrates with system crontab for real job execution
-- Uses consistent styling with other components
-- Follows the established design system with CSS custom properties
-
-## Development Best Practices
-
-### Error Handling
-- Always wrap async operations in try/catch
-- Provide fallback values for missing data
-- Log errors appropriately
-- Handle edge cases gracefully
-
-### Performance
-- Use intervals efficiently
-- Clean up resources properly
-- Optimize re-renders
-- Minimize IPC calls
-
-### Security
-- Validate IPC data
-- Sanitize user inputs
-- Use secure defaults
-- Handle file system operations safely
-
-## Build Configuration
-
-### Electron Builder
-- Multi-platform support (macOS ARM64, x64, universal)
-- App signing and notarization
-- Icon and metadata configuration
-- File inclusion/exclusion
-
-### Webpack
-- React component bundling
-- Development server
-- Hot reloading
-- Production optimizations
-
-## Common Tasks
-
-### Adding New System Stats
-1. Update `stats.js` to collect new data
-2. Modify `currentStats` object structure
-3. Update React components to display data
-4. Handle data formatting and display
-
-### Adding New Timezones
-1. Use `config.js` timezone functions
-2. Update React timezone components
-3. Handle timezone validation
-4. Persist configuration changes
-
-### Styling Changes
-1. Use TailwindCSS utilities
-2. Update CSS custom properties for theming
-3. Ensure dark/light mode compatibility
-4. Test responsive behavior
-
-### IPC Communication
-1. Define clear message channels
-2. Handle data serialization
-3. Implement proper error handling
-4. Clean up event listeners
-
-## Debugging Tips
-
-### Development Mode
-- Use `npm run dev` for live reloading
-- Check console for errors
-- Use Electron DevTools
-- Monitor IPC communication
-
-### Build Issues
-- Check file paths in build configuration
-- Verify all dependencies are included
-- Test on target platforms
-- Check signing and notarization
-
-### Performance Issues
-- Monitor interval frequencies
-- Check memory usage
-- Optimize re-renders
-- Profile system calls
-
-## Testing Strategy
-
-### Manual Testing
-- Test all system stats accuracy
-- Verify timezone functionality
-- Check theme switching
-- Test tray interactions
-
-### Build Testing
-- Test on different architectures
-- Verify app signing
-- Check auto-launch functionality
-- Test configuration persistence
-
-Remember: This is a desktop productivity app focused on system monitoring and timezone management. Always consider the user experience and system performance when making changes.
-
-
-
-## Git Workflow Rules
-
-### Pull Request Process (MANDATORY)
-When making any changes to the codebase, follow this exact workflow:
-
-1. **NEVER commit directly to main branch**
-2. **Always create a feature branch** for new changes
-3. **Create a proper Pull Request** with detailed description
-4. **Review and merge** the PR through GitHub
-
-
-### Step-by-Step Process:
-
-#### 1. Create Feature Branch
-```bash
-git checkout -b feature/descriptive-branch-name
-```
-
-#### 2. Make Changes and Commit
-```bash
-git add .
-git commit -m "feat: descriptive commit message
-
-- Detailed bullet points of changes
-- Include benefits and impact
-- Reference any issues or requirements"
-```
-
-#### 3. Push Feature Branch
-```bash
-git push origin feature/descriptive-branch-name
-```
-
-#### 4. Create Pull Request
-Use GitHub CLI to create PR with detailed description:
-```bash
-gh pr create --title "feat: descriptive title" --body "## Description
-Detailed description of changes
-
-## Changes
-- ✅ Change 1
-- ✅ Change 2
-- ✅ Change 3
-
-## Benefits
-- Benefit 1
-- Benefit 2
-
-## Testing
-- [x] Test 1
-- [x] Test 2
-
-## Impact
-- Risk assessment
-- Compatibility notes" --base main
-```
-
-#### 5. Merge Pull Request
-```bash
-gh pr merge [PR_NUMBER] --merge --delete-branch
-```
-
-#### 6. Clean Up
-```bash
-git checkout main
-git pull origin main
-```
-
-### Commit Message Format
-Follow conventional commits format:
-- `feat:` for new features
-- `fix:` for bug fixes
-- `docs:` for documentation changes
-- `refactor:` for code refactoring
-- `test:` for test additions/changes
-
-### Branch Naming Convention
-- `feature/descriptive-name` for new features
-- `fix/descriptive-name` for bug fixes
-- `hotfix/descriptive-name` for urgent fixes
-
-### Pull Request Requirements
-Every PR must include:
-- Clear title with conventional commit prefix
-- Detailed description with sections:
-  - Description
-  - Changes (with checkboxes)
-  - Benefits
-  - Testing checklist
-  - Impact assessment
-- All tests passing
-- Code review approval
-
-### Emergency Hotfix Process
-For urgent production fixes:
-1. Create `hotfix/descriptive-name` branch from main
-2. Make minimal necessary changes
-3. Create PR with `hotfix:` prefix
-4. Fast-track review and merge
-5. Deploy immediately
-
-### Code Quality Rules
-- All code must be properly formatted
-- Include comprehensive logging
-- Add error handling for all external calls
-- Write descriptive commit messages
-- Update documentation when needed
-
-## Enforcement
-- **NO DIRECT COMMITS TO main** - This will be enforced through branch protection rules
-- All changes must go through PR process
-- Code review required for all PRs
-- Automated testing must pass before merge
-
-## Tools Required
-- GitHub CLI (`gh`) for PR management
-- Git for version control
-- Python linting tools
-- FastAPI testing framework
+### **Core Modules**
+
+| File                 | Purpose                                      |
+| -------------------- | -------------------------------------------- |
+| `main.js`            | Electron lifecycle, window/tray control, IPC |
+| `stats.js`           | Collects & formats system info               |
+| `config.js`          | Settings persistence (JSON)                  |
+| `TrayIcon.js`        | Dynamic tray rendering                       |
+| `Settings.js`        | UI for user preferences                      |
+| `TimezoneManager.js` | Timezone list & timeline integration         |
 
 ---
-*This file ensures consistent development practices and maintains code quality across the  project.*
+
+## 🎨 **4. Theming & Design System**
+
+### **Color Variables**
+
+Dark and light mode CSS variables define consistent design tokens:
+
+```css
+--bg-primary: #1a1a1a; /* dark */ 
+--bg-primary-light: #ffffff; /* light */
+--accent-cpu: #ff4757;
+--accent-ram: #3742fa;
+--text-primary: #ffffff;
+```
+
+### **Component Standards**
+
+* Use Tailwind utilities
+* Cards: `bg-[var(--bg-card)]` + `border-[var(--border-color)]`
+* Buttons: `.btn`, `.btn-primary`, `.btn-secondary`
+* Modals: `.modal`, `.modal-content`, `.modal-header`
+* Responsive & theme-aware at all breakpoints
+
+---
+
+## ⚡ **5. Development Standards**
+
+### **Code Style**
+
+| Area                 | Standard                                     |
+| -------------------- | -------------------------------------------- |
+| **JavaScript**       | [ESLint Standard](https://standardjs.com)    |
+| **React Components** | Functional + Hooks (`useState`, `useEffect`) |
+| **Async Code**       | `async/await` only, no callbacks             |
+| **Naming**           | Descriptive, camelCase                       |
+| **Formatting**       | Prettier config enforced                     |
+| **Docs**             | JSDoc comments for complex logic             |
+
+### **Styling**
+
+* TailwindCSS for layout, spacing, and utilities
+* CSS custom properties for theming
+* Responsive first design
+* Accessible contrast ratios (WCAG AA+)
+
+### **Data & State Flow**
+
+```text
+stats.js → main.js → IPC → React Components → config.js (persist)
+```
+
+### **Error Handling**
+
+* Use `try/catch` for all async ops
+* Provide safe fallbacks
+* Validate all IPC data
+* Log errors in main process
+
+### **Versioning**
+
+* Follow **[Semantic Versioning (SemVer)](https://semver.org)**
+  `MAJOR.MINOR.PATCH` (e.g. `1.3.2`)
+
+---
+
+## 🧱 **6. Build & Packaging**
+
+| Command                   | Description                  |
+| ------------------------- | ---------------------------- |
+| `npm run dev`             | Live reload development mode |
+| `npm run build-react`     | React build only             |
+| `npm run build-mac-arm64` | Apple Silicon                |
+| `npm run build-mac-x64`   | Intel macOS                  |
+| `npm run build`           | Multi-platform build         |
+| `npm run dist`            | Package app for distribution |
+
+Built using **electron-builder** with signing, notarization, and platform packaging.
+
+---
+
+## 🧪 **7. Testing Guidelines**
+
+### **Manual Testing Checklist**
+
+* System stats refresh & accuracy
+* Timezone adjustment correctness
+* Theme switch & persistence
+* Tray icon responsiveness
+* Settings grid adaptability
+
+### **Build Testing**
+
+* macOS ARM64, x64, and universal binaries
+* Configuration persistence after restart
+* Auto-launch validation
+
+---
+
+## 🧭 **8. Git & PR Workflow (Standardized)**
+
+### **Branching Model**
+
+Follows [GitFlow](https://nvie.com/posts/a-successful-git-branching-model/) conventions with slight simplification:
+
+| Branch Prefix | Purpose               | Example                    |
+| ------------- | --------------------- | -------------------------- |
+| `feature/`    | New feature           | `feature/timeline-drag`    |
+| `fix/`        | Bug fix               | `fix/ram-chart-scale`      |
+| `refactor/`   | Code restructure      | `refactor/config-module`   |
+| `docs/`       | Documentation         | `docs/contributing-update` |
+| `hotfix/`     | Urgent production fix | `hotfix/theme-freeze`      |
+
+---
+
+### **Commit Conventions**
+
+Follow **[Conventional Commits](https://www.conventionalcommits.org)**:
+
+```
+<type>(scope?): <short summary>
+
+- Optional details
+- Benefits and changes
+```
+
+**Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `build`
+
+---
+
+### **Pull Request Standards**
+
+Each PR **must** include:
+
+```markdown
+## Description
+Short summary of what’s changed.
+
+## Changes
+- ✅ Point 1
+- ✅ Point 2
+
+## Benefits
+Why this improves UX or code quality.
+
+## Testing
+- [x] Manual test done
+- [x] Verified build success
+
+## Impact
+Compatibility, risks, or dependencies.
+```
+
+---
+
+### **Automated AI Workflow**
+
+#### **When you say “create PR”:**
+
+1. Analyze modified files
+2. Create `feature/...` branch
+3. Commit with proper Conventional Commit message
+4. Push & open PR via GitHub CLI
+
+#### **When you say “create PR and merge”:**
+
+Performs the same + merges PR, deletes branch, and syncs `main`.
+
+Example output:
+
+```
+✅ Created branch: feature/settings-grid-layout
+✅ Opened PR: #45
+✅ Merged to main
+✅ Cleaned up local branch
+```
+
+---
+
+### **Standard Commands**
+
+```bash
+# Create branch
+git checkout -b feature/timeline-enhancement
+
+# Commit
+git add .
+git commit -m "feat: improve timeline animation smoothness"
+
+# Push & create PR
+git push origin feature/timeline-enhancement
+gh pr create --title "feat: improve timeline animation" --body "Enhanced marker smoothness and drag feedback."
+
+# Merge
+gh pr merge --merge --delete-branch
+```
+
+---
+
+### **Rules Enforcement**
+
+* 🚫 No direct commits to `main`
+* ✅ All merges via PR
+* 🔒 Branch protection: review + CI required
+* 🔁 Local cleanup after merge
+* 🧹 Keep `main` always deployable
+
+---
+
+## 🧰 **9. Tools Required**
+
+* **Git**
+* **GitHub CLI (`gh`)**
+* **Node.js & npm**
+* **Electron Builder**
+* **Prettier / ESLint**
+
+---
+
+## ✅ **10. Summary**
+
+* Follow **GitFlow** + **Conventional Commits**
+* Maintain **code consistency** via ESLint & Prettier
+* Use **feature branches** only
+* Ensure **PR review & testing**
+* Maintain **theme + performance consistency**
+* Keep `main` stable and production-ready
+
+---

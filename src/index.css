@@ -18,6 +18,13 @@
   --accent-disk: #2ed573;
   --accent-net: #ffa502;
   --accent-battery: #2ed573;
+  --timeline-line: rgba(255, 255, 255, 0.3);
+  --timeline-tick: rgba(255, 255, 255, 0.6);
+  --timeline-marker: #ff4757;
+  --timeline-label: rgba(255, 255, 255, 0.8);
+  --scrollbar-track: rgba(255, 255, 255, 0.1);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.3);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.5);
 }
 
 /* Light theme */
@@ -35,6 +42,13 @@
   --accent-disk: #27ae60;
   --accent-net: #f39c12;
   --accent-battery: #27ae60;
+  --timeline-line: rgba(0, 0, 0, 0.2);
+  --timeline-tick: rgba(0, 0, 0, 0.4);
+  --timeline-marker: #e74c3c;
+  --timeline-label: rgba(0, 0, 0, 0.6);
+  --scrollbar-track: rgba(0, 0, 0, 0.1);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.3);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.5);
 }
 
 /* System theme detection */
@@ -53,6 +67,10 @@
     --accent-disk: #27ae60;
     --accent-net: #f39c12;
     --accent-battery: #27ae60;
+  --timeline-line: rgba(0, 0, 0, 0.2);
+  --timeline-tick: rgba(0, 0, 0, 0.4);
+  --timeline-marker: #e74c3c;
+  --timeline-label: rgba(0, 0, 0, 0.6);
   }
 }
 
@@ -71,6 +89,10 @@
     --accent-disk: #2ed573;
     --accent-net: #ffa502;
     --accent-battery: #2ed573;
+  --timeline-line: rgba(255, 255, 255, 0.3);
+  --timeline-tick: rgba(255, 255, 255, 0.6);
+  --timeline-marker: #ff4757;
+  --timeline-label: rgba(255, 255, 255, 0.8);
   }
 }
 
@@ -145,6 +167,22 @@
   
   .accent-battery {
     color: var(--accent-battery);
+  }
+  
+  .bg-timeline-line {
+    background-color: var(--timeline-line);
+  }
+  
+  .bg-timeline-tick {
+    background-color: var(--timeline-tick);
+  }
+  
+  .bg-timeline-marker {
+    background-color: var(--timeline-marker);
+  }
+  
+  .text-timeline-label {
+    color: var(--timeline-label);
   }
 }
 
@@ -314,4 +352,88 @@
   height: 8px;
   border-radius: 4px;
   background: transparent;
+}
+
+/* Vertical Timeline Slider Styles */
+.slider-vertical {
+  writing-mode: bt-lr; /* IE */
+  -webkit-appearance: slider-vertical; /* WebKit */
+  width: 8px;
+  height: 256px;
+}
+
+.slider-vertical::-webkit-slider-thumb {
+  appearance: none;
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: #ef4444;
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider-vertical::-moz-range-thumb {
+  height: 20px;
+  width: 20px;
+  border-radius: 50%;
+  background: #ef4444;
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider-vertical::-webkit-slider-track {
+  width: 8px;
+  border-radius: 4px;
+}
+
+.slider-vertical::-moz-range-track {
+  width: 8px;
+  border-radius: 4px;
+  background: transparent;
+}
+
+/* Global Custom Scrollbar Styles */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Webkit Scrollbar Styles (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+/* Firefox Scrollbar Styles */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* Smooth scrolling for all elements */
+* {
+  scroll-behavior: smooth;
 }

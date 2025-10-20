@@ -8,17 +8,48 @@ const { ipcRenderer } = window.require('electron');
 
 function App() {
   const [currentTheme, setCurrentTheme] = useState('dark');
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState(() => {
+    // Get last active tab from localStorage, default to 'home'
+    return localStorage.getItem('lastActiveTab') || 'home';
+  });
 
   useEffect(() => {
-    // Apply initial theme
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const initialTheme = prefersDark ? 'dark' : 'light';
-    setCurrentTheme(initialTheme);
-    applyTheme(initialTheme);
+    // Get initial theme from main process
+    const getInitialTheme = async () => {
+      try {
+        const settings = await ipcRenderer.invoke('get-settings');
+        if (settings && settings.theme) {
+          // Determine effective theme based on user setting
+          let effectiveTheme = settings.theme;
+          if (settings.theme === 'system') {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            effectiveTheme = prefersDark ? 'dark' : 'light';
+          }
+          console.log('Initial theme from settings:', effectiveTheme, '(user setting:', settings.theme, ')');
+          setCurrentTheme(effectiveTheme);
+          applyTheme(effectiveTheme);
+        } else {
+          // Fallback to system theme if no settings
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const initialTheme = prefersDark ? 'dark' : 'light';
+          setCurrentTheme(initialTheme);
+          applyTheme(initialTheme);
+        }
+      } catch (error) {
+        console.error('Error getting initial theme:', error);
+        // Fallback to system theme
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const initialTheme = prefersDark ? 'dark' : 'light';
+        setCurrentTheme(initialTheme);
+        applyTheme(initialTheme);
+      }
+    };
+
+    getInitialTheme();
 
     // Listen for theme changes
     const handleThemeChange = (event, theme) => {
+      console.log('Theme changed in renderer:', theme);
       setCurrentTheme(theme);
       applyTheme(theme);
     };
@@ -32,6 +63,12 @@ function App() {
 
   const applyTheme = (theme) => {
     document.body.setAttribute('data-theme', theme);
+  };
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    // Save the active tab to localStorage
+    localStorage.setItem('lastActiveTab', tabId);
   };
 
   const renderContent = () => {
@@ -49,7 +86,7 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-theme-primary text-theme-primary">
-      <Navigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <Navigation activeTab={activeTab} onTabChange={handleTabChange} />
       <div className="flex-1 overflow-hidden">
         {renderContent()}
       </div>
