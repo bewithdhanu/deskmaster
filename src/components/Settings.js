@@ -180,20 +180,20 @@ const Settings = () => {
 
 
   const ToggleSwitch = ({ enabled, onChange, label, description }) => (
-    <div className="flex items-center justify-between py-2">
+    <div className="flex items-center justify-between py-1">
       <div className="flex-1">
-        <div className="text-theme-primary font-medium text-sm">{label}</div>
+        <div className="text-theme-primary font-medium text-xs">{label}</div>
         {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
       </div>
       <button
         onClick={onChange}
-        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 ${
+        className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 ${
           enabled ? 'bg-red-500' : 'bg-theme-secondary'
         }`}
       >
         <span
-          className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 ${
-            enabled ? 'translate-x-5' : 'translate-x-1'
+          className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform duration-200 ${
+            enabled ? 'translate-x-3.5' : 'translate-x-0.5'
           }`}
         />
       </button>
@@ -201,15 +201,15 @@ const Settings = () => {
   );
 
   const SelectOption = ({ value, onChange, options, label, description }) => (
-    <div className="py-2">
-      <div className="mb-2">
-        <div className="text-theme-primary font-medium text-sm">{label}</div>
+    <div className="py-1">
+      <div className="mb-1">
+        <div className="text-theme-primary font-medium text-xs">{label}</div>
         {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
       </div>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 bg-theme-secondary border border-theme rounded-md text-theme-primary text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+        className="w-full px-2 py-1.5 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -221,135 +221,138 @@ const Settings = () => {
   );
 
   return (
-    <div className="h-full flex flex-col bg-theme-primary overflow-y-auto p-3">
-      
-      <div className="flex-1 p-6 mx-auto w-full">
-        {/* System Stats */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <MdMemory className="w-5 h-5 text-theme-muted" />
-            <h2 className="text-xl font-semibold text-theme-primary">System Stats</h2>
+    <div className="h-full flex flex-col bg-theme-primary overflow-y-auto p-4">
+      <div className="flex-1 mx-auto w-full">
+        {/* Responsive Grid Layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          
+          {/* System Stats Card */}
+          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
+            <div className="flex items-center gap-2 mb-3">
+              <MdMemory className="w-4 h-4 text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-primary">System Stats</h3>
+            </div>
+            <div className="space-y-2">
+              <ToggleSwitch
+                enabled={settings.stats.cpu}
+                onChange={() => toggleStat('cpu')}
+                label="CPU Usage"
+                description="Show in tray"
+              />
+              <ToggleSwitch
+                enabled={settings.stats.ram}
+                onChange={() => toggleStat('ram')}
+                label="Memory Usage"
+                description="Show in tray"
+              />
+              <ToggleSwitch
+                enabled={settings.stats.disk}
+                onChange={() => toggleStat('disk')}
+                label="Storage Usage"
+                description="Show in tray"
+              />
+              <ToggleSwitch
+                enabled={settings.stats.network}
+                onChange={() => toggleStat('network')}
+                label="Network Activity"
+                description="Show in tray"
+              />
+              <ToggleSwitch
+                enabled={settings.stats.battery}
+                onChange={() => toggleStat('battery')}
+                label="Battery Status"
+                description="Show in tray"
+              />
+            </div>
           </div>
-          <div className="border-b border-theme mb-4"></div>
-          <div className="space-y-0">
-            <ToggleSwitch
-              enabled={settings.stats.cpu}
-              onChange={() => toggleStat('cpu')}
-              label="CPU Usage"
-              description="Show CPU usage in tray and stats"
-            />
-            <ToggleSwitch
-              enabled={settings.stats.ram}
-              onChange={() => toggleStat('ram')}
-              label="Memory Usage"
-              description="Show RAM usage in tray and stats"
-            />
-            <ToggleSwitch
-              enabled={settings.stats.disk}
-              onChange={() => toggleStat('disk')}
-              label="Storage Usage"
-              description="Show disk usage in tray and stats"
-            />
-            <ToggleSwitch
-              enabled={settings.stats.network}
-              onChange={() => toggleStat('network')}
-              label="Network Activity"
-              description="Show network stats in tray and stats"
-            />
-            <ToggleSwitch
-              enabled={settings.stats.battery}
-              onChange={() => toggleStat('battery')}
-              label="Battery Status"
-              description="Show battery info in tray and stats"
-            />
-          </div>
-        </div>
 
-        {/* Timezones */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <MdAccessTime className="w-5 h-5 text-theme-muted" />
-            <h2 className="text-xl font-semibold text-theme-primary">World Clocks</h2>
-          </div>
-          <div className="border-b border-theme mb-4"></div>
-          <div className="space-y-4">
-            <SelectOption
-              value={settings.datetimeFormat}
-              onChange={updateDatetimeFormat}
-              options={datetimeFormats}
-              label="Time Format"
-              description="Choose how time is displayed in tray and world clocks"
-            />
-            
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-theme-primary font-medium">Timezones</div>
-                <button
-                  onClick={openAddTimezoneModal}
-                  className="flex items-center justify-center w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full text-sm font-bold transition-colors duration-200"
-                >
-                  +
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {settings.timezones.map((tz) => (
-                  <div key={tz.id} className="flex items-center gap-2 bg-theme-secondary rounded-full px-3 py-1.5 text-sm cursor-pointer hover:bg-theme-card-hover transition-colors duration-200">
-                    <span 
-                      className="text-theme-primary font-medium"
-                      onClick={() => openEditTimezoneModal(tz)}
-                    >
-                      {tz.label} ({tz.timezone})
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeTimezone(tz.id);
-                      }}
-                      className="text-theme-muted hover:text-red-400 transition-colors duration-200 ml-1"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-                
+          {/* World Clocks Card */}
+          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
+            <div className="flex items-center gap-2 mb-3">
+              <MdAccessTime className="w-4 h-4 text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-primary">World Clocks</h3>
+            </div>
+            <div className="space-y-3">
+              <SelectOption
+                value={settings.datetimeFormat}
+                onChange={updateDatetimeFormat}
+                options={datetimeFormats}
+                label="Time Format"
+                description="Display format"
+              />
+              
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs text-theme-primary font-medium">Timezones</div>
+                  <button
+                    onClick={openAddTimezoneModal}
+                    className="flex items-center justify-center w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full text-xs font-bold transition-colors duration-200"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {settings.timezones.map((tz) => (
+                    <div key={tz.id} className="flex items-center gap-1 bg-theme-secondary rounded-full px-2 py-1 text-xs cursor-pointer hover:bg-theme-card-hover transition-colors duration-200">
+                      <span 
+                        className="text-theme-primary font-medium"
+                        onClick={() => openEditTimezoneModal(tz)}
+                      >
+                        {tz.label}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeTimezone(tz.id);
+                        }}
+                        className="text-theme-muted hover:text-red-400 transition-colors duration-200 ml-1"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* System */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <MdPowerSettingsNew className="w-5 h-5 text-theme-muted" />
-            <h2 className="text-xl font-semibold text-theme-primary">System</h2>
+          {/* System Card */}
+          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
+            <div className="flex items-center gap-2 mb-3">
+              <MdPowerSettingsNew className="w-4 h-4 text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-primary">System</h3>
+            </div>
+            <div className="space-y-2">
+              <ToggleSwitch
+                enabled={settings.autoStart}
+                onChange={toggleAutoStart}
+                label="Start with System"
+                description="Auto-start on boot"
+              />
+            </div>
           </div>
-          <div className="border-b border-theme mb-4"></div>
-          <ToggleSwitch
-            enabled={settings.autoStart}
-            onChange={toggleAutoStart}
-            label="Start with System"
-            description="Automatically start DeskMaster when your computer boots"
-          />
-        </div>
 
-        {/* Appearance */}
-        <div className="mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <MdPalette className="w-5 h-5 text-theme-muted" />
-            <h2 className="text-xl font-semibold text-theme-primary">Appearance</h2>
+          {/* Appearance Card */}
+          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
+            <div className="flex items-center gap-2 mb-3">
+              <MdPalette className="w-4 h-4 text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-primary">Appearance</h3>
+            </div>
+            <div className="space-y-2">
+              <SelectOption
+                value={settings.theme}
+                onChange={updateTheme}
+                options={[
+                  { value: 'system', label: 'System Default' },
+                  { value: 'dark', label: 'Dark Mode' },
+                  { value: 'light', label: 'Light Mode' }
+                ]}
+                label="Theme"
+                description="Color scheme"
+              />
+            </div>
           </div>
-          <div className="border-b border-theme mb-4"></div>
-          <SelectOption
-            value={settings.theme}
-            onChange={updateTheme}
-            options={[
-              { value: 'system', label: 'System Default' },
-              { value: 'dark', label: 'Dark Mode' },
-              { value: 'light', label: 'Light Mode' }
-            ]}
-            label="Theme"
-            description="Choose your preferred color scheme"
-          />
+
         </div>
       </div>
 

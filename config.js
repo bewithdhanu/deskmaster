@@ -3,6 +3,19 @@ const path = require('path');
 const { app } = require('electron');
 
 let timezones = [];
+let appSettings = {
+  stats: {
+    cpu: true,
+    ram: true,
+    disk: true,
+    network: true,
+    battery: true
+  },
+  timezones: [],
+  datetimeFormat: 'HH:mm:ss',
+  autoStart: false,
+  theme: 'system'
+};
 
 // Configuration storage functions
 function getConfigStoragePath() {
@@ -25,6 +38,12 @@ function loadConfig() {
       { id: '2', label: 'UTC', timezone: 'UTC' }
     ];
     
+    // Load app settings from config
+    if (config.appSettings) {
+      appSettings = { ...appSettings, ...config.appSettings };
+    }
+    appSettings.timezones = timezones;
+    
     // Save default config if it didn't exist
     if (!fs.existsSync(storagePath)) {
       saveConfig();
@@ -40,9 +59,7 @@ function saveConfig() {
     const storagePath = getConfigStoragePath();
     const config = {
       timezones: timezones,
-      // Add other configuration sections here as needed
-      // theme: currentTheme,
-      // settings: otherSettings,
+      appSettings: appSettings
     };
     fs.writeFileSync(storagePath, JSON.stringify(config, null, 2));
   } catch (error) {
@@ -104,6 +121,22 @@ function removeTimezone(id) {
   saveConfig();
 }
 
+// App settings management functions
+function getAppSettings() {
+  return appSettings;
+}
+
+function setAppSettings(newSettings) {
+  appSettings = { ...appSettings, ...newSettings };
+  appSettings.timezones = timezones; // Keep timezones in sync
+  saveConfig();
+}
+
+function updateAppSetting(key, value) {
+  appSettings[key] = value;
+  saveConfig();
+}
+
 module.exports = {
   // Config functions
   getConfigStoragePath,
@@ -116,5 +149,10 @@ module.exports = {
   getTimezones,
   setTimezones,
   addTimezone,
-  removeTimezone
+  removeTimezone,
+  
+  // App settings functions
+  getAppSettings,
+  setAppSettings,
+  updateAppSetting
 };
