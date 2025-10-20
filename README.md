@@ -7,18 +7,9 @@
   
   [![macOS](https://img.shields.io/badge/macOS-10.12+-blue.svg)](https://www.apple.com/macos/)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-  [![Version](https://img.shields.io/badge/version-2.0.8-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
+  [![Version](https://img.shields.io/badge/version-2.1.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
 </div>
 
-## 📸 Screenshots
-
-<div align="center">
-  <img src="assets/screenshots/Desktop-screenshot-09-22-2025_06_25_PM.jpg" alt="DeskMaster Main Interface" width="600">
-  <p><em>Main application interface with system monitoring and world clocks</em></p>
-  
-  <img src="assets/screenshots/image-09-22-2025_06_26_PM.jpg" alt="DeskMaster Tray Interface" width="400">
-  <p><em>System tray with real-time statistics</em></p>
-</div>
 
 ## ✨ Features
 
@@ -33,15 +24,19 @@
 ### 🌍 **World Clocks**
 - **Multiple timezone support** - add unlimited timezones
 - **Custom labels** for each timezone
-- **12/24 hour format** support
+- **Interactive timeline** - drag to adjust time for all timezones
+- **Manual time editing** - click any timezone to set custom time
+- **Flexible time formats** - 12/24 hour with date options
 - **Automatic DST handling**
-- **Quick timezone switching**
+- **Real-time synchronization** across all timezones
 
 ### 🎨 **Modern Interface**
 - **Dark/Light theme** support with system preference detection
-- **Responsive design** built with React and Tailwind CSS
+- **Responsive grid layouts** that adapt to screen size
+- **Custom scrollbars** with theme-aware styling
 - **Smooth animations** and transitions
 - **Native macOS integration** with proper window management
+- **Persistent settings** that remember your preferences
 
 ### 🔧 **Productivity Tools**
 - **System tray integration** for quick access
