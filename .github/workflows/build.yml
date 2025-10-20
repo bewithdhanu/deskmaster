@@ -1,9 +1,8 @@
 name: Build and Release DeskMaster
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       version:
@@ -49,7 +48,7 @@ jobs:
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-builds-${{ github.event.inputs.version || github.ref_name }}
+          name: macos-builds-${{ github.event.inputs.version || github.event.release.tag_name }}
           path: |
             dist/*.dmg
             dist/*.dmg.blockmap
@@ -58,7 +57,7 @@ jobs:
   create-release:
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     
     steps:
       - name: Checkout code
@@ -72,10 +71,10 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.event.inputs.version || github.ref_name }}
-          name: DeskMaster ${{ github.event.inputs.version || github.ref_name }}
+          tag_name: ${{ github.event.inputs.version || github.event.release.tag_name }}
+          name: DeskMaster ${{ github.event.inputs.version || github.event.release.tag_name }}
           body: |
-            ## DeskMaster ${{ github.event.inputs.version || github.ref_name }}
+            ## DeskMaster ${{ github.event.inputs.version || github.event.release.tag_name }}
             
             ### 🚀 What's New
             - Desktop productivity tool with system monitoring
