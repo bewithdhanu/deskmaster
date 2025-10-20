@@ -32,19 +32,15 @@ let aboutWindow = null
 let statsInterval = null
 let trayUpdateInterval = null
 
-// Settings management
-let appSettings = {
-  stats: {
-    cpu: true,
-    ram: true,
-    disk: true,
-    network: true,
-    battery: true
-  },
-  timezones: [],
-  datetimeFormat: 'HH:mm:ss',
-  autoStart: false,
-  theme: 'system'
+// Settings management - will be loaded from config
+let appSettings = {};
+
+// Helper function to get the effective theme based on user preference
+function getEffectiveTheme() {
+  if (appSettings.theme === 'system') {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+  }
+  return appSettings.theme || 'system';
 }
 
 // Auto-launch configuration (only in production)
@@ -70,7 +66,8 @@ function createTrayIconWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      offscreen: true
+      offscreen: true,
+      devTools: process.env.NODE_ENV === 'development', // Enable DevTools only in development
     },
   })
 
@@ -104,7 +101,8 @@ function createAboutWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      webSecurity: false,
+      webSecurity: process.env.NODE_ENV === 'production', // Disable web security only in development
+      devTools: process.env.NODE_ENV === 'development', // Enable DevTools only in development
     },
   })
 
@@ -143,20 +141,69 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
+      devTools: process.env.NODE_ENV === 'development', // Enable DevTools only in development
+      webSecurity: process.env.NODE_ENV === 'production', // Disable web security only in development
     },
   })
 
   // Load React app from dist folder
   win.loadFile("dist/index.html")
 
-  // Open DevTools for debugging
-  // win.webContents.openDevTools()
+  // Open DevTools for debugging (only in development, but not automatically)
+  if (process.env.NODE_ENV === 'development') {
+    // DevTools available but not opened automatically
+    // User can open manually with Cmd+Option+I or right-click context menu
+  }
 
   win.webContents.on('did-finish-load', () => {
-    // TODO 
+    // Send initial theme to renderer
+    const effectiveTheme = getEffectiveTheme()
+    console.log('Sending initial theme to renderer:', effectiveTheme, '(user setting:', appSettings.theme, ')')
+    win.webContents.send('theme-changed', effectiveTheme)
   })
+
+  // Ensure window is ready before showing
+  win.once('ready-to-show', () => {
+    // Window is ready, but don't auto-show
+    // It will be shown when user clicks tray icon
+  })
+
+  // Add keyboard shortcut to toggle DevTools (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+        win.webContents.toggleDevTools()
+      }
+    })
+  }
+
+  // Add context menu for DevTools (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    win.webContents.on('context-menu', (event, params) => {
+      const menu = Menu.buildFromTemplate([
+        {
+          label: 'Inspect Element',
+          click: () => {
+            win.webContents.inspectElement(params.x, params.y)
+          }
+        },
+        {
+          label: 'Toggle DevTools',
+          click: () => {
+            win.webContents.toggleDevTools()
+          }
+        }
+      ])
+      menu.popup()
+    })
+  }
   
   win.on("hide", () => {
+    if (statsInterval) clearInterval(statsInterval)
+  })
+
+  win.on("closed", () => {
+    win = null
     if (statsInterval) clearInterval(statsInterval)
   })
 }
@@ -170,14 +217,14 @@ async function updateTrayIcon() {
 
     // Debug: Log timezone data
 
-    // Get current system theme with better detection
-    const systemTheme = nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+    // Get effective theme based on user preference
+    const effectiveTheme = getEffectiveTheme();
     
     // Send current stats to tray icon window
     trayIconWindow.webContents.send('update-tray-stats', {
       ...currentStats,
       timezones: timezones,
-      theme: systemTheme,
+      theme: effectiveTheme,
       settings: appSettings
     })
     // log all html contents of trayIconWindow
@@ -226,21 +273,32 @@ async function updateTrayIcon() {
 }
 
 async function sendDetailedStatsToRenderer() {
-  if (!win || !win.webContents) return
+  if (!win || win.isDestroyed() || !win.webContents || win.webContents.isDestroyed()) {
+    // Clear interval if window is destroyed
+    if (statsInterval) {
+      clearInterval(statsInterval);
+      statsInterval = null;
+    }
+    return;
+  }
 
   try {
     const detailedStats = await stats.getDetailedStats();
     const timezones = config.getTimezones();
 
     // Add theme info to stats object
-    detailedStats.theme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
+    detailedStats.theme = getEffectiveTheme();
     detailedStats.timezones = timezones;
     detailedStats.settings = appSettings;
-
 
     win.webContents.send("detailed-stats-update", detailedStats);
   } catch (error) {
     console.error("Error sending detailed stats:", error);
+    // Clear interval on error to prevent repeated failures
+    if (statsInterval) {
+      clearInterval(statsInterval);
+      statsInterval = null;
+    }
   }
 }
 
@@ -359,19 +417,35 @@ async function updateContextMenu() {
 }
 
 function showWindow() {
-  win.show()
-  win.focus()
+  // If window is destroyed, recreate it
+  if (!win || win.isDestroyed()) {
+    createWindow()
+  }
   
-  sendDetailedStatsToRenderer()
-  statsInterval = setInterval(() => {sendDetailedStatsToRenderer()}, 1000)
+  // Ensure window is ready before showing
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) {
+      win.restore()
+    }
+    
+    win.show()
+    win.focus()
+    
+    // Start stats updates
+    sendDetailedStatsToRenderer()
+    if (statsInterval) {
+      clearInterval(statsInterval)
+    }
+    statsInterval = setInterval(() => {sendDetailedStatsToRenderer()}, 1000)
+  }
 }
 
 app.whenReady().then(() => {
   // Load configuration from storage
   config.loadConfig()
   
-  // Initialize settings with existing timezone config
-  appSettings.timezones = config.getTimezones()
+  // Load app settings from config
+  appSettings = config.getAppSettings()
 
   createWindow()
   createTrayIconWindow()
@@ -396,10 +470,26 @@ app.whenReady().then(() => {
 
   tray.on("click", (event, bounds) => {
     tray.setContextMenu(null)
-    // event.preventDefault();
-    if (win.isVisible()) {
-      win.hide()
+    
+    // Prevent rapid clicking
+    if (tray._isProcessing) return
+    tray._isProcessing = true
+    
+    setTimeout(() => {
+      tray._isProcessing = false
+    }, 100)
+    
+    // Check if window exists and is not destroyed
+    if (win && !win.isDestroyed()) {
+      if (win.isVisible()) {
+        // Window is visible, hide it
+        win.hide()
+      } else {
+        // Window exists but not visible, show it
+        showWindow()
+      }
     } else {
+      // Window doesn't exist or is destroyed, create and show it
       showWindow()
     }
   })
@@ -411,11 +501,11 @@ app.whenReady().then(() => {
   })
 
   nativeTheme.on("updated", () => {
-    const theme = nativeTheme.shouldUseDarkColors ? "dark" : "light"
-    console.log("System theme changed:", theme)
+    const effectiveTheme = getEffectiveTheme()
+    console.log("Theme changed:", effectiveTheme, "(user setting:", appSettings.theme, ")")
     
-    if (win && win.webContents) {
-      win.webContents.send("theme-changed", theme)
+    if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+      win.webContents.send("theme-changed", effectiveTheme)
     }
     // Update tray icon with new theme
     updateTrayIcon()
@@ -477,19 +567,30 @@ ipcMain.handle('get-settings', () => {
 })
 
 ipcMain.handle('update-settings', (event, newSettings) => {
-  appSettings = { ...appSettings, ...newSettings }
+  // Update settings in config storage
+  config.setAppSettings(newSettings)
   
-  // Update timezones in config if they changed
-  if (newSettings.timezones) {
-    config.setTimezones(newSettings.timezones)
-  }
+  // Reload settings from config to ensure consistency
+  appSettings = config.getAppSettings()
+  
+  // Check if theme changed and notify windows
+  const effectiveTheme = getEffectiveTheme()
   
   // Notify all windows about settings update
-  if (win && win.webContents) {
+  if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
     win.webContents.send('settings-updated', appSettings)
+    // Also send theme change if theme was updated
+    if (newSettings.theme !== undefined) {
+      win.webContents.send('theme-changed', effectiveTheme)
+    }
   }
-  if (trayIconWindow && trayIconWindow.webContents) {
+  if (trayIconWindow && !trayIconWindow.isDestroyed() && trayIconWindow.webContents && !trayIconWindow.webContents.isDestroyed()) {
     trayIconWindow.webContents.send('settings-updated', appSettings)
+  }
+  
+  // Update tray icon if theme changed
+  if (newSettings.theme !== undefined) {
+    updateTrayIcon()
   }
   
   return appSettings
