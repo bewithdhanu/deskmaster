@@ -315,3 +315,25 @@ gh pr merge --merge --delete-branch
 * Keep `main` stable and production-ready
 
 ---
+
+### 🏷️ Version Management
+
+- The `version` field in `package.json` must follow **Semantic Versioning (SemVer)** format:
+```
+
+major.minor.patch
+
+````
+Example: `1.4.2`
+
+- Version bumping should happen **automatically** on merges to `main`:
+- **Major** → Breaking or structural changes  
+- **Minor** → New features, backward compatible  
+- **Patch** → Fixes, optimizations, or small updates  
+
+- Use automation (e.g., `npm version` or CI hooks) to ensure version increment aligns with commit types:
+- `feat:` → minor  
+- `fix:` → patch  
+- `breaking change:` → major  
+- When I ask for "commit and push or push code change" you need to up the version before commiting incase its not up
+- When I ask for "create relase" you need to create relase with this version 
