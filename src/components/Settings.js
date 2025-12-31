@@ -19,6 +19,7 @@ const Settings = () => {
     autoStart: false,
     theme: 'system',
     webAccess: false,
+    showInDock: true,
     apiKeys: {
       chatgpt: '',
       ipLocation: ''
@@ -491,6 +492,20 @@ const Settings = () => {
                     http://localhost:65530
                   </button>
                 </div>
+              )}
+              {isElectron() && (
+                <ToggleSwitch
+                  enabled={settings.showInDock !== false}
+                  onChange={() => {
+                    const newSettings = {
+                      ...settings,
+                      showInDock: !(settings.showInDock !== false)
+                    };
+                    updateSettings(newSettings);
+                  }}
+                  label="Show in Dock"
+                  description="Show app icon in macOS dock (macOS only)"
+                />
               )}
             </div>
           </div>

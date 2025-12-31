@@ -1,12 +1,25 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
-const { app, clipboard, BrowserWindow } = require('electron');
+const { app, clipboard, BrowserWindow, systemPreferences } = require('electron');
 let activeWin = null;
 try {
   activeWin = require('active-win');
 } catch (error) {
   console.warn('active-win package not available:', error.message);
+}
+
+// Check if accessibility permission is granted (macOS)
+function hasAccessibilityPermission() {
+  if (process.platform !== 'darwin') {
+    return true; // Not needed on other platforms
+  }
+  try {
+    return systemPreferences.isTrustedAccessibilityClient(false);
+  } catch (error) {
+    console.warn('Error checking accessibility permission:', error);
+    return false;
+  }
 }
 
 // Database path
@@ -35,7 +48,8 @@ async function getActiveWindowInfo() {
     }
     
     // Try to get active window from system using active-win package
-    if (activeWin) {
+    // Only attempt if accessibility permission is granted (macOS)
+    if (activeWin && hasAccessibilityPermission()) {
       try {
         const windowInfo = await activeWin();
         if (windowInfo) {
@@ -44,7 +58,10 @@ async function getActiveWindowInfo() {
         }
       } catch (error) {
         // active-win might fail due to permissions or other issues
-        console.warn('Error getting active window with active-win:', error.message);
+        // Don't log this as a warning if permission is not granted
+        if (hasAccessibilityPermission()) {
+          console.warn('Error getting active window with active-win:', error.message);
+        }
       }
     }
     
