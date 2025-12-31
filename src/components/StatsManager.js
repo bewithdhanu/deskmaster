@@ -10,7 +10,7 @@ const StatCard = ({ label, value, detail, progressValue, accentColor, children, 
       case 'ram-card': return 'border-blue-500';
       case 'disk-card': return 'border-green-500';
       case 'net-card': return 'border-yellow-500';
-      case 'battery-card': return 'border-green-500';
+      case 'battery-card': return 'border-purple-600';
       default: return 'border-theme';
     }
   };
@@ -21,7 +21,7 @@ const StatCard = ({ label, value, detail, progressValue, accentColor, children, 
       case 'ram-card': return 'bg-blue-500';
       case 'disk-card': return 'bg-green-500';
       case 'net-card': return 'bg-yellow-500';
-      case 'battery-card': return 'bg-green-500';
+      case 'battery-card': return 'bg-purple-600';
       default: return 'bg-theme-secondary';
     }
   };
@@ -85,89 +85,79 @@ const StatsManager = () => {
     };
   }, []);
 
+  // Always show all stats in StatsManager (settings only affect tray)
   const enabledStats = [];
 
-  if (stats.settings.stats.cpu) {
+  // Always show CPU
+  enabledStats.push(
+    <StatCard
+      key="cpu"
+      label="CPU"
+      value={`${stats.cpu}%`}
+      detail={`${stats.cpuDetails.cores}c @ ${stats.cpuDetails.speed}GHz`}
+      progressValue={stats.cpu}
+      accentColor="cpu-card"
+      hoverDetails={`Temperature: ${stats.cpuDetails.temperature || 'N/A'}°C | Usage: ${stats.cpu}%`}
+    />
+  );
+
+  // Always show RAM
+  enabledStats.push(
+    <StatCard
+      key="ram"
+      label="RAM"
+      value={`${stats.ram}%`}
+      detail={`${stats.memoryDetails.used}/${stats.memoryDetails.total}GB`}
+      progressValue={stats.ram}
+      accentColor="ram-card"
+      hoverDetails={`Memory Usage: ${stats.ram}% | Available: ${(parseFloat(stats.memoryDetails.total) - parseFloat(stats.memoryDetails.used)).toFixed(1)}GB`}
+    />
+  );
+
+  // Always show Disk
+  enabledStats.push(
+    <StatCard
+      key="disk"
+      label="Storage"
+      value={`${stats.disk}%`}
+      detail={stats.storageDetails[0] ? `${stats.storageDetails[0].used}/${stats.storageDetails[0].total}GB` : 'Loading...'}
+      progressValue={stats.disk}
+      accentColor="disk-card"
+      hoverDetails={`Disk Usage: ${stats.disk}% | Free: ${stats.storageDetails[0] ? (parseFloat(stats.storageDetails[0].total) - parseFloat(stats.storageDetails[0].used)).toFixed(1) : 'N/A'}GB`}
+    />
+  );
+
+  // Always show Network
+  enabledStats.push(
+    <StatCard
+      key="network"
+      label="Network"
+      value={stats.net.human}
+      detail={stats.networkDetails[0] ? `↓${stats.networkDetails[0].rx} KB/s ↑${stats.networkDetails[0].tx} KB/s` : 'Loading...'}
+      progressValue={Math.min(stats.net.kbs / 10, 100)}
+      accentColor="net-card"
+      hoverDetails={`Download: ${stats.networkDetails[0]?.rx || '0'} KB/s | Upload: ${stats.networkDetails[0]?.tx || '0'} KB/s`}
+    />
+  );
+
+  // Always show Battery if available
+  if (stats.battery && stats.battery.percent !== undefined) {
     enabledStats.push(
       <StatCard
-        key="cpu"
-        label="CPU"
-        value={`${stats.cpu}%`}
-        detail={`${stats.cpuDetails.cores}c @ ${stats.cpuDetails.speed}GHz`}
-        progressValue={stats.cpu}
-        accentColor="cpu-card"
-        hoverDetails={`Temperature: ${stats.cpuDetails.temperature || 'N/A'}°C | Usage: ${stats.cpu}%`}
+        key="battery"
+        label="Battery"
+        value={`${stats.battery.percent}%`}
+        detail={stats.battery.charging ? '⚡ Charging' : '🔋 Battery'}
+        progressValue={stats.battery.percent}
+        accentColor="battery-card"
+        hoverDetails={`Battery: ${stats.battery.percent}% | Status: ${stats.battery.charging ? 'Charging' : 'Discharging'} | Time: ${stats.battery.time || 'N/A'}`}
       />
     );
-  }
-
-  if (stats.settings.stats.ram) {
-    enabledStats.push(
-      <StatCard
-        key="ram"
-        label="RAM"
-        value={`${stats.ram}%`}
-        detail={`${stats.memoryDetails.used}/${stats.memoryDetails.total}GB`}
-        progressValue={stats.ram}
-        accentColor="ram-card"
-        hoverDetails={`Memory Usage: ${stats.ram}% | Available: ${(parseFloat(stats.memoryDetails.total) - parseFloat(stats.memoryDetails.used)).toFixed(1)}GB`}
-      />
-    );
-  }
-
-  if (stats.settings.stats.disk) {
-    enabledStats.push(
-      <StatCard
-        key="disk"
-        label="Storage"
-        value={`${stats.disk}%`}
-        detail={stats.storageDetails[0] ? `${stats.storageDetails[0].used}/${stats.storageDetails[0].total}GB` : 'Loading...'}
-        progressValue={stats.disk}
-        accentColor="disk-card"
-        hoverDetails={`Disk Usage: ${stats.disk}% | Free: ${stats.storageDetails[0] ? (parseFloat(stats.storageDetails[0].total) - parseFloat(stats.storageDetails[0].used)).toFixed(1) : 'N/A'}GB`}
-      />
-    );
-  }
-
-  if (stats.settings.stats.network) {
-    enabledStats.push(
-      <StatCard
-        key="network"
-        label="Network"
-        value={stats.net.human}
-        detail={stats.networkDetails[0] ? `↓${stats.networkDetails[0].rx} KB/s ↑${stats.networkDetails[0].tx} KB/s` : 'Loading...'}
-        progressValue={Math.min(stats.net.kbs / 10, 100)}
-        accentColor="net-card"
-        hoverDetails={`Download: ${stats.networkDetails[0]?.rx || '0'} KB/s | Upload: ${stats.networkDetails[0]?.tx || '0'} KB/s`}
-      />
-    );
-  }
-
-  if (stats.settings?.stats?.battery) {
-    if (stats.battery && stats.battery.percent !== undefined) {
-      enabledStats.push(
-        <StatCard
-          key="battery"
-          label="Battery"
-          value={`${stats.battery.percent}%`}
-          detail={stats.battery.charging ? '⚡ Charging' : '🔋 Battery'}
-          progressValue={stats.battery.percent}
-          accentColor="battery-card"
-          hoverDetails={`Battery: ${stats.battery.percent}% | Status: ${stats.battery.charging ? 'Charging' : 'Discharging'} | Time: ${stats.battery.time || 'N/A'}`}
-        />
-      );
-    }
   }
 
   return (
-    <div className="p-3">
-      <div className="flex gap-3">
-        {enabledStats.length > 0 ? enabledStats : (
-          <div className="w-full text-center py-12 text-theme-muted">
-            <p>No stats enabled. Go to Settings to enable system stats.</p>
-          </div>
-        )}
-      </div>
+    <div className="flex gap-3">
+      {enabledStats}
     </div>
   );
 };

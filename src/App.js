@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Home from './components/Home';
 import TimezoneManager from './components/TimezoneManager';
+import SystemPerformance from './components/SystemPerformance';
 import Settings from './components/Settings';
 import Navigation from './components/Navigation';
 import { getIpcRenderer } from './utils/electron';
@@ -78,6 +79,8 @@ function App() {
         return <Home />;
       case 'world-clocks':
         return <TimezoneManager />;
+      case 'system-performance':
+        return <SystemPerformance />;
       case 'settings':
         return <Settings />;
       default:
