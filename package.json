@@ -96,6 +96,9 @@
       "dist/about.html",
       "config.js",
       "stats.js",
+      "history.js",
+      "clipboard.js",
+      "authenticator.js",
       "package.json",
       "assets/**/*"
     ],
