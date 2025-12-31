@@ -1,5 +1,6 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   entry: {
@@ -29,6 +30,14 @@ module.exports = {
       filename: 'about.html',
       chunks: ['about'],
       inject: 'body'
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: 'assets/icons/app-icon-256.png',
+          to: 'assets/icons/app-icon-256.png'
+        }
+      ]
     })
   ],
   module: {
