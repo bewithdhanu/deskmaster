@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import moment from 'moment-timezone';
+import { getIpcRenderer } from '../utils/electron';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = getIpcRenderer();
 
 const TrayIcon = () => {
   const [stats, setStats] = useState({

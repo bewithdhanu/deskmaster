@@ -3,8 +3,9 @@ import Home from './components/Home';
 import TimezoneManager from './components/TimezoneManager';
 import Settings from './components/Settings';
 import Navigation from './components/Navigation';
+import { getIpcRenderer } from './utils/electron';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = getIpcRenderer();
 
 function App() {
   const [currentTheme, setCurrentTheme] = useState('dark');
@@ -38,10 +39,10 @@ function App() {
       } catch (error) {
         console.error('Error getting initial theme:', error);
         // Fallback to system theme
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const initialTheme = prefersDark ? 'dark' : 'light';
-        setCurrentTheme(initialTheme);
-        applyTheme(initialTheme);
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = prefersDark ? 'dark' : 'light';
+    setCurrentTheme(initialTheme);
+    applyTheme(initialTheme);
       }
     };
 

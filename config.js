@@ -14,7 +14,8 @@ let appSettings = {
   timezones: [],
   datetimeFormat: 'HH:mm:ss',
   autoStart: false,
-  theme: 'system'
+  theme: 'system',
+  webAccess: false
 };
 
 // Configuration storage functions
@@ -32,16 +33,21 @@ function loadConfig() {
       config = JSON.parse(data);
     }
     
-    // Load timezones from config
-    timezones = config.timezones || [
-      { id: '1', label: 'Local', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-      { id: '2', label: 'UTC', timezone: 'UTC' }
-    ];
-    
-    // Load app settings from config
+    // Load app settings from config first
     if (config.appSettings) {
       appSettings = { ...appSettings, ...config.appSettings };
     }
+    
+    // Load timezones - prioritize appSettings.timezones if it exists, otherwise use config.timezones
+    if (appSettings.timezones && appSettings.timezones.length > 0) {
+      timezones = appSettings.timezones;
+    } else if (config.timezones && config.timezones.length > 0) {
+      timezones = config.timezones;
+    } else {
+      timezones = [];
+    }
+    
+    // Keep timezones in sync
     appSettings.timezones = timezones;
     
     // Save default config if it didn't exist
@@ -128,7 +134,12 @@ function getAppSettings() {
 
 function setAppSettings(newSettings) {
   appSettings = { ...appSettings, ...newSettings };
-  appSettings.timezones = timezones; // Keep timezones in sync
+  // Update timezones variable if timezones are provided in newSettings
+  if (newSettings.timezones !== undefined) {
+    timezones = newSettings.timezones;
+  }
+  // Keep timezones in sync
+  appSettings.timezones = timezones;
   saveConfig();
 }
 
