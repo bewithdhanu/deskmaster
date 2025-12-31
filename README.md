@@ -7,7 +7,7 @@
   
   [![macOS](https://img.shields.io/badge/macOS-10.12+-blue.svg)](https://www.apple.com/macos/)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-  [![Version](https://img.shields.io/badge/version-2.2.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
+  [![Version](https://img.shields.io/badge/version-2.1.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
 </div>
 
 
@@ -43,6 +43,54 @@
 - **Auto-start option** (configurable)
 - **Minimal resource usage**
 - **Background operation** without interrupting workflow
+
+### 🛠️ **Utility Tools**
+- **Bcrypt Hash Generator** - Generate secure bcrypt hashes from text
+- **Bcrypt Hash Verifier** - Verify text against bcrypt hashes
+- **Public IP Tool** - Display your public IP address
+- **IP Location Tool** - Get location details from IP address(es) with API key support
+- **Pinggy Tunnel** - Create secure tunnels to local ports for testing and development
+- **Text Reformat Tool** - Reformat text using ChatGPT GPT-4o mini (requires API key)
+- **Text Translation** - Translate text to any language using ChatGPT GPT-4o mini
+- **Password Generator** - Generate strong passwords with customizable options (length, character sets)
+
+### 📋 **Clipboard History**
+- **Automatic tracking** - Monitors clipboard changes in real-time
+- **Search functionality** - Quickly find past clipboard entries
+- **Copy to clipboard** - One-click copy of any historical entry
+- **View full content** - Expand to see complete clipboard entries
+- **Delete entries** - Remove unwanted clipboard history items
+- **Clear all** - Bulk delete all clipboard history
+- **Real-time updates** - WebSocket-powered live updates
+- **Source tracking** - See which application copied each entry
+
+### 🔐 **Authenticator (TOTP)**
+- **TOTP code generation** - Generate time-based one-time passwords
+- **Multiple authenticators** - Manage unlimited authenticator accounts
+- **QR code import** - Import from `otpauth://` URLs
+- **Manual entry** - Add authenticators manually with secret key
+- **Real-time codes** - Codes update automatically every 30 seconds
+- **Copy to clipboard** - One-click copy of TOTP codes
+- **Username display** - View and copy usernames associated with accounts
+- **Trash system** - Soft delete with 30-day retention before permanent deletion
+- **Restore from trash** - Recover accidentally deleted authenticators
+- **Search & sort** - Find authenticators quickly, sorted by name
+- **WebSocket updates** - Real-time code updates without polling
+
+### 🔒 **Security Features**
+- **Computer authentication** - Touch ID/password required for sensitive tabs
+- **Protected tabs** - Clipboard, Authenticator, and Settings require authentication
+- **Operation security** - Edit/delete operations require authentication (regardless of timeout)
+- **5-minute timeout** - Authentication valid for 5 minutes after successful auth
+- **Export encryption** - Optional AES-256-GCM encryption for exported data
+- **Import decryption** - Automatic detection and decryption of encrypted imports
+
+### 💾 **Data Management**
+- **Export all data** - Export settings, authenticators, clipboard history, and performance stats
+- **Import all data** - Restore complete application state from exported file
+- **Optional encryption** - Protect exported data with encryption key
+- **Reset all data** - Complete data reset to factory defaults
+- **Authentication required** - All data operations require computer authentication
 
 ### 🌐 **Web Access** (New!)
 - **Browser access** - View and control DeskMaster from any web browser
@@ -89,6 +137,40 @@ Choose the version that matches your Mac:
 3. Add a custom label (optional)
 4. Click **"Add Timezone"**
 
+### Using Tools
+1. Navigate to the **Tools** tab
+2. Available tools are displayed in a grid layout
+3. Click any tool to open it
+4. Use drag-and-drop to reorder tools
+5. Add/remove tools as needed
+
+### Clipboard History
+1. Navigate to the **Clipboard** tab
+2. View all clipboard entries automatically tracked
+3. Use search to find specific entries
+4. Click any entry to copy it again
+5. Click the eye icon to view full content
+
+### Authenticator
+1. Navigate to the **Authenticator** tab
+2. Click **"+"** to add a new authenticator
+3. Enter `otpauth://` URL or manual details
+4. TOTP codes update automatically every 30 seconds
+5. Click code to copy to clipboard
+6. Use trash view to restore deleted authenticators
+
+### Data Export/Import
+1. Go to **Settings** → **Data Management**
+2. **Export**: Click "Export All Data" to save everything to a JSON file
+   - Optional: Enter encryption key for secure export
+   - Leave empty to export without encryption
+3. **Import**: Click "Import Data" to restore from exported file
+   - If file is encrypted, enter the encryption key
+   - All current data will be replaced
+4. **Reset**: Click "Reset All Data" to clear everything
+   - Requires double confirmation
+   - Cannot be undone
+
 ## ⚙️ Configuration
 
 ### Themes
@@ -116,6 +198,9 @@ DeskMaster can be accessed from any web browser on your local network:
 3. **Features Available**:
    - ✅ Real-time system monitoring (CPU, RAM, Disk, Network, Battery)
    - ✅ World clocks with interactive timeline
+   - ✅ Tools (all utility tools)
+   - ✅ Clipboard history (view and copy)
+   - ✅ Authenticator (view TOTP codes)
    - ✅ Settings management
    - ✅ Theme switching
    - ✅ All UI functionality
@@ -124,9 +209,10 @@ DeskMaster can be accessed from any web browser on your local network:
    - Web access is **disabled by default**
    - Only accessible when explicitly enabled
    - Runs on localhost (127.0.0.1) - not exposed to external networks
+   - API token authentication required for all requests
    - Can be disabled at any time from Settings
 
-**Note**: The desktop app must be running for web access to work. The browser connects to the app via WebSocket and HTTP API for real-time data.
+**Note**: The desktop app must be running for web access to work. The browser connects to the app via WebSocket and HTTP API for real-time data. Export/Import features are only available in the desktop app (not in browser mode).
 
 ## 🛠️ System Requirements
 

@@ -15,7 +15,12 @@ let appSettings = {
   datetimeFormat: 'HH:mm:ss',
   autoStart: false,
   theme: 'system',
-  webAccess: false
+  webAccess: false,
+  apiKeys: {
+    chatgpt: '',
+    ipLocation: ''
+  },
+  toolOrder: []
 };
 
 // Configuration storage functions
