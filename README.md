@@ -7,7 +7,7 @@
   
   [![macOS](https://img.shields.io/badge/macOS-10.12+-blue.svg)](https://www.apple.com/macos/)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-  [![Version](https://img.shields.io/badge/version-2.1.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
+  [![Version](https://img.shields.io/badge/version-2.3.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
 </div>
 
 
