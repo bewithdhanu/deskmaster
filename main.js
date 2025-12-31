@@ -1,5 +1,7 @@
 const { app, BrowserWindow, Tray, nativeImage, ipcMain, Menu, nativeTheme } = require("electron")
 const path = require("path")
+const http = require("http")
+const WebSocket = require("ws")
 const config = require("./config")
 const stats = require("./stats")
 
@@ -34,6 +36,15 @@ let trayUpdateInterval = null
 
 // Settings management - will be loaded from config
 let appSettings = {};
+
+// WebSocket and HTTP server for browser access
+let wss = null
+let httpServer = null
+let staticServer = null
+const WS_PORT = 65531
+const HTTP_PORT = 65532
+const STATIC_PORT = 65530
+const connectedClients = new Set()
 
 // Helper function to get the effective theme based on user preference
 function getEffectiveTheme() {
@@ -213,7 +224,10 @@ async function updateTrayIcon() {
 
   try {
     const currentStats = await stats.updateTrayStats();
-    const timezones = config.getTimezones();
+    const allTimezones = config.getTimezones();
+    
+    // Filter timezones to only show those with showInTray: true (default to true if not set)
+    const timezones = allTimezones.filter(tz => tz.showInTray !== false);
 
     // Debug: Log timezone data
 
@@ -241,7 +255,7 @@ async function updateTrayIcon() {
     // Base width for stats + timezones + padding
     const baseWidth = 20; // Base padding
     const statWidth = enabledStatsCount * 18; // Each stat takes ~18px
-    const timezoneWidth = timezones.length * 72; // Each timezone takes ~72px
+    const timezoneWidth = timezones.length * 72; // Each timezone takes ~72px (only those shown in tray)
     const padding = (enabledStatsCount + timezones.length) * 4; // 4px padding between items
     
     const width = baseWidth + statWidth + timezoneWidth + padding;
@@ -292,6 +306,9 @@ async function sendDetailedStatsToRenderer() {
     detailedStats.settings = appSettings;
 
     win.webContents.send("detailed-stats-update", detailedStats);
+    
+    // Broadcast to WebSocket clients (browser)
+    broadcastStats(detailedStats);
   } catch (error) {
     console.error("Error sending detailed stats:", error);
     // Clear interval on error to prevent repeated failures
@@ -299,6 +316,274 @@ async function sendDetailedStatsToRenderer() {
       clearInterval(statsInterval);
       statsInterval = null;
     }
+  }
+}
+
+// Broadcast stats to all connected WebSocket clients
+function broadcastStats(statsData) {
+  if (wss && connectedClients.size > 0) {
+    const message = JSON.stringify({
+      type: 'detailed-stats-update',
+      data: statsData
+    });
+    
+    connectedClients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      } else {
+        connectedClients.delete(client);
+      }
+    });
+  }
+}
+
+// Start WebSocket and HTTP servers for browser access
+function startBrowserServers() {
+  const fs = require('fs');
+  const { URL } = require('url');
+  
+  // MIME types for static file server
+  const mimeTypes = {
+    '.html': 'text/html',
+    '.js': 'application/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+    '.ico': 'image/x-icon',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.eot': 'application/vnd.ms-fontobject'
+  };
+  
+  // Static file server for serving the web UI
+  try {
+    staticServer = http.createServer((req, res) => {
+      const parsedUrl = new URL(req.url, `http://localhost:${STATIC_PORT}`);
+      let pathname = parsedUrl.pathname;
+      
+      // Handle favicon.ico requests gracefully
+      if (pathname === '/favicon.ico') {
+        res.writeHead(204, { 'Content-Type': 'image/x-icon' });
+        res.end();
+        return;
+      }
+      
+      // Default to index.html
+      if (pathname === '/') {
+        pathname = '/index.html';
+      }
+      
+      // Security: prevent directory traversal
+      const safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
+      const filePath = path.join(__dirname, 'dist', safePath);
+      
+      // Check if file exists
+      fs.access(filePath, fs.constants.F_OK, (err) => {
+        if (err) {
+          res.writeHead(404, { 'Content-Type': 'text/plain' });
+          res.end('404 Not Found');
+          return;
+        }
+        
+        // Read and serve file
+        fs.readFile(filePath, (err, data) => {
+          if (err) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('500 Internal Server Error');
+            return;
+          }
+          
+          // Get MIME type
+          const ext = path.extname(filePath).toLowerCase();
+          const contentType = mimeTypes[ext] || 'application/octet-stream';
+          
+          // Set headers
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+            'Cache-Control': 'no-cache'
+          });
+          
+          res.end(data);
+        });
+      });
+    });
+    
+    staticServer.listen(STATIC_PORT, () => {
+      console.log(`🌐 Static file server started on http://localhost:${STATIC_PORT}`);
+    });
+    
+    staticServer.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.warn(`⚠️  Static server port ${STATIC_PORT} is already in use. Browser access may not work.`);
+      } else {
+        console.error('Static server error:', error);
+      }
+    });
+  } catch (error) {
+    console.error('Failed to start static file server:', error);
+  }
+  
+  // WebSocket server for real-time stats
+  try {
+    wss = new WebSocket.Server({ port: WS_PORT });
+    
+    wss.on('connection', (ws) => {
+      console.log('🌐 Browser client connected via WebSocket');
+      connectedClients.add(ws);
+      
+      // Send initial stats
+      sendInitialStatsToClient(ws);
+      
+      ws.on('close', () => {
+        console.log('🌐 Browser client disconnected');
+        connectedClients.delete(ws);
+      });
+      
+      ws.on('error', (error) => {
+        console.error('WebSocket error:', error);
+        connectedClients.delete(ws);
+      });
+    });
+    
+    wss.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.warn(`⚠️  WebSocket port ${WS_PORT} is already in use. Browser access may not work.`);
+      } else {
+        console.error('WebSocket server error:', error);
+      }
+    });
+    
+    console.log(`🔌 WebSocket server started on ws://localhost:${WS_PORT}`);
+  } catch (error) {
+    console.error('Failed to start WebSocket server:', error);
+  }
+  
+  // HTTP server for IPC-like commands
+  httpServer = http.createServer((req, res) => {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+    
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    
+    req.on('end', async () => {
+      try {
+        if (req.url === '/api/get-settings' && req.method === 'GET') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(appSettings));
+        } else if (req.url === '/api/update-settings' && req.method === 'POST') {
+          const newSettings = JSON.parse(body);
+          config.setAppSettings(newSettings);
+          appSettings = config.getAppSettings();
+          
+          // Broadcast settings update to WebSocket clients
+          if (wss && connectedClients.size > 0) {
+            const message = JSON.stringify({
+              type: 'settings-updated',
+              data: appSettings
+            });
+            connectedClients.forEach((client) => {
+              if (client.readyState === WebSocket.OPEN) {
+                client.send(message);
+              }
+            });
+          }
+          
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(appSettings));
+        } else if (req.url === '/api/toggle-auto-start' && req.method === 'POST') {
+          const { enabled } = JSON.parse(body);
+          const success = await toggleAutoStart(enabled);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success }));
+        } else if (req.url === '/api/toggle-web-access' && req.method === 'POST') {
+          const { enabled } = JSON.parse(body);
+          appSettings.webAccess = enabled;
+          config.updateAppSetting('webAccess', enabled);
+          
+          if (enabled) {
+            if (!wss || !httpServer) {
+              startBrowserServers();
+            }
+          } else {
+            if (staticServer) {
+              staticServer.close();
+              staticServer = null;
+            }
+            if (wss) {
+              wss.close();
+              wss = null;
+              connectedClients.clear();
+            }
+            if (httpServer) {
+              httpServer.close();
+              httpServer = null;
+            }
+          }
+          
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Not found' }));
+        }
+      } catch (error) {
+        console.error('HTTP API error:', error);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: error.message }));
+      }
+    });
+  });
+  
+  httpServer.listen(HTTP_PORT, () => {
+    console.log(`🌐 HTTP API server started on http://localhost:${HTTP_PORT}`);
+  });
+  
+  httpServer.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.warn(`⚠️  Port ${HTTP_PORT} is already in use. Browser API may not work.`);
+    } else {
+      console.error('HTTP server error:', error);
+    }
+  });
+}
+
+async function sendInitialStatsToClient(ws) {
+  try {
+    const detailedStats = await stats.getDetailedStats();
+    const timezones = config.getTimezones();
+    
+    detailedStats.theme = getEffectiveTheme();
+    detailedStats.timezones = timezones;
+    detailedStats.settings = appSettings;
+    
+    const message = JSON.stringify({
+      type: 'detailed-stats-update',
+      data: detailedStats
+    });
+    
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(message);
+    }
+  } catch (error) {
+    console.error('Error sending initial stats to client:', error);
   }
 }
 
@@ -428,15 +713,15 @@ function showWindow() {
       win.restore()
     }
     
-    win.show()
-    win.focus()
-    
+  win.show()
+  win.focus()
+  
     // Start stats updates
-    sendDetailedStatsToRenderer()
+  sendDetailedStatsToRenderer()
     if (statsInterval) {
       clearInterval(statsInterval)
     }
-    statsInterval = setInterval(() => {sendDetailedStatsToRenderer()}, 1000)
+  statsInterval = setInterval(() => {sendDetailedStatsToRenderer()}, 1000)
   }
 }
 
@@ -446,6 +731,11 @@ app.whenReady().then(() => {
   
   // Load app settings from config
   appSettings = config.getAppSettings()
+
+  // Start WebSocket and HTTP servers for browser access if enabled
+  if (appSettings.webAccess) {
+    startBrowserServers()
+  }
 
   createWindow()
   createTrayIconWindow()
@@ -481,9 +771,9 @@ app.whenReady().then(() => {
     
     // Check if window exists and is not destroyed
     if (win && !win.isDestroyed()) {
-      if (win.isVisible()) {
+    if (win.isVisible()) {
         // Window is visible, hide it
-        win.hide()
+      win.hide()
       } else {
         // Window exists but not visible, show it
         showWindow()
@@ -593,8 +883,66 @@ ipcMain.handle('update-settings', (event, newSettings) => {
     updateTrayIcon()
   }
   
+  // Broadcast settings update to WebSocket clients
+  if (wss && connectedClients.size > 0) {
+    const message = JSON.stringify({
+      type: 'settings-updated',
+      data: appSettings
+    });
+    const themeMessage = JSON.stringify({
+      type: 'theme-changed',
+      data: getEffectiveTheme()
+    });
+    connectedClients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+        if (newSettings.theme !== undefined) {
+          client.send(themeMessage);
+        }
+      }
+    });
+  }
+  
   return appSettings
 })
+
+ipcMain.handle('toggle-web-access', async (event, enabled) => {
+  appSettings.webAccess = enabled;
+  config.updateAppSetting('webAccess', enabled);
+  
+  if (enabled) {
+    // Start servers if not already running
+    if (!wss || !httpServer) {
+      startBrowserServers();
+    }
+  } else {
+    // Stop servers
+    if (staticServer) {
+      staticServer.close();
+      staticServer = null;
+      console.log('🌐 Static file server stopped');
+    }
+    if (wss) {
+      wss.close();
+      wss = null;
+      connectedClients.clear();
+      console.log('🔌 WebSocket server stopped');
+    }
+    if (httpServer) {
+      httpServer.close();
+      httpServer = null;
+      console.log('🌐 HTTP API server stopped');
+    }
+  }
+  
+  return true;
+});
+
+ipcMain.handle('open-external-url', async (event, url) => {
+  const { shell } = require('electron');
+  await shell.openExternal(url);
+  return true;
+});
 
 ipcMain.handle('toggle-auto-start', async (event, enabled) => {
   if (!autoLauncher) {
@@ -621,6 +969,19 @@ app.on("window-all-closed", (e) => {
 })
 
 app.on("before-quit", () => {
+  // Close all servers
+  if (staticServer) {
+    staticServer.close();
+    console.log('🌐 Static file server closed');
+  }
+  if (wss) {
+    wss.close();
+    console.log('🔌 WebSocket server closed');
+  }
+  if (httpServer) {
+    httpServer.close();
+    console.log('🌐 HTTP API server closed');
+  }
   if (statsInterval) clearInterval(statsInterval)
   if (trayUpdateInterval) clearInterval(trayUpdateInterval)
 })

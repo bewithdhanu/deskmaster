@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { MdSettings, MdMemory, MdStorage, MdNetworkCheck, MdBatteryFull, MdAccessTime, MdPowerSettingsNew, MdPalette } from 'react-icons/md';
 import TimezoneDropdown from './TimezoneDropdown';
+import { getIpcRenderer } from '../utils/electron';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = getIpcRenderer();
 
 const Settings = () => {
   const [settings, setSettings] = useState({
@@ -16,13 +17,15 @@ const Settings = () => {
     timezones: [],
     datetimeFormat: 'HH:mm:ss',
     autoStart: false,
-    theme: 'system'
+    theme: 'system',
+    webAccess: false
   });
 
   const [showTimezoneModal, setShowTimezoneModal] = useState(false);
   const [editingTimezone, setEditingTimezone] = useState(null); // null for add, timezone object for edit
   const [selectedTimezone, setSelectedTimezone] = useState(null);
   const [timezoneLabel, setTimezoneLabel] = useState('');
+  const [showInTray, setShowInTray] = useState(true);
 
   const datetimeFormats = [
     { value: 'HH:mm:ss', label: '24-hour (14:30:25)' },
@@ -81,6 +84,7 @@ const Settings = () => {
     setEditingTimezone(null);
     setSelectedTimezone(null);
     setTimezoneLabel('');
+    setShowInTray(true); // Default to showing in tray
     setShowTimezoneModal(true);
   };
 
@@ -88,6 +92,7 @@ const Settings = () => {
     setEditingTimezone(timezone);
     setSelectedTimezone(timezone.timezone);
     setTimezoneLabel(timezone.label);
+    setShowInTray(timezone.showInTray !== undefined ? timezone.showInTray : true); // Default to true if not set
     setShowTimezoneModal(true);
   };
 
@@ -96,6 +101,7 @@ const Settings = () => {
     setEditingTimezone(null);
     setSelectedTimezone(null);
     setTimezoneLabel('');
+    setShowInTray(true);
   };
 
   const saveTimezone = () => {
@@ -106,7 +112,7 @@ const Settings = () => {
           ...settings,
           timezones: settings.timezones.map(tz => 
             tz.id === editingTimezone.id 
-              ? { ...tz, label: timezoneLabel.trim(), timezone: selectedTimezone }
+              ? { ...tz, label: timezoneLabel.trim(), timezone: selectedTimezone, showInTray: showInTray }
               : tz
           )
         };
@@ -116,7 +122,8 @@ const Settings = () => {
         const newTimezone = {
           id: Date.now(),
           label: timezoneLabel.trim(),
-          timezone: selectedTimezone
+          timezone: selectedTimezone,
+          showInTray: showInTray
         };
         
         const newSettings = {
@@ -160,6 +167,33 @@ const Settings = () => {
     } catch (error) {
       console.error('Error toggling auto-start:', error);
     }
+  };
+
+  const toggleWebAccess = async () => {
+    const newWebAccess = !settings.webAccess;
+    const newSettings = {
+      ...settings,
+      webAccess: newWebAccess
+    };
+    updateSettings(newSettings);
+    
+    // Notify main process to start/stop servers
+    try {
+      await ipcRenderer.invoke('toggle-web-access', newWebAccess);
+    } catch (error) {
+      console.error('Error toggling web access:', error);
+    }
+  };
+
+  const openWebUrl = () => {
+    const url = 'http://localhost:65530';
+    ipcRenderer.invoke('open-external-url', url).catch(error => {
+      console.error('Error opening URL:', error);
+      // Fallback: try using window.open if in browser
+      if (typeof window !== 'undefined' && window.open) {
+        window.open(url, '_blank');
+      }
+    });
   };
 
   const updateTheme = (theme) => {
@@ -300,6 +334,15 @@ const Settings = () => {
                       >
                         {tz.label}
                       </span>
+                      {tz.showInTray !== false && (
+                        <span 
+                          className="text-theme-muted text-[10px]"
+                          title="Shown in tray"
+                          onClick={() => openEditTimezoneModal(tz)}
+                        >
+                          🖥️
+                        </span>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -329,6 +372,24 @@ const Settings = () => {
                 label="Start with System"
                 description="Auto-start on boot"
               />
+              <ToggleSwitch
+                enabled={settings.webAccess}
+                onChange={toggleWebAccess}
+                label="Web Access"
+                description="Enable browser access"
+              />
+              {settings.webAccess && (
+                <div className="mt-2 pt-2 border-t border-theme">
+                  <div className="text-xs text-theme-muted mb-1">Web URL:</div>
+                  <button
+                    onClick={openWebUrl}
+                    className="text-xs text-red-500 hover:text-red-400 underline break-all text-left transition-colors duration-200"
+                    title="Click to open in browser"
+                  >
+                    http://localhost:65530
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -389,6 +450,24 @@ const Settings = () => {
                   placeholder="e.g., New York, London"
                   className="w-full px-3 py-2 bg-theme-primary border border-theme rounded-md text-theme-primary focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <div className="flex-1">
+                  <div className="text-theme-primary font-medium text-sm">Show in Tray</div>
+                  <div className="text-theme-muted text-xs mt-0.5">Display this timezone in system tray</div>
+                </div>
+                <button
+                  onClick={() => setShowInTray(!showInTray)}
+                  className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 ${
+                    showInTray ? 'bg-red-500' : 'bg-theme-secondary'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform duration-200 ${
+                      showInTray ? 'translate-x-3.5' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
               </div>
               <div className="flex gap-2 pt-2">
                 <button

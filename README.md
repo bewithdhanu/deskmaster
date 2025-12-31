@@ -7,7 +7,7 @@
   
   [![macOS](https://img.shields.io/badge/macOS-10.12+-blue.svg)](https://www.apple.com/macos/)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-  [![Version](https://img.shields.io/badge/version-2.1.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
+  [![Version](https://img.shields.io/badge/version-2.2.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
 </div>
 
 
@@ -43,6 +43,13 @@
 - **Auto-start option** (configurable)
 - **Minimal resource usage**
 - **Background operation** without interrupting workflow
+
+### 🌐 **Web Access** (New!)
+- **Browser access** - View and control DeskMaster from any web browser
+- **Real-time data** - Live system stats and timezone updates via WebSocket
+- **Full functionality** - All features work in browser (stats, timezones, settings)
+- **Easy setup** - Enable with a single toggle in Settings
+- **Secure** - Only accessible when explicitly enabled
 
 ## 🚀 Installation
 
@@ -91,8 +98,35 @@ Choose the version that matches your Mac:
 
 ### Auto-Start
 - Enable auto-start to launch DeskMaster when you log in
-- Access this option through the system tray menu
+- Access this option through Settings → System
 - Perfect for keeping your productivity tools always available
+
+### Web Access
+DeskMaster can be accessed from any web browser on your local network:
+
+1. **Enable Web Access**:
+   - Go to Settings → System
+   - Toggle "Web Access" to ON
+   - The web URL will appear below the toggle
+
+2. **Access in Browser**:
+   - Click the URL (`http://localhost:65530`) to open in your default browser
+   - Or manually navigate to the URL in any browser
+
+3. **Features Available**:
+   - ✅ Real-time system monitoring (CPU, RAM, Disk, Network, Battery)
+   - ✅ World clocks with interactive timeline
+   - ✅ Settings management
+   - ✅ Theme switching
+   - ✅ All UI functionality
+
+4. **Security**:
+   - Web access is **disabled by default**
+   - Only accessible when explicitly enabled
+   - Runs on localhost (127.0.0.1) - not exposed to external networks
+   - Can be disabled at any time from Settings
+
+**Note**: The desktop app must be running for web access to work. The browser connects to the app via WebSocket and HTTP API for real-time data.
 
 ## 🛠️ System Requirements
 

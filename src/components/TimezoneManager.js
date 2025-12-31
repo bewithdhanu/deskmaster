@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import moment from 'moment-timezone';
 import TimeZoneClock from './TimeZoneClock';
 import HorizontalTimeline from './HorizontalTimeline';
+import { getIpcRenderer } from '../utils/electron';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = getIpcRenderer();
 
 const TimezoneManager = () => {
   const [timezones, setTimezones] = useState([]);
@@ -16,20 +17,58 @@ const TimezoneManager = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Request initial settings to get timezones immediately
+    const loadInitialData = async () => {
+      try {
+        const currentSettings = await ipcRenderer.invoke('get-settings');
+        if (currentSettings) {
+          if (currentSettings.timezones) {
+            setTimezones(currentSettings.timezones);
+            setIsLoading(false);
+          }
+          if (currentSettings.datetimeFormat) {
+            setSettings(prev => ({
+              ...prev,
+              datetimeFormat: currentSettings.datetimeFormat
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Error loading initial timezone data:', error);
+        setIsLoading(false);
+      }
+    };
+
+    // Load initial data immediately
+    loadInitialData();
+
     // Listen for timezone updates
     const handleTimezoneUpdate = (event, data) => {
-      if (data.timezones) {
+      if (data && data.timezones) {
         setTimezones(data.timezones);
         setIsLoading(false);
       }
-      if (data.settings) {
-        setSettings(data.settings);
+      if (data && data.settings) {
+        setSettings(prev => ({
+          ...prev,
+          datetimeFormat: data.settings.datetimeFormat || prev.datetimeFormat
+        }));
       }
     };
 
     // Listen for settings updates (for format changes)
     const handleSettingsUpdate = (event, newSettings) => {
-      setSettings(newSettings);
+      if (newSettings) {
+        setSettings(prev => ({
+          ...prev,
+          datetimeFormat: newSettings.datetimeFormat || prev.datetimeFormat
+        }));
+        // Update timezones if they changed
+        if (newSettings.timezones) {
+          setTimezones(newSettings.timezones);
+          setIsLoading(false);
+        }
+      }
     };
 
     ipcRenderer.on('detailed-stats-update', handleTimezoneUpdate);

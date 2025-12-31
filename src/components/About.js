@@ -1,6 +1,7 @@
 import React from 'react';
+import { getIpcRenderer } from '../utils/electron';
 
-const { ipcRenderer } = window.require('electron');
+const ipcRenderer = getIpcRenderer();
 
 const About = () => {
   const [version, setVersion] = React.useState('2.0.0');
