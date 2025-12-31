@@ -16,6 +16,7 @@ let appSettings = {
   autoStart: false,
   theme: 'system',
   webAccess: false,
+  showInDock: true,
   apiKeys: {
     chatgpt: '',
     ipLocation: ''

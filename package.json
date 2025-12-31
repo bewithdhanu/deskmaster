@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -40,8 +40,10 @@
     "@babel/core": "^7.23.0",
     "@babel/preset-env": "^7.23.0",
     "@babel/preset-react": "^7.22.0",
+    "@electron/notarize": "^3.1.1",
     "autoprefixer": "^10.4.21",
     "babel-loader": "^9.1.0",
+    "copy-webpack-plugin": "^13.0.1",
     "css-loader": "^6.8.0",
     "electron": "^27.3.11",
     "electron-builder": "^24.6.4",
@@ -94,6 +96,7 @@
       "dist/index.html",
       "dist/tray-icon.html",
       "dist/about.html",
+      "dist/assets/**/*",
       "config.js",
       "stats.js",
       "history.js",
@@ -114,9 +117,15 @@
       },
       "icon": "assets/icons/app-icon-512.png",
       "artifactName": "DeskMaster-${version}-${arch}.${ext}",
-      "hardenedRuntime": false,
-      "gatekeeperAssess": false,
-      "identity": null
-    }
+      "hardenedRuntime": true,
+      "gatekeeperAssess": true,
+      "identity": "${env.APPLE_IDENTITY}",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "${env.APPLE_TEAM_ID}"
+      }
+    },
+    "afterSign": "build/notarize.js"
   }
 }

@@ -101,7 +101,8 @@ function createTrayIconWindow() {
     },
   })
 
-  trayIconWindow.loadFile("dist/tray-icon.html")
+  const distPath = app.isPackaged ? app.getAppPath() : __dirname;
+  trayIconWindow.loadFile(path.join(distPath, "dist", "tray-icon.html"))
   
   trayIconWindow.webContents.on('did-finish-load', () => {
     // Open DevTools for tray window debugging
@@ -136,7 +137,8 @@ function createAboutWindow() {
     },
   })
 
-  aboutWindow.loadFile("dist/about.html")
+  const distPath = app.isPackaged ? app.getAppPath() : __dirname;
+  aboutWindow.loadFile(path.join(distPath, "dist", "about.html"))
 
   aboutWindow.once('ready-to-show', () => {
     aboutWindow.show()
@@ -177,7 +179,9 @@ function createWindow() {
   })
 
   // Load React app from dist folder
-  win.loadFile("dist/index.html")
+  // Use proper path resolution for both dev and production
+  const distPath = app.isPackaged ? app.getAppPath() : __dirname;
+  win.loadFile(path.join(distPath, "dist", "index.html"))
 
   // Open DevTools for debugging (only in development, but not automatically)
   if (process.env.NODE_ENV === 'development') {
@@ -442,10 +446,24 @@ function stopTOTPBroadcasting() {
   }
 }
 
+// Helper function to get the correct path for dist folder (works in dev and production)
+function getDistPath() {
+  // In production, app is packaged in app.asar
+  // app.getAppPath() returns the path to app.asar or the unpacked app directory
+  if (app.isPackaged) {
+    // In production, dist is inside app.asar
+    return path.join(app.getAppPath(), 'dist');
+  } else {
+    // In development, use __dirname
+    return path.join(__dirname, 'dist');
+  }
+}
+
 // Start WebSocket and HTTP servers for browser access
 function startBrowserServers() {
   const fs = require('fs');
   const { URL } = require('url');
+  const distPath = getDistPath();
   
   // MIME types for static file server
   const mimeTypes = {
@@ -492,10 +510,23 @@ function startBrowserServers() {
       const parsedUrl = new URL(req.url, `http://localhost:${STATIC_PORT}`);
       let pathname = parsedUrl.pathname;
       
-      // Handle favicon.ico requests gracefully
-      if (pathname === '/favicon.ico') {
-        res.writeHead(204, { 'Content-Type': 'image/x-icon' });
-        res.end();
+      // Handle favicon.ico requests - serve the app icon
+      if (pathname === '/favicon.ico' || pathname === '/assets/icons/app-icon-256.png') {
+        const faviconPath = path.join(distPath, 'assets', 'icons', 'app-icon-256.png');
+        fs.readFile(faviconPath, (err, data) => {
+          if (err) {
+            // Fallback: return 204 if icon not found
+            res.writeHead(204, { 'Content-Type': 'image/x-icon' });
+            res.end();
+            return;
+          }
+          res.writeHead(200, {
+            'Content-Type': 'image/png',
+            'Access-Control-Allow-Origin': origin || `http://localhost:${STATIC_PORT}`,
+            'Cache-Control': 'public, max-age=31536000'
+          });
+          res.end(data);
+        });
         return;
       }
       
@@ -506,7 +537,7 @@ function startBrowserServers() {
       
       // Security: prevent directory traversal
       const safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
-      const filePath = path.join(__dirname, 'dist', safePath);
+      const filePath = path.join(distPath, safePath);
       
       // Check if file exists
       fs.access(filePath, fs.constants.F_OK, (err) => {
@@ -1580,6 +1611,17 @@ app.whenReady().then(async () => {
   
   // Load app settings from config
   appSettings = config.getAppSettings()
+  
+  // Apply dock visibility setting
+  updateDockVisibility()
+  
+  // Handle dock icon click (macOS only)
+  if (process.platform === 'darwin') {
+    app.on('activate', () => {
+      // When dock icon is clicked, show the window
+      showWindow()
+    })
+  }
 
   // Initialize history database
   try {
@@ -1601,6 +1643,17 @@ app.whenReady().then(async () => {
     clipboardTracker.setClipboardChangeCallback(() => {
       broadcastClipboardUpdate();
     });
+    
+    // Check accessibility permission before starting clipboard monitoring (macOS)
+    if (process.platform === 'darwin') {
+      const hasPermission = systemPreferences.isTrustedAccessibilityClient(false);
+      if (!hasPermission) {
+        console.warn('⚠️  Accessibility permission not granted. Clipboard source tracking may be limited.');
+        console.warn('   Grant permission in System Settings → Privacy & Security → Accessibility');
+      } else {
+        console.log('✅ Accessibility permission granted');
+      }
+    }
     
     // Start clipboard monitoring
     clipboardTracker.startClipboardMonitoring()
@@ -1751,12 +1804,28 @@ ipcMain.handle('get-settings', () => {
   return appSettings
 })
 
+// Function to update dock visibility
+function updateDockVisibility() {
+  if (process.platform === 'darwin') {
+    if (appSettings.showInDock !== false) {
+      app.dock.show()
+    } else {
+      app.dock.hide()
+    }
+  }
+}
+
 ipcMain.handle('update-settings', (event, newSettings) => {
   // Update settings in config storage
   config.setAppSettings(newSettings)
   
   // Reload settings from config to ensure consistency
   appSettings = config.getAppSettings()
+  
+  // Update dock visibility if setting changed
+  if (newSettings.showInDock !== undefined) {
+    updateDockVisibility()
+  }
   
   // Check if theme changed and notify windows
   const effectiveTheme = getEffectiveTheme()
