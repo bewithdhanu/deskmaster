@@ -156,6 +156,19 @@ async function getDetailedStats() {
     // Add performance data to stats object
     stats.performanceData = performanceData;
 
+    // Store in history database (async, don't wait)
+    if (typeof require !== 'undefined') {
+      try {
+        const history = require('./history');
+        history.storeStats(stats).catch(err => {
+          // Silently fail - history storage shouldn't block stats
+          console.warn('Failed to store stats history:', err.message);
+        });
+      } catch (err) {
+        // history module might not be available in all contexts
+      }
+    }
+
     return stats;
   } catch (error) {
     console.error("Error getting detailed stats:", error);

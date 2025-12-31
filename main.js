@@ -4,6 +4,7 @@ const http = require("http")
 const WebSocket = require("ws")
 const config = require("./config")
 const stats = require("./stats")
+const history = require("./history")
 
 // Only load auto-launch in production
 let AutoLaunch = null
@@ -210,12 +211,14 @@ function createWindow() {
   }
   
   win.on("hide", () => {
-    if (statsInterval) clearInterval(statsInterval)
+    // Don't stop stats updates when window is hidden
+    // Stats need to continue for WebSocket clients and tray
   })
 
   win.on("closed", () => {
     win = null
-    if (statsInterval) clearInterval(statsInterval)
+    // Don't stop stats updates when window is closed
+    // Stats need to continue for WebSocket clients and tray
   })
 }
 
@@ -287,15 +290,6 @@ async function updateTrayIcon() {
 }
 
 async function sendDetailedStatsToRenderer() {
-  if (!win || win.isDestroyed() || !win.webContents || win.webContents.isDestroyed()) {
-    // Clear interval if window is destroyed
-    if (statsInterval) {
-      clearInterval(statsInterval);
-      statsInterval = null;
-    }
-    return;
-  }
-
   try {
     const detailedStats = await stats.getDetailedStats();
     const timezones = config.getTimezones();
@@ -305,17 +299,16 @@ async function sendDetailedStatsToRenderer() {
     detailedStats.timezones = timezones;
     detailedStats.settings = appSettings;
 
-    win.webContents.send("detailed-stats-update", detailedStats);
+    // Send to Electron window if it exists and is not destroyed
+    if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+      win.webContents.send("detailed-stats-update", detailedStats);
+    }
     
-    // Broadcast to WebSocket clients (browser)
+    // Always broadcast to WebSocket clients (browser) regardless of window state
     broadcastStats(detailedStats);
   } catch (error) {
     console.error("Error sending detailed stats:", error);
-    // Clear interval on error to prevent repeated failures
-    if (statsInterval) {
-      clearInterval(statsInterval);
-      statsInterval = null;
-    }
+    // Don't clear interval on error - keep trying
   }
 }
 
@@ -478,79 +471,130 @@ function startBrowserServers() {
       return;
     }
     
+    // Handle GET requests immediately (no body to read)
+    if (req.method === 'GET') {
+      handleGetRequest(req, res);
+      return;
+    }
+    
+    // Handle POST requests (need to read body)
     let body = '';
     req.on('data', chunk => {
       body += chunk.toString();
     });
     
     req.on('end', async () => {
-      try {
-        if (req.url === '/api/get-settings' && req.method === 'GET') {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(appSettings));
-        } else if (req.url === '/api/update-settings' && req.method === 'POST') {
-          const newSettings = JSON.parse(body);
-          config.setAppSettings(newSettings);
-          appSettings = config.getAppSettings();
-          
-          // Broadcast settings update to WebSocket clients
-          if (wss && connectedClients.size > 0) {
-            const message = JSON.stringify({
-              type: 'settings-updated',
-              data: appSettings
-            });
-            connectedClients.forEach((client) => {
-              if (client.readyState === WebSocket.OPEN) {
-                client.send(message);
-              }
-            });
-          }
-          
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(appSettings));
-        } else if (req.url === '/api/toggle-auto-start' && req.method === 'POST') {
-          const { enabled } = JSON.parse(body);
-          const success = await toggleAutoStart(enabled);
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success }));
-        } else if (req.url === '/api/toggle-web-access' && req.method === 'POST') {
-          const { enabled } = JSON.parse(body);
-          appSettings.webAccess = enabled;
-          config.updateAppSetting('webAccess', enabled);
-          
-          if (enabled) {
-            if (!wss || !httpServer) {
-              startBrowserServers();
-            }
-          } else {
-            if (staticServer) {
-              staticServer.close();
-              staticServer = null;
-            }
-            if (wss) {
-              wss.close();
-              wss = null;
-              connectedClients.clear();
-            }
-            if (httpServer) {
-              httpServer.close();
-              httpServer = null;
-            }
-          }
-          
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true }));
-        } else {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Not found' }));
-        }
-      } catch (error) {
-        console.error('HTTP API error:', error);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: error.message }));
-      }
+      await handlePostRequest(req, res, body);
     });
   });
+  
+  // Handle GET requests
+  async function handleGetRequest(req, res) {
+    try {
+      if (req.url === '/api/get-settings') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(appSettings));
+      } else if (req.url.startsWith('/api/history') && req.url !== '/api/history/range') {
+        // Parse query parameters
+        const url = new URL(req.url, `http://localhost:${HTTP_PORT}`);
+        const startTime = parseInt(url.searchParams.get('startTime')) || Date.now() - (24 * 60 * 60 * 1000);
+        const endTime = parseInt(url.searchParams.get('endTime')) || Date.now();
+        
+        try {
+          const historyData = await history.getHistory(startTime, endTime);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(historyData));
+        } catch (error) {
+          console.error('Error getting history:', error);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/history/range') {
+        try {
+          const timeRange = await history.getTimeRange();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(timeRange));
+        } catch (error) {
+          console.error('Error getting history range:', error);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found' }));
+      }
+    } catch (error) {
+      console.error('HTTP GET API error:', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
+  
+  // Handle POST requests
+  async function handlePostRequest(req, res, body) {
+    try {
+      if (req.url === '/api/update-settings') {
+        const newSettings = JSON.parse(body);
+        config.setAppSettings(newSettings);
+        appSettings = config.getAppSettings();
+        
+        // Broadcast settings update to WebSocket clients
+        if (wss && connectedClients.size > 0) {
+          const message = JSON.stringify({
+            type: 'settings-updated',
+            data: appSettings
+          });
+          connectedClients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(message);
+            }
+          });
+        }
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(appSettings));
+      } else if (req.url === '/api/toggle-auto-start') {
+        const { enabled } = JSON.parse(body);
+        const success = await toggleAutoStart(enabled);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success }));
+      } else if (req.url === '/api/toggle-web-access') {
+        const { enabled } = JSON.parse(body);
+        appSettings.webAccess = enabled;
+        config.updateAppSetting('webAccess', enabled);
+        
+        if (enabled) {
+          if (!wss || !httpServer) {
+            startBrowserServers();
+          }
+        } else {
+          if (staticServer) {
+            staticServer.close();
+            staticServer = null;
+          }
+          if (wss) {
+            wss.close();
+            wss = null;
+            connectedClients.clear();
+          }
+          if (httpServer) {
+            httpServer.close();
+            httpServer = null;
+          }
+        }
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found' }));
+      }
+    } catch (error) {
+      console.error('HTTP POST API error:', error);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+  }
   
   httpServer.listen(HTTP_PORT, () => {
     console.log(`🌐 HTTP API server started on http://localhost:${HTTP_PORT}`);
@@ -713,24 +757,35 @@ function showWindow() {
       win.restore()
     }
     
-  win.show()
-  win.focus()
+    win.show()
+    win.focus()
+  }
   
-    // Start stats updates
-  sendDetailedStatsToRenderer()
-    if (statsInterval) {
-      clearInterval(statsInterval)
-    }
-  statsInterval = setInterval(() => {sendDetailedStatsToRenderer()}, 1000)
+  // Start stats updates if not already running
+  // Stats should run continuously for WebSocket clients and tray, not just when window is open
+  if (!statsInterval) {
+    sendDetailedStatsToRenderer()
+    statsInterval = setInterval(() => {sendDetailedStatsToRenderer()}, 1000)
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Load configuration from storage
   config.loadConfig()
   
   // Load app settings from config
   appSettings = config.getAppSettings()
+
+  // Initialize history database
+  try {
+    await history.initDatabase()
+    console.log('✅ History database initialized')
+    
+    // Clean up old data on startup
+    await history.cleanupOldData()
+  } catch (error) {
+    console.error('Failed to initialize history database:', error)
+  }
 
   // Start WebSocket and HTTP servers for browser access if enabled
   if (appSettings.webAccess) {
@@ -739,6 +794,13 @@ app.whenReady().then(() => {
 
   createWindow()
   createTrayIconWindow()
+
+  // Start stats updates immediately (for WebSocket clients and tray, not just window)
+  // Stats should run continuously regardless of window state
+  if (!statsInterval) {
+    sendDetailedStatsToRenderer()
+    statsInterval = setInterval(() => {sendDetailedStatsToRenderer()}, 1000)
+  }
 
   // Create tray with our custom icon
   const trayIconPath = path.join(__dirname, 'assets/icons/tray-icon-22.png')
@@ -944,6 +1006,26 @@ ipcMain.handle('open-external-url', async (event, url) => {
   return true;
 });
 
+ipcMain.handle('get-history', async (event, startTime, endTime) => {
+  try {
+    const historyData = await history.getHistory(startTime, endTime);
+    return historyData;
+  } catch (error) {
+    console.error('Error getting history:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('get-history-range', async (event) => {
+  try {
+    const timeRange = await history.getTimeRange();
+    return timeRange;
+  } catch (error) {
+    console.error('Error getting history range:', error);
+    return { oldest: null, newest: null, count: 0 };
+  }
+});
+
 ipcMain.handle('toggle-auto-start', async (event, enabled) => {
   if (!autoLauncher) {
     console.log('Auto-start not available in development mode')
@@ -968,7 +1050,7 @@ app.on("window-all-closed", (e) => {
   e.preventDefault()
 })
 
-app.on("before-quit", () => {
+app.on("before-quit", async () => {
   // Close all servers
   if (staticServer) {
     staticServer.close();
@@ -984,6 +1066,14 @@ app.on("before-quit", () => {
   }
   if (statsInterval) clearInterval(statsInterval)
   if (trayUpdateInterval) clearInterval(trayUpdateInterval)
+  
+  // Close database connection
+  try {
+    await history.closeDatabase();
+    console.log('💾 History database closed');
+  } catch (error) {
+    console.error('Error closing database:', error);
+  }
 })
 
 // Add IPC handler for tray icon screenshot from renderer

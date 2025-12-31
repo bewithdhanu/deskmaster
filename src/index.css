@@ -17,7 +17,7 @@
   --accent-ram: #3742fa;
   --accent-disk: #2ed573;
   --accent-net: #ffa502;
-  --accent-battery: #2ed573;
+  --accent-battery: #9333ea;
   --timeline-line: rgba(255, 255, 255, 0.3);
   --timeline-tick: rgba(255, 255, 255, 0.6);
   --timeline-marker: #ff4757;
@@ -41,7 +41,7 @@
   --accent-ram: #3498db;
   --accent-disk: #27ae60;
   --accent-net: #f39c12;
-  --accent-battery: #27ae60;
+  --accent-battery: #9333ea;
   --timeline-line: rgba(0, 0, 0, 0.2);
   --timeline-tick: rgba(0, 0, 0, 0.4);
   --timeline-marker: #e74c3c;
@@ -66,7 +66,7 @@
     --accent-ram: #3498db;
     --accent-disk: #27ae60;
     --accent-net: #f39c12;
-    --accent-battery: #27ae60;
+    --accent-battery: #9333ea;
   --timeline-line: rgba(0, 0, 0, 0.2);
   --timeline-tick: rgba(0, 0, 0, 0.4);
   --timeline-marker: #e74c3c;
@@ -88,7 +88,7 @@
     --accent-ram: #3742fa;
     --accent-disk: #2ed573;
     --accent-net: #ffa502;
-    --accent-battery: #2ed573;
+    --accent-battery: #9333ea;
   --timeline-line: rgba(255, 255, 255, 0.3);
   --timeline-tick: rgba(255, 255, 255, 0.6);
   --timeline-marker: #ff4757;

@@ -4,6 +4,9 @@ const WS_PORT = 65531;
 const HTTP_PORT = 65532;
 const API_BASE = `http://localhost:${HTTP_PORT}/api`;
 
+// Singleton instance for browser IPC renderer
+let browserIpcRendererInstance = null;
+
 // Check if we're running in Electron
 const isElectron = () => {
   return typeof window !== 'undefined' && 
@@ -19,78 +22,94 @@ export const getIpcRenderer = () => {
       return window.require('electron').ipcRenderer;
     } catch (error) {
       console.warn('Failed to get ipcRenderer:', error);
-      return createBrowserIpcRenderer();
+      return getBrowserIpcRenderer();
     }
   }
-  return createBrowserIpcRenderer();
+  return getBrowserIpcRenderer();
+};
+
+// Get or create browser IPC renderer (singleton)
+const getBrowserIpcRenderer = () => {
+  if (!browserIpcRendererInstance) {
+    browserIpcRendererInstance = createBrowserIpcRenderer();
+  }
+  return browserIpcRendererInstance;
+};
+
+// Global WebSocket instance (singleton)
+let globalWebSocket = null;
+let globalListeners = new Map();
+let globalReconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+
+// Initialize WebSocket connection (singleton)
+const connectWebSocket = () => {
+  // If already connected or connecting, don't create another
+  if (globalWebSocket && (globalWebSocket.readyState === WebSocket.CONNECTING || globalWebSocket.readyState === WebSocket.OPEN)) {
+    return;
+  }
+  
+  try {
+    globalWebSocket = new WebSocket(`ws://localhost:${WS_PORT}`);
+    
+    globalWebSocket.onopen = () => {
+      console.log('✅ Connected to DeskMaster desktop app via WebSocket');
+      globalReconnectAttempts = 0;
+    };
+    
+    globalWebSocket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        
+        if (message.type === 'detailed-stats-update') {
+          const callbacks = globalListeners.get('detailed-stats-update');
+          if (callbacks) {
+            callbacks.forEach(cb => cb(null, message.data));
+          }
+        } else if (message.type === 'settings-updated') {
+          const callbacks = globalListeners.get('settings-updated');
+          if (callbacks) {
+            callbacks.forEach(cb => cb(null, message.data));
+          }
+        } else if (message.type === 'theme-changed') {
+          const callbacks = globalListeners.get('theme-changed');
+          if (callbacks) {
+            callbacks.forEach(cb => cb(null, message.data));
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    };
+    
+    globalWebSocket.onerror = (error) => {
+      console.warn('WebSocket error:', error);
+    };
+    
+    globalWebSocket.onclose = () => {
+      console.warn('WebSocket connection closed. Attempting to reconnect...');
+      globalWebSocket = null;
+      
+      if (globalReconnectAttempts < maxReconnectAttempts) {
+        globalReconnectAttempts++;
+        setTimeout(() => {
+          connectWebSocket();
+        }, 2000 * globalReconnectAttempts);
+      } else {
+        console.error('❌ Failed to connect to DeskMaster desktop app. Make sure the app is running.');
+      }
+    };
+  } catch (error) {
+    console.error('Failed to create WebSocket connection:', error);
+  }
 };
 
 // Create browser IPC renderer that connects to Electron app via WebSocket/HTTP
 const createBrowserIpcRenderer = () => {
-  let ws = null;
-  const listeners = new Map();
-  let reconnectAttempts = 0;
-  const maxReconnectAttempts = 5;
-  
-  // Initialize WebSocket connection
-  const connectWebSocket = () => {
-    try {
-      ws = new WebSocket(`ws://localhost:${WS_PORT}`);
-      
-      ws.onopen = () => {
-        console.log('✅ Connected to DeskMaster desktop app via WebSocket');
-        reconnectAttempts = 0;
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          
-          if (message.type === 'detailed-stats-update') {
-            const callbacks = listeners.get('detailed-stats-update');
-            if (callbacks) {
-              callbacks.forEach(cb => cb(null, message.data));
-            }
-          } else if (message.type === 'settings-updated') {
-            const callbacks = listeners.get('settings-updated');
-            if (callbacks) {
-              callbacks.forEach(cb => cb(null, message.data));
-            }
-          } else if (message.type === 'theme-changed') {
-            const callbacks = listeners.get('theme-changed');
-            if (callbacks) {
-              callbacks.forEach(cb => cb(null, message.data));
-            }
-          }
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
-        }
-      };
-      
-      ws.onerror = (error) => {
-        console.warn('WebSocket error:', error);
-      };
-      
-      ws.onclose = () => {
-        console.warn('WebSocket connection closed. Attempting to reconnect...');
-        ws = null;
-        
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++;
-          setTimeout(() => {
-            connectWebSocket();
-          }, 2000 * reconnectAttempts);
-        } else {
-          console.error('❌ Failed to connect to DeskMaster desktop app. Make sure the app is running.');
-        }
-      };
-    } catch (error) {
-      console.error('Failed to create WebSocket connection:', error);
-    }
-  };
-  
-  // Start connection
-  connectWebSocket();
+  // Initialize WebSocket connection (singleton - only creates if not already exists)
+  if (!globalWebSocket || globalWebSocket.readyState === WebSocket.CLOSED) {
+    connectWebSocket();
+  }
   
   return {
     send: (channel, ...args) => {
@@ -143,6 +162,19 @@ const createBrowserIpcRenderer = () => {
           // In browser, just open the URL
           window.open(url, '_blank');
           return true;
+        } else if (channel === 'get-history') {
+          const [startTime, endTime] = args;
+          const response = await fetch(`${API_BASE}/history?startTime=${startTime}&endTime=${endTime}`);
+          if (response.ok) {
+            return await response.json();
+          }
+          throw new Error('Failed to get history');
+        } else if (channel === 'get-history-range') {
+          const response = await fetch(`${API_BASE}/history/range`);
+          if (response.ok) {
+            return await response.json();
+          }
+          throw new Error('Failed to get history range');
         }
         return null;
       } catch (error) {
@@ -161,22 +193,25 @@ const createBrowserIpcRenderer = () => {
       }
     },
     on: (channel, callback) => {
-      if (!listeners.has(channel)) {
-        listeners.set(channel, new Set());
+      if (!globalListeners.has(channel)) {
+        globalListeners.set(channel, new Set());
       }
-      listeners.get(channel).add(callback);
+      globalListeners.get(channel).add(callback);
       console.log(`[Browser Mode] IPC listener registered for: ${channel}`);
     },
     removeListener: (channel, callback) => {
-      if (listeners.has(channel)) {
-        listeners.get(channel).delete(callback);
-        if (listeners.get(channel).size === 0) {
-          listeners.delete(channel);
+      if (globalListeners.has(channel)) {
+        globalListeners.get(channel).delete(callback);
+        if (globalListeners.get(channel).size === 0) {
+          globalListeners.delete(channel);
         }
       }
     }
   };
 };
+
+// Export isElectron check
+export { isElectron };
 
 // Legacy mock function (kept for backward compatibility, but not used)
 const createMockIpcRenderer = () => {
@@ -271,7 +306,3 @@ const createMockIpcRenderer = () => {
     }
   };
 };
-
-// Export isElectron check
-export { isElectron };
-

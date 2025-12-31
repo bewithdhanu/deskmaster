@@ -1,5 +1,5 @@
 import React from 'react';
-import { MdHome, MdAccessTime, MdSettings } from 'react-icons/md';
+import { MdHome, MdAccessTime, MdSettings, MdSpeed } from 'react-icons/md';
 
 const Navigation = ({ activeTab, onTabChange }) => {
   const menuItems = [
@@ -12,6 +12,11 @@ const Navigation = ({ activeTab, onTabChange }) => {
       id: 'world-clocks',
       label: 'World Clocks',
       icon: <MdAccessTime className="w-5 h-5" />
+    },
+    {
+      id: 'system-performance',
+      label: 'Performance',
+      icon: <MdSpeed className="w-5 h-5" />
     },
     {
       id: 'settings',
