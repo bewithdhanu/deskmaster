@@ -247,6 +247,114 @@ function cleanupOldData() {
   });
 }
 
+// Clear all history data
+function clearAllHistory() {
+  return new Promise((resolve, reject) => {
+    if (!isInitialized || !db) {
+      // Initialize if needed
+      initDatabase().then(() => {
+        db.run('DELETE FROM stats_history', (err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve();
+        });
+      }).catch(reject);
+      return;
+    }
+    
+    db.run('DELETE FROM stats_history', (err) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve();
+    });
+  });
+}
+
+// Import history entries directly (bypasses time-based filtering)
+function importHistoryEntries(entries) {
+  return new Promise((resolve, reject) => {
+    if (!isInitialized || !db) {
+      initDatabase().then(() => {
+        importEntries(entries, resolve, reject);
+      }).catch(reject);
+      return;
+    }
+    importEntries(entries, resolve, reject);
+  });
+}
+
+function importEntries(entries, resolve, reject) {
+  if (!entries || entries.length === 0) {
+    resolve();
+    return;
+  }
+
+  // Use a transaction for better performance
+  db.serialize(() => {
+    db.run('BEGIN TRANSACTION', (beginErr) => {
+      if (beginErr) {
+        reject(beginErr);
+        return;
+      }
+      
+      const stmt = db.prepare(`
+        INSERT INTO stats_history (timestamp, cpu, ram, disk, network_kbs, battery_percent, temperature)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      
+      let completed = 0;
+      let hasError = false;
+      
+      const checkComplete = () => {
+        if (completed === entries.length && !hasError) {
+          stmt.finalize((finalizeErr) => {
+            if (finalizeErr) {
+              db.run('ROLLBACK');
+              reject(finalizeErr);
+              return;
+            }
+            db.run('COMMIT', (commitErr) => {
+              if (commitErr) {
+                reject(commitErr);
+                return;
+              }
+              resolve();
+            });
+          });
+        }
+      };
+      
+      entries.forEach((entry) => {
+        stmt.run([
+          entry.timestamp || Date.now(),
+          entry.cpu || 0,
+          entry.ram || 0,
+          entry.disk || 0,
+          entry.network || entry.network_kbs || 0,
+          entry.battery !== undefined && entry.battery !== null ? entry.battery : null,
+          entry.temperature !== undefined && entry.temperature !== null ? entry.temperature : null
+        ], (err) => {
+          if (err && !hasError) {
+            hasError = true;
+            db.run('ROLLBACK');
+            reject(err);
+            return;
+          }
+          
+          if (!hasError) {
+            completed++;
+            checkComplete();
+          }
+        });
+      });
+    });
+  });
+}
+
 // Close database connection
 function closeDatabase() {
   return new Promise((resolve) => {
@@ -278,6 +386,8 @@ module.exports = {
   getHistory,
   getTimeRange,
   cleanupOldData,
+  clearAllHistory,
+  importHistoryEntries,
   closeDatabase
 };
 

@@ -70,3 +70,9 @@ release/
 # Temporary files
 tmp/
 temp/
+
+# Database files (user data - should not be committed)
+*.db
+*.sqlite
+*.sqlite3
+data/

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { MdSettings, MdMemory, MdStorage, MdNetworkCheck, MdBatteryFull, MdAccessTime, MdPowerSettingsNew, MdPalette } from 'react-icons/md';
+import { MdSettings, MdMemory, MdStorage, MdNetworkCheck, MdBatteryFull, MdAccessTime, MdPowerSettingsNew, MdPalette, MdVisibility, MdVisibilityOff, MdFileDownload, MdFileUpload, MdDeleteForever } from 'react-icons/md';
 import TimezoneDropdown from './TimezoneDropdown';
-import { getIpcRenderer } from '../utils/electron';
+import { getIpcRenderer, isElectron } from '../utils/electron';
 
 const ipcRenderer = getIpcRenderer();
 
@@ -18,7 +18,11 @@ const Settings = () => {
     datetimeFormat: 'HH:mm:ss',
     autoStart: false,
     theme: 'system',
-    webAccess: false
+    webAccess: false,
+    apiKeys: {
+      chatgpt: '',
+      ipLocation: ''
+    }
   });
 
   const [showTimezoneModal, setShowTimezoneModal] = useState(false);
@@ -26,6 +30,11 @@ const Settings = () => {
   const [selectedTimezone, setSelectedTimezone] = useState(null);
   const [timezoneLabel, setTimezoneLabel] = useState('');
   const [showInTray, setShowInTray] = useState(true);
+  const [showChatGPTKey, setShowChatGPTKey] = useState(false);
+  const [showIPLocationKey, setShowIPLocationKey] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const datetimeFormats = [
     { value: 'HH:mm:ss', label: '24-hour (14:30:25)' },
@@ -212,6 +221,99 @@ const Settings = () => {
     }
   };
 
+  // Helper function to authenticate user (always prompts, regardless of timeout)
+  const requireAuthentication = async (action = 'perform this action') => {
+    try {
+      const result = await ipcRenderer.invoke('authenticate-user', `Authentication required to ${action}`);
+      return result && result.authenticated;
+    } catch (error) {
+      console.error('Authentication error:', error);
+      return false;
+    }
+  };
+
+  const handleExport = async () => {
+    const authenticated = await requireAuthentication('export all data');
+    if (!authenticated) {
+      return; // Silently cancel if authentication fails
+    }
+
+    setIsExporting(true);
+    try {
+      const result = await ipcRenderer.invoke('export-all-data');
+      if (result.success) {
+        alert(`Data exported successfully to:\n${result.filePath}`);
+      }
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Error exporting data: ' + error.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async () => {
+    const authenticated = await requireAuthentication('import all data');
+    if (!authenticated) {
+      return; // Silently cancel if authentication fails
+    }
+
+    if (!window.confirm('Importing data will replace all current settings, authenticators, and clipboard history. This action cannot be undone. Continue?')) {
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const result = await ipcRenderer.invoke('import-all-data');
+      if (result.success) {
+        alert('Data imported successfully! The application will reload.');
+        // Reload settings
+        await loadSettings();
+        // Reload the page to refresh all components
+        window.location.reload();
+      } else if (result.needsPassword) {
+        // Password prompt is handled by backend, but if it still fails, show error
+        alert(result.error || 'Encryption key is required for this file.');
+      }
+    } catch (error) {
+      console.error('Error importing data:', error);
+      alert('Error importing data: ' + error.message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleReset = async () => {
+    const authenticated = await requireAuthentication('reset all data');
+    if (!authenticated) {
+      return; // Silently cancel if authentication fails
+    }
+
+    if (!window.confirm('This will permanently delete all settings, authenticators, and clipboard history. This action cannot be undone. Are you absolutely sure?')) {
+      return;
+    }
+
+    if (!window.confirm('Final confirmation: This will delete EVERYTHING. Continue?')) {
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const result = await ipcRenderer.invoke('reset-all-data');
+      if (result.success) {
+        alert('All data has been reset. The application will reload.');
+        // Reload settings
+        await loadSettings();
+        // Reload the page to refresh all components
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Error resetting data:', error);
+      alert('Error resetting data: ' + error.message);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const ToggleSwitch = ({ enabled, onChange, label, description }) => (
     <div className="flex items-center justify-between py-1">
@@ -411,6 +513,136 @@ const Settings = () => {
                 label="Theme"
                 description="Color scheme"
               />
+            </div>
+          </div>
+
+          {/* API Keys Card */}
+          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
+            <div className="flex items-center gap-2 mb-3">
+              <MdSettings className="w-4 h-4 text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-primary">API Keys</h3>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-theme-primary mb-1">
+                  ChatGPT API Key (GPT-4o mini)
+                </label>
+                <div className="relative">
+                <input
+                    type={showChatGPTKey ? "text" : "password"}
+                  value={settings.apiKeys?.chatgpt || ''}
+                  onChange={(e) => {
+                    const newSettings = {
+                      ...settings,
+                      apiKeys: {
+                        ...settings.apiKeys,
+                        chatgpt: e.target.value
+                      }
+                    };
+                    updateSettings(newSettings);
+                  }}
+                  placeholder="sk-..."
+                    className="w-full px-2 py-1.5 pr-8 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+                  <button
+                    type="button"
+                    onClick={() => setShowChatGPTKey(!showChatGPTKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary transition-colors"
+                    title={showChatGPTKey ? "Hide password" : "Show password"}
+                  >
+                    {showChatGPTKey ? (
+                      <MdVisibilityOff className="w-4 h-4" />
+                    ) : (
+                      <MdVisibility className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                <div className="text-theme-muted text-xs mt-1">For text reformatting tool</div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-theme-primary mb-1">
+                  IP Location API Key
+                </label>
+                <div className="relative">
+                <input
+                    type={showIPLocationKey ? "text" : "password"}
+                  value={settings.apiKeys?.ipLocation || ''}
+                  onChange={(e) => {
+                    const newSettings = {
+                      ...settings,
+                      apiKeys: {
+                        ...settings.apiKeys,
+                        ipLocation: e.target.value
+                      }
+                    };
+                    updateSettings(newSettings);
+                  }}
+                  placeholder="API key..."
+                    className="w-full px-2 py-1.5 pr-8 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+                  <button
+                    type="button"
+                    onClick={() => setShowIPLocationKey(!showIPLocationKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary transition-colors"
+                    title={showIPLocationKey ? "Hide password" : "Show password"}
+                  >
+                    {showIPLocationKey ? (
+                      <MdVisibilityOff className="w-4 h-4" />
+                    ) : (
+                      <MdVisibility className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                <div className="text-theme-muted text-xs mt-1">For IP location lookup tool</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Data Management Card */}
+          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
+            <div className="flex items-center gap-2 mb-3">
+              <MdSettings className="w-4 h-4 text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-primary">Data Management</h3>
+            </div>
+            <div className="space-y-2">
+              {!isElectron() ? (
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
+                  <p className="text-yellow-600 dark:text-yellow-400 text-xs font-medium mb-1">Browser Mode</p>
+                  <p className="text-theme-muted text-xs">Export and Import are only available in the desktop app.</p>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={handleExport}
+                    disabled={isExporting}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
+                  >
+                    <MdFileDownload className="w-4 h-4" />
+                    {isExporting ? 'Exporting...' : 'Export All Data'}
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    disabled={isImporting}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
+                  >
+                    <MdFileUpload className="w-4 h-4" />
+                    {isImporting ? 'Importing...' : 'Import Data'}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={handleReset}
+                disabled={isResetting}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-500 hover:bg-red-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
+              >
+                <MdDeleteForever className="w-4 h-4" />
+                {isResetting ? 'Resetting...' : 'Reset All Data'}
+              </button>
+              <div className="text-theme-muted text-xs mt-2 pt-2 border-t border-theme">
+                <p className="mb-1">Export: Save all settings, authenticators, and clipboard history to a file (optional encryption).</p>
+                <p className="mb-1">Import: Restore data from an exported file (replaces current data).</p>
+                <p>Reset: Permanently delete all data and restore defaults.</p>
+              </div>
             </div>
           </div>
 

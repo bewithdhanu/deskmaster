@@ -26,6 +26,14 @@ ChartJS.register(
 
 const ipcRenderer = getIpcRenderer();
 
+// Helper function to format network speed (KB/s or MB/s)
+const formatNetworkSpeed = (value) => {
+  if (value >= 1024) {
+    return (value / 1024).toFixed(2) + ' MB/s';
+  }
+  return Math.round(value) + ' KB/s';
+};
+
 // Helper function to get computed CSS variable value
 const getCSSVariable = (varName) => {
   if (typeof window === 'undefined') return '#ffffff';
@@ -218,10 +226,30 @@ const HistoryChart = () => {
     });
   };
 
+  // Sample data points to reduce clutter and make chart smoother
+  const sampleData = useMemo(() => {
+    if (!historyData || historyData.length === 0) return [];
+    
+    // Determine sampling interval based on selected range
+    let sampleInterval = 16;
+    if (selectedRange === '1h') {
+      sampleInterval = 3; // Every 3rd point for 1 hour (5s intervals -> ~20 points/hour)
+    } else if (selectedRange === '6h') {
+      sampleInterval = 16; // Every 8th point for 6 hours (4x more reduction)
+    } else if (selectedRange === '24h') {
+      sampleInterval = 16; // Every 8th point for 24 hours (4x more reduction)
+    } else if (selectedRange === '7d' || selectedRange === '30d') {
+      sampleInterval = 16; // Every 8th point for longer ranges (4x more reduction)
+    }
+    
+    // Sample the data
+    return historyData.filter((_, index) => index % sampleInterval === 0);
+  }, [historyData, selectedRange]);
+
   // Prepare chart data - memoized to prevent unnecessary re-renders
   const chartData = useMemo(() => {
     return {
-      labels: historyData.map(item => {
+      labels: sampleData.map(item => {
         const date = new Date(item.timestamp);
         if (selectedRange === '1h' || selectedRange === '6h') {
           return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -234,7 +262,7 @@ const HistoryChart = () => {
       datasets: [
         selectedMetrics.includes('cpu') && {
           label: 'CPU %',
-          data: historyData.map(item => item.cpu),
+          data: sampleData.map(item => item.cpu),
           borderColor: 'rgb(255, 71, 87)',
           backgroundColor: 'rgba(255, 71, 87, 0.1)',
           fill: true,
@@ -245,7 +273,7 @@ const HistoryChart = () => {
         },
         selectedMetrics.includes('ram') && {
           label: 'RAM %',
-          data: historyData.map(item => item.ram),
+          data: sampleData.map(item => item.ram),
           borderColor: 'rgb(55, 66, 250)',
           backgroundColor: 'rgba(55, 66, 250, 0.1)',
           fill: true,
@@ -256,7 +284,7 @@ const HistoryChart = () => {
         },
         selectedMetrics.includes('disk') && {
           label: 'Disk %',
-          data: historyData.map(item => item.disk),
+          data: sampleData.map(item => item.disk),
           borderColor: 'rgb(46, 213, 115)',
           backgroundColor: 'rgba(46, 213, 115, 0.1)',
           fill: true,
@@ -266,8 +294,8 @@ const HistoryChart = () => {
           pointHoverRadius: 0
         },
         selectedMetrics.includes('network') && {
-          label: 'Network KB/s',
-          data: historyData.map(item => item.network),
+          label: 'Network',
+          data: sampleData.map(item => item.network),
           borderColor: 'rgb(255, 165, 0)',
           backgroundColor: 'rgba(255, 165, 0, 0.1)',
           fill: true,
@@ -278,7 +306,7 @@ const HistoryChart = () => {
         },
         selectedMetrics.includes('battery') && {
           label: 'Battery %',
-          data: historyData.map(item => item.battery !== null && item.battery !== undefined ? item.battery : null),
+          data: sampleData.map(item => item.battery !== null && item.battery !== undefined ? item.battery : null),
           borderColor: 'rgb(147, 51, 234)',
           backgroundColor: 'rgba(147, 51, 234, 0.1)',
           fill: true,
@@ -290,7 +318,7 @@ const HistoryChart = () => {
         }
       ].filter(Boolean)
     };
-  }, [historyData, selectedRange, selectedMetrics]);
+  }, [sampleData, selectedRange, selectedMetrics]);
 
   // Memoize chart options to prevent re-renders
   const chartOptions = useMemo(() => {
@@ -368,8 +396,8 @@ const HistoryChart = () => {
                 label += ': ';
               }
               if (context.parsed.y !== null) {
-                label += context.dataset.label?.includes('KB/s') 
-                  ? Math.round(context.parsed.y) + ' KB/s'
+                label += context.dataset.label?.includes('KB/s') || context.dataset.label?.includes('Network')
+                  ? formatNetworkSpeed(context.parsed.y)
                   : Math.round(context.parsed.y) + '%';
               }
               return label;
@@ -385,7 +413,8 @@ const HistoryChart = () => {
             minRotation: 0,
             font: {
               size: 11
-            }
+            },
+            maxTicksLimit: 24 // Limit the number of X-axis labels to reduce clutter
           },
           grid: {
             color: borderColorValue,
@@ -423,7 +452,7 @@ const HistoryChart = () => {
               size: 11
             },
             callback: function(value) {
-              return value + ' KB/s';
+              return formatNetworkSpeed(value);
             }
           },
           grid: {
@@ -532,7 +561,7 @@ const HistoryChart = () => {
             <div className="text-center">
               <div className="text-theme-muted">Network Avg</div>
               <div className="text-theme-primary font-semibold">
-                {Math.round(historyData.reduce((sum, d) => sum + d.network, 0) / historyData.length)} KB/s
+                {formatNetworkSpeed(historyData.reduce((sum, d) => sum + d.network, 0) / historyData.length)}
               </div>
             </div>
           )}

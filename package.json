@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "2.0.9",
+  "version": "2.1.0",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -56,11 +56,15 @@
     "webpack-dev-server": "^4.15.0"
   },
   "dependencies": {
+    "active-win": "^8.2.1",
     "auto-launch": "^5.0.6",
+    "bcryptjs": "^2.4.3",
     "chart.js": "^4.4.0",
+    "dotenv": "^16.6.1",
     "html2canvas": "^1.4.1",
     "moment": "^2.30.1",
     "moment-timezone": "^0.6.0",
+    "otplib": "^12.0.1",
     "react": "^18.2.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
