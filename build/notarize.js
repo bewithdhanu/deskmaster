@@ -1,5 +1,3 @@
-const { notarize } = require('@electron/notarize');
-
 exports.default = async function notarizing(context) {
   const { electronPlatformName, appOutDir } = context;
   
@@ -14,6 +12,9 @@ exports.default = async function notarizing(context) {
     console.warn('   Set APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID environment variables to enable notarization');
     return;
   }
+
+  // Dynamic import for ES module support
+  const { notarize } = await import('@electron/notarize');
 
   const appName = context.packager.appInfo.productFilename;
   const appPath = `${appOutDir}/${appName}.app`;

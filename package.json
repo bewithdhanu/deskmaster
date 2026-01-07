@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
