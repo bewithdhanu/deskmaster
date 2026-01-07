@@ -1218,6 +1218,84 @@ function startBrowserServers() {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message || 'Internal server error' }));
         }
+      } else if (req.url === '/api/create-onetimesecret') {
+        const { secret, ttl } = JSON.parse(body);
+        try {
+          if (!secret || !secret.trim()) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Secret is required' }));
+            return;
+          }
+
+          const https = require('https');
+          const querystring = require('querystring');
+          
+          const postData = querystring.stringify({
+            secret: secret.trim(),
+            ttl: ttl || 3600
+          });
+
+          const options = {
+            hostname: 'us.onetimesecret.com',
+            port: 443,
+            path: '/api/v1/share',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Length': Buffer.byteLength(postData)
+            },
+            timeout: 10000
+          };
+
+          const apiReq = https.request(options, (apiRes) => {
+            let data = '';
+            apiRes.on('data', (chunk) => {
+              data += chunk;
+            });
+            apiRes.on('end', () => {
+              try {
+                if (apiRes.statusCode !== 200) {
+                  res.writeHead(apiRes.statusCode, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: `OneTimeSecret API returned status ${apiRes.statusCode}` }));
+                  return;
+                }
+                const result = JSON.parse(data);
+                if (result.secret_key) {
+                  const secretUrl = `https://us.onetimesecret.com/secret/${result.secret_key}`;
+                  res.writeHead(200, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ 
+                    url: secretUrl,
+                    secretKey: result.secret_key,
+                    metadataKey: result.metadata_key
+                  }));
+                } else {
+                  res.writeHead(500, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: 'Invalid response from OneTimeSecret API' }));
+                }
+              } catch (error) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to parse API response' }));
+              }
+            });
+          });
+
+          apiReq.on('error', (error) => {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Request failed: ${error.message}` }));
+          });
+
+          apiReq.on('timeout', () => {
+            apiReq.destroy();
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Request timeout' }));
+          });
+
+          apiReq.write(postData);
+          apiReq.end();
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message || 'Failed to create OneTimeSecret' }));
+        }
       } else if (req.url === '/api/delete-clipboard-entry') {
         const { id } = JSON.parse(body);
         try {
@@ -2468,6 +2546,80 @@ ipcMain.handle('reformat-text', async (event, text) => {
     });
   } catch (error) {
     console.error('Error reformatting text:', error);
+    throw error;
+  }
+});
+
+// OneTimeSecret IPC handler
+ipcMain.handle('create-onetimesecret', async (event, secret, ttl = 3600) => {
+  try {
+    if (!secret || !secret.trim()) {
+      throw new Error('Secret is required');
+    }
+
+    const https = require('https');
+    const querystring = require('querystring');
+    
+    const postData = querystring.stringify({
+      secret: secret.trim(),
+      ttl: ttl || 3600
+    });
+
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'us.onetimesecret.com',
+        port: 443,
+        path: '/api/v1/share',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(postData)
+        },
+        timeout: 10000
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          try {
+            if (res.statusCode !== 200) {
+              reject(new Error(`OneTimeSecret API returned status ${res.statusCode}`));
+              return;
+            }
+            const result = JSON.parse(data);
+            if (result.secret_key) {
+              const secretUrl = `https://us.onetimesecret.com/secret/${result.secret_key}`;
+              resolve({
+                url: secretUrl,
+                secretKey: result.secret_key,
+                metadataKey: result.metadata_key
+              });
+            } else {
+              reject(new Error('Invalid response from OneTimeSecret API'));
+            }
+          } catch (error) {
+            reject(new Error('Failed to parse API response'));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        reject(new Error(`Request failed: ${error.message}`));
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
+      req.write(postData);
+      req.end();
+    });
+  } catch (error) {
+    console.error('Error creating OneTimeSecret:', error);
     throw error;
   }
 });

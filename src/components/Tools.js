@@ -5,6 +5,7 @@ import IPLocationTool from './tools/IPLocationTool';
 import PinggyTunnelTool from './tools/PinggyTunnelTool';
 import TextReformatTool from './tools/TextReformatTool';
 import PasswordGenerator from './tools/PasswordGenerator';
+import OneTimeSecretTool from './tools/OneTimeSecretTool';
 import { MdAdd, MdClose } from 'react-icons/md';
 import { getIpcRenderer } from '../utils/electron';
 
@@ -18,7 +19,8 @@ const Tools = () => {
     'ip-location': true,
     'pinggy': true,
     'text-reformat': true,
-    'password-generator': true
+    'password-generator': true,
+    'onetimesecret': true
   });
   const [toolOrder, setToolOrder] = useState([]);
   const [draggedTool, setDraggedTool] = useState(null);
@@ -33,7 +35,8 @@ const Tools = () => {
     { id: 'ip-location', name: 'IP Location', description: 'Get location details from IP address(es)' },
     { id: 'pinggy', name: 'Pinggy Tunnel', description: 'Create secure tunnels to local ports' },
     { id: 'text-reformat', name: 'Text Reformat', description: 'Reformat text using ChatGPT GPT-4o mini' },
-    { id: 'password-generator', name: 'Password Generator', description: 'Generate strong passwords with customizable options' }
+    { id: 'password-generator', name: 'Password Generator', description: 'Generate strong passwords with customizable options' },
+    { id: 'onetimesecret', name: 'OneTimeSecret', description: 'Create anonymous one-time shareable secrets' }
   ];
 
   // Load tool order from settings on mount
@@ -52,13 +55,13 @@ const Tools = () => {
           setToolOrder(migratedOrder);
         } else {
           // Initialize default order
-          const defaultOrder = ['bcrypt-generate', 'bcrypt-verify', 'public-ip', 'ip-location', 'pinggy', 'text-reformat', 'password-generator'];
+          const defaultOrder = ['bcrypt-generate', 'bcrypt-verify', 'public-ip', 'ip-location', 'pinggy', 'text-reformat', 'password-generator', 'onetimesecret'];
           setToolOrder(defaultOrder);
         }
       } catch (error) {
         console.error('Error loading tool order:', error);
         // Fallback to default order
-        const defaultOrder = ['bcrypt-generate', 'bcrypt-verify', 'public-ip', 'ip-location', 'pinggy', 'text-reformat', 'password-generator'];
+        const defaultOrder = ['bcrypt-generate', 'bcrypt-verify', 'public-ip', 'ip-location', 'pinggy', 'text-reformat', 'password-generator', 'onetimesecret'];
         setToolOrder(defaultOrder);
       }
     };
@@ -286,6 +289,16 @@ const Tools = () => {
           );
         }
         return null;
+      case 'onetimesecret':
+        if (activeTools['onetimesecret']) {
+          return (
+            <OneTimeSecretTool
+              key="onetimesecret"
+              onClose={handleCloseTool}
+            />
+          );
+        }
+        return null;
       default:
         return null;
     }
@@ -334,6 +347,9 @@ const Tools = () => {
     }
     if (activeTools['password-generator'] && !processedIds.has('password-generator')) {
       orderedTools.push(getToolComponent('password-generator'));
+    }
+    if (activeTools['onetimesecret'] && !processedIds.has('onetimesecret')) {
+      orderedTools.push(getToolComponent('onetimesecret'));
     }
 
     return orderedTools.map((component, index) => {

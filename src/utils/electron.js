@@ -352,6 +352,20 @@ const createBrowserIpcRenderer = () => {
           }
           const error = await response.json();
           throw new Error(error.error || 'Failed to translate text');
+        } else if (channel === 'create-onetimesecret') {
+          const [secret, ttl] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/create-onetimesecret`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ secret, ttl })
+          });
+          if (response.ok) {
+            const result = await response.json();
+            return result;
+          }
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to create OneTimeSecret');
         } else if (channel === 'get-clipboard-history') {
           const [limit] = args;
           const url = new URL(`${API_BASE}/get-clipboard-history`);
