@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import Home from './components/Home';
 import TimezoneManager from './components/TimezoneManager';
 import SystemPerformance from './components/SystemPerformance';
 import Tools from './components/Tools';
@@ -165,13 +164,11 @@ function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'home':
-        return <Home />;
+        return <Tools />;
       case 'world-clocks':
         return <TimezoneManager />;
       case 'system-performance':
         return <SystemPerformance />;
-      case 'tools':
-        return <Tools />;
       case 'clipboard':
         return <ClipboardHistory />;
       case 'authenticator':
@@ -179,7 +176,7 @@ function App() {
       case 'settings':
         return <Settings />;
       default:
-        return <Home />;
+        return <Tools />;
     }
   };
 

@@ -65,6 +65,47 @@ let lastTOTPCodes = null
 const crypto = require('crypto')
 const API_SECRET_TOKEN = crypto.randomBytes(32).toString('hex')
 
+// Text reformat: tone-specific instructions (multi-select: combine selected tones)
+const REFORMAT_TONE_INSTRUCTIONS = {
+  casual: 'Casual: Use everyday language, contractions, and a relaxed style. Keep it conversational and approachable.',
+  professional: 'Professional: Clear, polished, business-appropriate language. Correct grammar, concise and direct. Suitable for emails and reports.',
+  managerial: 'Managerial: Formal, authoritative, executive-level. Precise language, commanding but respectful. Suited for leadership and senior-stakeholder communication.',
+  friendly: 'Friendly: Warm, approachable, and personable. Use a positive and welcoming tone.',
+  formal: 'Formal: Proper, reserved, and polished. Avoid contractions and colloquialisms; suitable for official documents.',
+  concise: 'Concise: Short and to the point. Remove filler words and redundancy; keep only essential information.',
+  empathetic: 'Empathetic: Acknowledge feelings and show understanding. Use supportive and considerate language.',
+  assertive: 'Assertive: Direct and confident. State points clearly without being aggressive.',
+  diplomatic: 'Diplomatic: Tactful and considerate. Soften potentially harsh points while staying clear.',
+  funny: 'Funny: Light, witty, or humorous where appropriate. Add tasteful humor and playfulness without undermining the message.'
+};
+
+function getReformatMessages(text, tones) {
+  const selected = Array.isArray(tones) && tones.length > 0 ? tones : ['professional'];
+  const instructions = selected
+    .map(t => REFORMAT_TONE_INSTRUCTIONS[t])
+    .filter(Boolean);
+  const toneInstruction = instructions.length > 0
+    ? `Apply the following tone(s) together: ${instructions.join(' ')}`
+    : REFORMAT_TONE_INSTRUCTIONS.professional;
+  const systemPrompt = `You are an expert editor. Your task is to reformat the user's text so it is clear, correct, and easy to read.
+
+Rules:
+1. Fix all grammar, spelling, and punctuation.
+2. Improve sentence structure and flow; break run-on sentences and tighten wordy phrases.
+3. Use clear paragraph breaks where ideas change; keep paragraphs short (2–4 sentences when possible).
+4. Preserve every fact, number, and piece of information; do not add or remove content.
+5. Do not add headings, bullet points, or lists unless the original text already has them or they are clearly needed for clarity.
+6. Use emojis where they fit the tone and add clarity or warmth (e.g. in casual, friendly, or funny tones). Use them sparingly in professional or formal tones; avoid overusing them.
+7. Output only the reformatted text, with no preamble or explanation.
+
+Tone: ${toneInstruction}`;
+  const userPrompt = `Reformat the following text according to the rules and tone given. Output only the reformatted text.\n\n---\n\n${text}`;
+  return [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt }
+  ];
+}
+
 // Helper function to get the effective theme based on user preference
 function getEffectiveTheme() {
   if (appSettings.theme === 'system') {
@@ -990,7 +1031,17 @@ function startBrowserServers() {
               chatgpt: '',
               ipLocation: ''
             },
-            toolOrder: []
+            toolOrder: [],
+            activeTools: {
+              'bcrypt-generate': true,
+              'bcrypt-verify': true,
+              'public-ip': true,
+              'ip-location': true,
+              'pinggy': true,
+              'text-reformat': true,
+              'password-generator': true,
+              'onetimesecret': true
+            }
           };
           config.setAppSettings(defaultSettings);
           appSettings = config.getAppSettings();
@@ -1398,7 +1449,9 @@ function startBrowserServers() {
           res.end(JSON.stringify({ error: error.message }));
         }
       } else if (req.url === '/api/reformat-text') {
-        const { text } = JSON.parse(body);
+        const bodyData = JSON.parse(body);
+        const text = bodyData.text;
+        const tones = Array.isArray(bodyData.tones) ? bodyData.tones : (bodyData.tone != null ? [bodyData.tone] : ['professional']);
         try {
           const apiKey = appSettings.apiKeys?.chatgpt;
           
@@ -1409,19 +1462,11 @@ function startBrowserServers() {
           }
 
           const https = require('https');
+          const messages = getReformatMessages(text, tones);
           const requestData = JSON.stringify({
             model: 'gpt-4o-mini',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a helpful assistant that reformats text to be more readable, well-structured, and properly formatted. Preserve all important information while improving clarity and structure.'
-              },
-              {
-                role: 'user',
-                content: `Please reformat the following text to make it more readable and well-structured:\n\n${text}`
-              }
-            ],
-            temperature: 0.7,
+            messages,
+            temperature: 0.3,
             max_tokens: 2000
           });
 
@@ -2348,7 +2393,17 @@ ipcMain.handle('reset-all-data', async (event) => {
         chatgpt: '',
         ipLocation: ''
       },
-      toolOrder: []
+      toolOrder: [],
+      activeTools: {
+        'bcrypt-generate': true,
+        'bcrypt-verify': true,
+        'public-ip': true,
+        'ip-location': true,
+        'pinggy': true,
+        'text-reformat': true,
+        'password-generator': true,
+        'onetimesecret': true
+      }
     };
     config.setAppSettings(defaultSettings);
     appSettings = config.getAppSettings();
@@ -2469,7 +2524,7 @@ ipcMain.handle('translate-text', async (event, text, targetLanguage) => {
   }
 });
 
-ipcMain.handle('reformat-text', async (event, text) => {
+ipcMain.handle('reformat-text', async (event, text, tones) => {
   try {
     const https = require('https');
     const apiKey = appSettings.apiKeys?.chatgpt;
@@ -2478,19 +2533,11 @@ ipcMain.handle('reformat-text', async (event, text) => {
       throw new Error('ChatGPT API key not found. Please set it in Settings > API Keys');
     }
 
+    const messages = getReformatMessages(text, tones);
     const requestData = JSON.stringify({
       model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a helpful assistant that reformats text to be more readable, well-structured, and properly formatted. Preserve all important information while improving clarity and structure.'
-        },
-        {
-          role: 'user',
-          content: `Please reformat the following text to make it more readable and well-structured:\n\n${text}`
-        }
-      ],
-      temperature: 0.7,
+      messages,
+      temperature: 0.3,
       max_tokens: 2000
     });
 
