@@ -149,23 +149,24 @@ function createAuthenticator(data) {
       return;
     }
 
-    const { name, secret, url, username, password } = data;
+    const { name, url, username, password } = data;
+    const secret = (data.secret && String(data.secret).trim()) ? String(data.secret).trim() : '';
     
-    if (!name || !secret) {
-      reject(new Error('Name and secret are required'));
+    if (!name || !name.trim()) {
+      reject(new Error('Name is required'));
       return;
     }
 
     db.run(
       'INSERT INTO authenticators (name, secret, url, username, password) VALUES (?, ?, ?, ?, ?)',
-      [name, secret, url || null, username || null, password || null],
+      [name.trim(), secret, url || null, username || null, password || null],
       function(err) {
         if (err) {
           console.error('Error creating authenticator:', err);
           reject(err);
           return;
         }
-        resolve({ id: this.lastID, ...data });
+        resolve({ id: this.lastID, name: data.name, secret, url: data.url, username: data.username, password: data.password });
       }
     );
   });
@@ -179,16 +180,17 @@ function updateAuthenticator(id, data) {
       return;
     }
 
-    const { name, secret, url, username, password } = data;
+    const { name, url, username, password } = data;
+    const secret = (data.secret && String(data.secret).trim()) ? String(data.secret).trim() : '';
     
-    if (!name || !secret) {
-      reject(new Error('Name and secret are required'));
+    if (!name || !name.trim()) {
+      reject(new Error('Name is required'));
       return;
     }
 
     db.run(
       'UPDATE authenticators SET name = ?, secret = ?, url = ?, username = ?, password = ?, updated_at = ? WHERE id = ?',
-      [name, secret, url || null, username || null, password || null, Math.floor(Date.now() / 1000), id],
+      [name.trim(), secret, url || null, username || null, password || null, Math.floor(Date.now() / 1000), id],
       function(err) {
         if (err) {
           console.error('Error updating authenticator:', err);
@@ -199,7 +201,7 @@ function updateAuthenticator(id, data) {
           reject(new Error('Authenticator not found'));
           return;
         }
-        resolve({ id, ...data });
+        resolve({ id, name: data.name, secret, url: data.url, username: data.username, password: data.password });
       }
     );
   });

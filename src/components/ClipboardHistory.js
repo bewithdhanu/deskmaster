@@ -9,6 +9,8 @@ const ClipboardHistory = () => {
   const [clipboardHistory, setClipboardHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [copiedId, setCopiedId] = useState(null);
   const [viewingEntry, setViewingEntry] = useState(null);
 
@@ -16,10 +18,12 @@ const ClipboardHistory = () => {
     try {
       setIsLoading(true);
       let history;
+      // Fetch enough items to show full history (retention is 1 month, not a record limit)
+      const fetchLimit = 2000;
       if (searchQuery.trim()) {
-        history = await ipcRenderer.invoke('search-clipboard-history', searchQuery.trim(), 333);
+        history = await ipcRenderer.invoke('search-clipboard-history', searchQuery.trim(), fetchLimit);
       } else {
-        history = await ipcRenderer.invoke('get-clipboard-history', 333);
+        history = await ipcRenderer.invoke('get-clipboard-history', fetchLimit);
       }
       setClipboardHistory(history || []);
     } catch (error) {
@@ -49,6 +53,16 @@ const ClipboardHistory = () => {
       }
     };
   }, [searchQuery]);
+
+  const isInDateRange = (timestamp) => {
+    if (!dateFrom && !dateTo) return true;
+    const m = moment(timestamp);
+    if (dateFrom && m.isBefore(moment(dateFrom).startOf('day'))) return false;
+    if (dateTo && m.isAfter(moment(dateTo).endOf('day'))) return false;
+    return true;
+  };
+
+  const displayedHistory = clipboardHistory.filter((entry) => isInDateRange(entry.timestamp));
 
   const handleCopy = async (text, id) => {
     if (!text) return;
@@ -140,9 +154,9 @@ const ClipboardHistory = () => {
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="mb-4">
-        <div className="relative">
+      {/* Search Bar + Date Range */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px]">
           <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-theme-muted" />
           <input
             type="text"
@@ -152,6 +166,31 @@ const ClipboardHistory = () => {
             className="w-full pl-10 pr-4 py-2 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-muted focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
           />
         </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <label className="text-xs text-theme-muted whitespace-nowrap">From</label>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="px-3 py-2 bg-theme-secondary border border-theme rounded-lg text-theme-primary text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+          />
+          <label className="text-xs text-theme-muted whitespace-nowrap">To</label>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="px-3 py-2 bg-theme-secondary border border-theme rounded-lg text-theme-primary text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              type="button"
+              onClick={() => { setDateFrom(''); setDateTo(''); }}
+              className="text-xs text-red-500 hover:text-red-400 whitespace-nowrap"
+            >
+              Clear dates
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Clipboard List */}
@@ -160,15 +199,15 @@ const ClipboardHistory = () => {
           <div className="flex items-center justify-center h-full">
             <div className="text-theme-muted">Loading clipboard history...</div>
           </div>
-        ) : clipboardHistory.length === 0 ? (
+        ) : displayedHistory.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-theme-muted">
-              {searchQuery ? 'No clipboard entries found matching your search.' : 'No clipboard history yet. Start copying text to see it here.'}
+              {searchQuery ? 'No clipboard entries found matching your search.' : (dateFrom || dateTo) ? 'No entries in the selected date range.' : 'No clipboard history yet. Start copying text to see it here.'}
             </div>
           </div>
         ) : (
           <div className="space-y-1">
-            {clipboardHistory.map((entry) => (
+            {displayedHistory.map((entry) => (
               <div
                 key={entry.id}
                 className="bg-theme-card border border-theme rounded-lg px-3 py-2 hover:border-red-500 transition-colors duration-200 flex items-center gap-3"
@@ -222,9 +261,10 @@ const ClipboardHistory = () => {
       </div>
 
       {/* Footer with count */}
-      {clipboardHistory.length > 0 && (
+      {displayedHistory.length > 0 && (
         <div className="mt-4 text-xs text-theme-muted text-center">
-          Showing {clipboardHistory.length} {clipboardHistory.length === 1 ? 'entry' : 'entries'} 
+          Showing {displayedHistory.length} {displayedHistory.length === 1 ? 'entry' : 'entries'}
+          {(dateFrom || dateTo) && clipboardHistory.length !== displayedHistory.length && ` (filtered from ${clipboardHistory.length})`}
           {searchQuery && ` matching "${searchQuery}"`}
         </div>
       )}

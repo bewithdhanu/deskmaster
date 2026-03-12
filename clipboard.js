@@ -22,6 +22,9 @@ function hasAccessibilityPermission() {
   }
 }
 
+// Retention: keep clipboard history for the last 1 month (time-based, not record count)
+const CLIPBOARD_RETENTION_DAYS = 30;
+
 // Database path
 function getDbPath() {
   const userDataPath = app ? app.getPath('userData') : path.join(__dirname, 'data');
@@ -150,31 +153,19 @@ function storeClipboardEntry(content, source) {
           return;
         }
         
-        // Check if we have more than 333 entries (reduced from 1000 to decrease data)
-        db.get('SELECT COUNT(*) as count FROM clipboard_history', (err, row) => {
-          if (err) {
-            console.error('Error counting clipboard entries:', err);
-            resolve();
-            return;
-          }
-          
-          if (row && row.count > 333) {
-            // Delete oldest entries, keeping only the last 333 (reduced from 1000 to decrease data)
-            const deleteCount = row.count - 333;
-            db.run(
-              'DELETE FROM clipboard_history WHERE id IN (SELECT id FROM clipboard_history ORDER BY timestamp ASC LIMIT ?)',
-              [deleteCount],
-              (err) => {
-                if (err) {
-                  console.error('Error cleaning old clipboard entries:', err);
-                }
-                resolve();
-              }
-            );
-          } else {
+        // Delete entries older than retention period (time-based: last 1 month)
+        const retentionMs = CLIPBOARD_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+        const cutoff = timestamp - retentionMs;
+        db.run(
+          'DELETE FROM clipboard_history WHERE timestamp < ?',
+          [cutoff],
+          (err) => {
+            if (err) {
+              console.error('Error cleaning old clipboard entries:', err);
+            }
             resolve();
           }
-        });
+        );
       }
     );
   });

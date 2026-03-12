@@ -602,14 +602,13 @@ const Authenticator = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-theme-primary mb-1">Secret *</label>
+                  <label className="block text-sm font-medium text-theme-primary mb-1">Secret</label>
                   <input
                     type="text"
                     value={formData.secret}
                     onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
                     className="w-full px-3 py-2 bg-theme-secondary border border-theme rounded text-theme-primary font-mono"
-                    required
-                    placeholder="TOTP secret key"
+                    placeholder="TOTP secret key — leave blank to add without a code"
                   />
                 </div>
                 <div>

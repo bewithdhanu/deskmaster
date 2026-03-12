@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import StatsManager from './StatsManager';
 import BcryptHashGenerator from './tools/BcryptHashGenerator';
 import PublicIPTool from './tools/PublicIPTool';
 import IPLocationTool from './tools/IPLocationTool';
@@ -23,10 +24,8 @@ const Tools = () => {
     'onetimesecret': true
   });
   const [toolOrder, setToolOrder] = useState([]);
-  const [draggedTool, setDraggedTool] = useState(null);
-  const [dropTarget, setDropTarget] = useState(null); // Track where we're dropping
-  const [dropPosition, setDropPosition] = useState(null); // 'before' or 'after'
   const [showAddToolModal, setShowAddToolModal] = useState(false);
+  const [insertAfterByTool, setInsertAfterByTool] = useState({});
 
   const availableTools = [
     { id: 'bcrypt-generate', name: 'Generate Hash', description: 'Generate bcrypt hash from text' },
@@ -39,177 +38,81 @@ const Tools = () => {
     { id: 'onetimesecret', name: 'OneTimeSecret', description: 'Create anonymous one-time shareable secrets' }
   ];
 
-  // Load tool order from settings on mount
+  const defaultToolOrder = ['bcrypt-generate', 'bcrypt-verify', 'public-ip', 'ip-location', 'pinggy', 'text-reformat', 'password-generator', 'onetimesecret'];
+
+  // Load tool order and active tools from settings on mount (persisted until tool is uninstalled)
   useEffect(() => {
-    const loadToolOrder = async () => {
+    const loadToolsState = async () => {
       try {
         const settings = await ipcRenderer.invoke('get-settings');
-        if (settings.toolOrder && Array.isArray(settings.toolOrder)) {
-          // Migrate old 'bcrypt' to separate tools
+        // Tool order: migrate old 'bcrypt' to separate tools
+        if (settings.toolOrder && Array.isArray(settings.toolOrder) && settings.toolOrder.length > 0) {
           const migratedOrder = settings.toolOrder.map(id => {
-            if (id === 'bcrypt') {
-              return ['bcrypt-generate', 'bcrypt-verify'];
-            }
+            if (id === 'bcrypt') return ['bcrypt-generate', 'bcrypt-verify'];
             return id;
           }).flat();
           setToolOrder(migratedOrder);
         } else {
-          // Initialize default order
-          const defaultOrder = ['bcrypt-generate', 'bcrypt-verify', 'public-ip', 'ip-location', 'pinggy', 'text-reformat', 'password-generator', 'onetimesecret'];
-          setToolOrder(defaultOrder);
+          setToolOrder(defaultToolOrder);
+        }
+        // Active tools: restore which tools are installed; new tools (not in saved) default to false
+        if (settings.activeTools && typeof settings.activeTools === 'object') {
+          const merged = {};
+          availableTools.forEach(tool => {
+            const saved = settings.activeTools[tool.id];
+            merged[tool.id] = Object.prototype.hasOwnProperty.call(settings.activeTools, tool.id) ? saved !== false : false;
+          });
+          setActiveTools(merged);
         }
       } catch (error) {
-        console.error('Error loading tool order:', error);
-        // Fallback to default order
-        const defaultOrder = ['bcrypt-generate', 'bcrypt-verify', 'public-ip', 'ip-location', 'pinggy', 'text-reformat', 'password-generator', 'onetimesecret'];
-        setToolOrder(defaultOrder);
+        console.error('Error loading tools state:', error);
+        setToolOrder(defaultToolOrder);
       }
     };
-    loadToolOrder();
+    loadToolsState();
   }, []);
 
-  // Save tool order to settings
-  const saveToolOrder = async (newOrder) => {
+  // Persist tool order and active tools (remembers arrangement and installed tools until uninstall)
+  const persistToolsState = async (newOrder, newActiveTools) => {
     try {
       const settings = await ipcRenderer.invoke('get-settings');
       const updatedSettings = {
         ...settings,
-        toolOrder: newOrder
+        toolOrder: newOrder,
+        activeTools: newActiveTools
       };
       await ipcRenderer.invoke('update-settings', updatedSettings);
     } catch (error) {
-      console.error('Error saving tool order:', error);
+      console.error('Error saving tools state:', error);
     }
   };
 
   const handleCloseTool = (toolId) => {
-    setActiveTools(prev => ({
-      ...prev,
-      [toolId]: false
-    }));
-    // Remove from order
-    setToolOrder(prev => {
-      const newOrder = prev.filter(id => id !== toolId);
-      saveToolOrder(newOrder);
-      return newOrder;
-    });
+    const newActiveTools = { ...activeTools, [toolId]: false };
+    const newOrder = toolOrder.filter(id => id !== toolId);
+    setActiveTools(newActiveTools);
+    setToolOrder(newOrder);
+    persistToolsState(newOrder, newActiveTools);
   };
 
-  const handleAddTool = (toolId) => {
-    setActiveTools(prev => ({
-      ...prev,
-      [toolId]: true
-    }));
-    // Add to order at the end
-    setToolOrder(prev => {
-      const newOrder = [...prev, toolId];
-      saveToolOrder(newOrder);
-      return newOrder;
-    });
+  // Add tool at a chosen position (null = at end); preferred sequence is stored
+  const handleAddTool = (toolId, insertAfterId = null) => {
+    const newActiveTools = { ...activeTools, [toolId]: true };
+    const newOrder = [...toolOrder];
+    if (insertAfterId == null) {
+      newOrder.push(toolId);
+    } else {
+      const idx = newOrder.indexOf(insertAfterId);
+      if (idx === -1) newOrder.push(toolId);
+      else newOrder.splice(idx + 1, 0, toolId);
+    }
+    setActiveTools(newActiveTools);
+    setToolOrder(newOrder);
+    persistToolsState(newOrder, newActiveTools);
     setShowAddToolModal(false);
   };
 
-  const handleDragStart = (e, toolId) => {
-    // Check if the drag started on an interactive element
-    const target = e.target;
-    const isInteractiveElement = 
-      target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
-      target.tagName === 'BUTTON' ||
-      target.tagName === 'SELECT' ||
-      target.tagName === 'A' ||
-      target.closest('button') !== null ||
-      target.closest('input') !== null ||
-      target.closest('textarea') !== null ||
-      target.closest('select') !== null ||
-      target.closest('a') !== null ||
-      target.closest('[role="button"]') !== null;
-    
-    // Prevent dragging if clicking on interactive elements
-    if (isInteractiveElement) {
-      e.preventDefault();
-      return;
-    }
-    
-    setDraggedTool(toolId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', toolId);
-  };
-
-  const handleDragEnd = (e) => {
-    setDraggedTool(null);
-    setDropTarget(null);
-    setDropPosition(null);
-  };
-
-  const handleDragOver = (e, targetToolId) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    
-    if (!draggedTool || draggedTool === targetToolId) return;
-
-    // Determine if we're dropping before or after based on mouse position
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseY = e.clientY;
-    const elementMiddle = rect.top + rect.height / 2;
-    
-    const position = mouseY < elementMiddle ? 'before' : 'after';
-    setDropTarget(targetToolId);
-    setDropPosition(position);
-  };
-
-  const handleDragLeave = (e) => {
-    // Only clear if we're actually leaving the element (not just moving to a child)
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX;
-    const y = e.clientY;
-    
-    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-      setDropTarget(null);
-      setDropPosition(null);
-    }
-  };
-
-  const handleDrop = (e, targetToolId) => {
-    e.preventDefault();
-    
-    if (!draggedTool || draggedTool === targetToolId) {
-      setDropTarget(null);
-      setDropPosition(null);
-      return;
-    }
-
-    setToolOrder(prev => {
-      const newOrder = [...prev];
-      const draggedIndex = newOrder.indexOf(draggedTool);
-      const targetIndex = newOrder.indexOf(targetToolId);
-
-      if (draggedIndex === -1 || targetIndex === -1) return prev;
-
-      // Remove dragged item
-      newOrder.splice(draggedIndex, 1);
-      
-      // Calculate new target index based on drop position
-      let newTargetIndex = newOrder.indexOf(targetToolId);
-      if (dropPosition === 'after') {
-        newTargetIndex += 1;
-      }
-      // Adjust for removed item if dragging from before the target
-      if (draggedIndex < newTargetIndex) {
-        newTargetIndex -= 1;
-      }
-      
-      // Insert at calculated position
-      newOrder.splice(newTargetIndex, 0, draggedTool);
-
-      saveToolOrder(newOrder);
-      return newOrder;
-    });
-
-    setDraggedTool(null);
-    setDropTarget(null);
-    setDropPosition(null);
-  };
+  const getToolDisplayName = (toolId) => availableTools.find(t => t.id === toolId)?.name || toolId;
 
   const getToolComponent = (toolId) => {
     switch (toolId) {
@@ -352,37 +255,12 @@ const Tools = () => {
       orderedTools.push(getToolComponent('onetimesecret'));
     }
 
-    return orderedTools.map((component, index) => {
+    return orderedTools.map((component) => {
       const toolId = component.key;
-      const isDragging = draggedTool === toolId;
-      const isDropTarget = dropTarget === toolId;
-      const showDropIndicatorBefore = isDropTarget && dropPosition === 'before';
-      const showDropIndicatorAfter = isDropTarget && dropPosition === 'after';
-      
       return (
-        <React.Fragment key={toolId}>
-          {/* Drop indicator before */}
-          {showDropIndicatorBefore && (
-            <div className="w-full h-1 bg-red-500 rounded-full mb-2 break-inside-avoid" />
-          )}
-          
-          <div
-            draggable
-            onDragStart={(e) => handleDragStart(e, toolId)}
-            onDragEnd={handleDragEnd}
-            onDragOver={(e) => handleDragOver(e, toolId)}
-            onDragLeave={handleDragLeave}
-            onDrop={(e) => handleDrop(e, toolId)}
-            className={`relative break-inside-avoid mb-4 ${isDragging ? 'opacity-30 cursor-grabbing' : 'cursor-grab'} transition-all duration-200`}
-          >
-            {component}
-          </div>
-          
-          {/* Drop indicator after */}
-          {showDropIndicatorAfter && (
-            <div className="w-full h-1 bg-red-500 rounded-full mb-2 break-inside-avoid" />
-          )}
-        </React.Fragment>
+        <div key={toolId} className="break-inside-avoid mb-4">
+          {component}
+        </div>
       );
     });
   };
@@ -393,11 +271,11 @@ const Tools = () => {
 
   return (
     <div className="h-full flex flex-col overflow-y-auto p-4 gap-4">
-      <div className="mb-4">
+      <StatsManager />
+      {/* <div className="mb-4 mt-2">
         <h1 className="text-2xl font-bold text-theme-primary">Tools</h1>
         <p className="text-theme-muted text-sm mt-1">Utility tools for your productivity</p>
-      </div>
-      
+      </div> */}
       <div className="columns-1 md:columns-2 xl:columns-3 gap-4">
         {getVisibleTools()}
         
@@ -416,7 +294,7 @@ const Tools = () => {
       {/* Add Tool Modal */}
       {showAddToolModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowAddToolModal(false)}>
-          <div className="bg-theme-card border border-theme rounded-lg p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-theme-primary border border-theme rounded-lg p-6 max-w-md w-full mx-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-theme-primary">Available Tools</h2>
               <button
@@ -427,19 +305,42 @@ const Tools = () => {
               </button>
             </div>
             
-            <div className="space-y-2">
+            <p className="text-theme-muted text-xs mb-3">Choose a tool and where to add it. Your order is saved.</p>
+            <div className="space-y-3">
               {getAvailableToolsToAdd().length === 0 ? (
                 <p className="text-theme-muted text-sm text-center py-4">All tools are already added</p>
               ) : (
                 getAvailableToolsToAdd().map(tool => (
-                  <button
+                  <div
                     key={tool.id}
-                    onClick={() => handleAddTool(tool.id)}
-                    className="w-full p-3 bg-theme-secondary border border-theme rounded-lg text-left hover:bg-theme-card-hover transition-colors duration-200"
+                    className="p-3 bg-theme-secondary border border-theme rounded-lg flex flex-col sm:flex-row sm:items-center gap-2"
                   >
-                    <div className="font-medium text-theme-primary text-sm">{tool.name}</div>
-                    <div className="text-theme-muted text-xs mt-1">{tool.description}</div>
-                  </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-theme-primary text-sm">{tool.name}</div>
+                      <div className="text-theme-muted text-xs mt-0.5">{tool.description}</div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <select
+                        className="px-2 py-1.5 bg-theme-primary border border-theme rounded text-theme-primary text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                        value={insertAfterByTool[tool.id] == null ? 'end' : insertAfterByTool[tool.id]}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setInsertAfterByTool(prev => ({ ...prev, [tool.id]: v === 'end' ? null : v }));
+                        }}
+                      >
+                        <option value="end">At end</option>
+                        {toolOrder.map(id => (
+                          <option key={id} value={id}>After {getToolDisplayName(id)}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleAddTool(tool.id, insertAfterByTool[tool.id] ?? null)}
+                        className="px-3 py-1.5 bg-red-500 text-white rounded text-sm font-medium hover:bg-red-600 transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
                 ))
               )}
             </div>

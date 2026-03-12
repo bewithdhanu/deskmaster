@@ -4,14 +4,29 @@ import { getIpcRenderer } from '../../utils/electron';
 
 const ipcRenderer = getIpcRenderer();
 
+const REFORMAT_TONES = [
+  { value: 'casual', label: 'Casual' },
+  { value: 'professional', label: 'Professional' },
+  { value: 'managerial', label: 'Managerial' },
+  { value: 'friendly', label: 'Friendly' },
+  { value: 'formal', label: 'Formal' },
+  { value: 'concise', label: 'Concise' },
+  { value: 'empathetic', label: 'Empathetic' },
+  { value: 'assertive', label: 'Assertive' },
+  { value: 'diplomatic', label: 'Diplomatic' },
+  { value: 'funny', label: 'Funny' }
+];
+
 const TextReformatTool = ({ onClose }) => {
   const [mode, setMode] = useState('reformat'); // 'reformat' or 'translate'
   const [targetLanguage, setTargetLanguage] = useState('');
+  const [reformatTones, setReformatTones] = useState(['professional']);
   const [inputText, setInputText] = useState('');
   const [outputText, setOutputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showModeDropdown, setShowModeDropdown] = useState(false);
+  const [showToneDropdown, setShowToneDropdown] = useState(false);
   const [isHoveringOutput, setIsHoveringOutput] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -26,6 +41,11 @@ const TextReformatTool = ({ onClose }) => {
       return;
     }
 
+    if (mode === 'reformat' && (!reformatTones || reformatTones.length === 0)) {
+      setError('Please select at least one tone');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setOutputText('');
@@ -33,7 +53,8 @@ const TextReformatTool = ({ onClose }) => {
     try {
       let result;
       if (mode === 'reformat') {
-        result = await ipcRenderer.invoke('reformat-text', inputText);
+        const tonesToUse = reformatTones.length > 0 ? reformatTones : ['professional'];
+        result = await ipcRenderer.invoke('reformat-text', inputText, tonesToUse);
       } else {
         result = await ipcRenderer.invoke('translate-text', inputText, targetLanguage);
       }
@@ -56,9 +77,22 @@ const TextReformatTool = ({ onClose }) => {
   const handleModeChange = (newMode) => {
     setMode(newMode);
     setShowModeDropdown(false);
-    setOutputText(''); // Clear output when switching modes
+    setShowToneDropdown(false);
+    setOutputText('');
     setError(null);
   };
+
+  const toggleTone = (value) => {
+    setReformatTones(prev =>
+      prev.includes(value) ? prev.filter(t => t !== value) : [...prev, value]
+    );
+  };
+
+  const currentToneLabel = reformatTones.length === 0
+    ? 'Select tone(s)...'
+    : reformatTones.length <= 2
+      ? reformatTones.map(v => REFORMAT_TONES.find(t => t.value === v)?.label || v).join(', ')
+      : `${reformatTones.length} tones selected`;
 
   const handleCopyOutput = async () => {
     if (!outputText) return;
@@ -148,6 +182,48 @@ const TextReformatTool = ({ onClose }) => {
 
           {/* Output Text Area */}
           <div className="flex flex-col h-[280px]">
+            {mode === 'reformat' && (
+              <div className="mb-2 relative">
+                <label className="block text-xs font-medium text-theme-primary mb-1">
+                  Tone (multi-select)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowToneDropdown(!showToneDropdown)}
+                  className="w-full px-3 py-2 h-[38px] flex items-center justify-between bg-theme-secondary border border-theme rounded-lg text-theme-primary text-sm text-left hover:border-theme-muted focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                >
+                  <span className="truncate">{currentToneLabel}</span>
+                  <MdArrowDropDown className={`w-4 h-4 shrink-0 transition-transform duration-200 ${showToneDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showToneDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowToneDropdown(false)} />
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-theme-primary border border-theme rounded-lg shadow-lg z-20 overflow-hidden max-h-[200px] overflow-y-auto">
+                      {REFORMAT_TONES.map((tone) => {
+                        const isSelected = reformatTones.includes(tone.value);
+                        return (
+                          <button
+                            key={tone.value}
+                            type="button"
+                            onClick={() => toggleTone(tone.value)}
+                            className={`w-full text-left px-2 py-1 text-xs hover:bg-theme-secondary transition-colors duration-200 flex items-center gap-1.5 min-h-0 ${
+                              isSelected ? 'text-red-500 font-medium bg-theme-secondary/50' : 'text-theme-primary'
+                            }`}
+                          >
+                            <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border ${
+                              isSelected ? 'bg-red-500 border-red-500' : 'border-theme-muted'
+                            }`}>
+                              {isSelected && <MdCheck className="w-2.5 h-2.5 text-white" />}
+                            </span>
+                            {tone.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             {mode === 'translate' && (
               <div className="mb-2">
                 <label className="block text-xs font-medium text-theme-primary mb-1">
@@ -175,7 +251,7 @@ const TextReformatTool = ({ onClose }) => {
                 readOnly
                 placeholder={mode === 'reformat' ? 'Reformatted text will appear here...' : 'Translated text will appear here...'}
                 className="w-full h-full px-3 py-2 pr-9 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-muted text-sm resize-none"
-                rows={mode === 'translate' ? 8 : 10}
+                rows={8}
               />
               {isHoveringOutput && outputText && (
                 <button
@@ -203,7 +279,7 @@ const TextReformatTool = ({ onClose }) => {
         <div className="flex gap-2">
           <button
             onClick={handleProcess}
-            disabled={!inputText.trim() || isLoading || (mode === 'translate' && !targetLanguage.trim())}
+            disabled={!inputText.trim() || isLoading || (mode === 'translate' && !targetLanguage.trim()) || (mode === 'reformat' && (!reformatTones || reformatTones.length === 0))}
             className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center gap-2"
           >
             {isLoading ? (

@@ -325,12 +325,13 @@ const createBrowserIpcRenderer = () => {
           }
           throw new Error('Failed to get Pinggy instances');
         } else if (channel === 'reformat-text') {
-          const [text] = args;
+          const [text, tones] = args;
+          const tonePayload = Array.isArray(tones) && tones.length > 0 ? { tones } : { tones: ['professional'] };
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
           const response = await fetch(`${API_BASE}/reformat-text`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ text })
+            body: JSON.stringify({ text, ...tonePayload })
           });
           if (response.ok) {
             const result = await response.json();

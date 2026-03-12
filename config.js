@@ -21,7 +21,17 @@ let appSettings = {
     chatgpt: '',
     ipLocation: ''
   },
-  toolOrder: []
+  toolOrder: [],
+  activeTools: {
+    'bcrypt-generate': true,
+    'bcrypt-verify': true,
+    'public-ip': true,
+    'ip-location': true,
+    'pinggy': true,
+    'text-reformat': true,
+    'password-generator': true,
+    'onetimesecret': true
+  }
 };
 
 // Configuration storage functions
