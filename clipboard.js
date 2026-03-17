@@ -1,25 +1,12 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
-const { app, clipboard, BrowserWindow, systemPreferences } = require('electron');
+const { app, clipboard, BrowserWindow } = require('electron');
 let activeWin = null;
 try {
   activeWin = require('active-win');
 } catch (error) {
   console.warn('active-win package not available:', error.message);
-}
-
-// Check if accessibility permission is granted (macOS)
-function hasAccessibilityPermission() {
-  if (process.platform !== 'darwin') {
-    return true; // Not needed on other platforms
-  }
-  try {
-    return systemPreferences.isTrustedAccessibilityClient(false);
-  } catch (error) {
-    console.warn('Error checking accessibility permission:', error);
-    return false;
-  }
 }
 
 // Retention: keep clipboard history for the last 1 month (time-based, not record count)
@@ -42,6 +29,9 @@ let lastClipboardTimestamp = 0;
 let lastStoredText = ''; // Track what we last stored to prevent duplicates
 
 // Get active window/app name (platform-specific)
+// On macOS we avoid using active-win (Accessibility APIs) to prevent repeated
+// "Accessibility Access" prompts when the user copies text. We only use our
+// own focused window when available; otherwise use a generic label.
 async function getActiveWindowInfo() {
   try {
     // First check if our Electron window is focused
@@ -49,26 +39,26 @@ async function getActiveWindowInfo() {
     if (focusedWindow) {
       return focusedWindow.getTitle() || 'DeskMaster';
     }
-    
-    // Try to get active window from system using active-win package
-    // Only attempt if accessibility permission is granted (macOS)
-    if (activeWin && hasAccessibilityPermission()) {
+
+    // On macOS, do not call active-win: it uses Accessibility APIs and triggers
+    // the system permission popup repeatedly when copying text, even when
+    // accessibility is already granted. Use generic label instead.
+    if (process.platform === 'darwin') {
+      return 'Other app';
+    }
+
+    // On Windows/Linux, active-win does not require accessibility permission
+    if (activeWin) {
       try {
         const windowInfo = await activeWin();
         if (windowInfo) {
-          // Return app name (e.g., "Chrome", "VS Code") or window title
           return windowInfo.owner?.name || windowInfo.title || 'System';
         }
       } catch (error) {
-        // active-win might fail due to permissions or other issues
-        // Don't log this as a warning if permission is not granted
-        if (hasAccessibilityPermission()) {
-          console.warn('Error getting active window with active-win:', error.message);
-        }
+        console.warn('Error getting active window with active-win:', error.message);
       }
     }
-    
-    // Fallback to generic name
+
     return 'System';
   } catch (error) {
     console.error('Error getting active window info:', error);
