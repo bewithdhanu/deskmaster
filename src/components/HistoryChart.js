@@ -34,6 +34,11 @@ const formatNetworkSpeed = (value) => {
   return Math.round(value) + ' KB/s';
 };
 
+// Minimum pixel distance between two x-axis ticks so the chart always looks good at any width
+const TICK_SPACING_PX = 10;
+// Line chart stroke width (px)
+const CHART_LINE_BORDER_WIDTH = 2;
+
 // Helper function to get computed CSS variable value
 const getCSSVariable = (varName) => {
   if (typeof window === 'undefined') return '#ffffff';
@@ -53,7 +58,12 @@ const HistoryChart = () => {
   const [selectedRange, setSelectedRange] = useState('1h'); // 1h, 6h, 24h, 7d, 30d
   const [isLoading, setIsLoading] = useState(false);
   const [selectedMetrics, setSelectedMetrics] = useState(['cpu', 'ram', 'disk', 'network', 'battery']);
+  const [chartWidth, setChartWidth] = useState(400);
+  const chartContainerRef = useRef(null);
   const updateIntervalRef = useRef(null);
+  // Custom range: store as "YYYY-MM-DDTHH:mm" for datetime-local inputs
+  const [customRangeStart, setCustomRangeStart] = useState('');
+  const [customRangeEnd, setCustomRangeEnd] = useState('');
   const [themeColors, setThemeColors] = useState({
     textPrimary: '#ffffff',
     textMuted: 'rgba(255, 255, 255, 0.7)',
@@ -70,15 +80,23 @@ const HistoryChart = () => {
     { value: 'custom', label: 'Custom Range', hours: null }
   ];
 
-  const loadHistory = async (range = selectedRange) => {
+  const loadHistory = async (range = selectedRange, customStart = customRangeStart, customEnd = customRangeEnd) => {
     setIsLoading(true);
     try {
       let startTime, endTime;
       const now = Date.now();
 
       if (range === 'custom') {
-        // For custom, use the full available range
-        if (timeRange.oldest && timeRange.newest) {
+        // Use user-selected start/end from date range picker when set
+        if (customStart && customEnd) {
+          startTime = new Date(customStart).getTime();
+          endTime = new Date(customEnd).getTime();
+          if (startTime > endTime) {
+            const swap = startTime;
+            startTime = endTime;
+            endTime = swap;
+          }
+        } else if (timeRange.oldest && timeRange.newest) {
           startTime = timeRange.oldest;
           endTime = timeRange.newest;
         } else {
@@ -110,6 +128,20 @@ const HistoryChart = () => {
     try {
       const range = await ipcRenderer.invoke('get-history-range');
       setTimeRange(range);
+      // Initialize custom range picker defaults from available data
+      if (range?.oldest != null && range?.newest != null) {
+        const toDatetimeLocal = (ts) => {
+          const d = new Date(ts);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const h = String(d.getHours()).padStart(2, '0');
+          const min = String(d.getMinutes()).padStart(2, '0');
+          return `${y}-${m}-${day}T${h}:${min}`;
+        };
+        setCustomRangeStart((prev) => prev || toDatetimeLocal(range.oldest));
+        setCustomRangeEnd((prev) => prev || toDatetimeLocal(range.newest));
+      }
     } catch (error) {
       console.error('Error loading time range:', error);
     }
@@ -180,6 +212,23 @@ const HistoryChart = () => {
     };
   }, []);
 
+  // Measure chart container width for width-based tick count (all ranges: 1h, 6h, 24h, 7d, 30d, custom)
+  useEffect(() => {
+    const el = chartContainerRef.current;
+    if (!el) return;
+
+    const updateWidth = () => {
+      if (el.offsetWidth > 0) {
+        setChartWidth(el.offsetWidth);
+      }
+    };
+
+    updateWidth();
+    const resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(el);
+    return () => resizeObserver.disconnect();
+  }, []);
+
   useEffect(() => {
     loadTimeRange();
     loadHistory();
@@ -209,11 +258,46 @@ const HistoryChart = () => {
         clearInterval(updateIntervalRef.current);
       }
     };
-  }, [selectedRange]);
+  }, [selectedRange, customRangeStart, customRangeEnd]);
+
+  const toDatetimeLocal = (ts) => {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
 
   const handleRangeChange = (range) => {
     setSelectedRange(range);
+    if (range === 'custom') {
+      let startStr = customRangeStart;
+      let endStr = customRangeEnd;
+      if (!startStr && !endStr && (timeRange.oldest != null || timeRange.newest != null)) {
+        const end = timeRange.newest != null ? timeRange.newest : Date.now();
+        const start = timeRange.oldest != null ? timeRange.oldest : end - 24 * 60 * 60 * 1000;
+        startStr = toDatetimeLocal(start);
+        endStr = toDatetimeLocal(end);
+        setCustomRangeStart(startStr);
+        setCustomRangeEnd(endStr);
+      }
+      if (startStr && endStr) {
+        loadHistory(range, startStr, endStr);
+        return;
+      }
+    }
     loadHistory(range);
+  };
+
+  const handleCustomRangeChange = (field, value) => {
+    if (field === 'start') {
+      setCustomRangeStart(value);
+      if (value && customRangeEnd) {
+        loadHistory('custom', value, customRangeEnd);
+      }
+    } else {
+      setCustomRangeEnd(value);
+      if (customRangeStart && value) {
+        loadHistory('custom', customRangeStart, value);
+      }
+    }
   };
 
   const toggleMetric = (metric) => {
@@ -226,25 +310,25 @@ const HistoryChart = () => {
     });
   };
 
-  // Sample data points to reduce clutter and make chart smoother
+  // Tick count from available chart width (same logic for 1h, 6h, 24h, 7d, 30d, custom)
+  const tickCount = useMemo(() => {
+    return Math.max(2, Math.floor(chartWidth / TICK_SPACING_PX));
+  }, [chartWidth]);
+
+  // Sample data to match tick count so the chart has one point per tick and looks good at any width
   const sampleData = useMemo(() => {
     if (!historyData || historyData.length === 0) return [];
-    
-    // Determine sampling interval based on selected range
-    let sampleInterval = 16;
-    if (selectedRange === '1h') {
-      sampleInterval = 3; // Every 3rd point for 1 hour (5s intervals -> ~20 points/hour)
-    } else if (selectedRange === '6h') {
-      sampleInterval = 16; // Every 8th point for 6 hours (4x more reduction)
-    } else if (selectedRange === '24h') {
-      sampleInterval = 16; // Every 8th point for 24 hours (4x more reduction)
-    } else if (selectedRange === '7d' || selectedRange === '30d') {
-      sampleInterval = 16; // Every 8th point for longer ranges (4x more reduction)
+    if (historyData.length <= tickCount) return historyData;
+
+    // Evenly distribute tickCount points across the full time range
+    const sampled = [];
+    const step = (historyData.length - 1) / (tickCount - 1);
+    for (let i = 0; i < tickCount; i++) {
+      const index = i === tickCount - 1 ? historyData.length - 1 : Math.round(i * step);
+      sampled.push(historyData[index]);
     }
-    
-    // Sample the data
-    return historyData.filter((_, index) => index % sampleInterval === 0);
-  }, [historyData, selectedRange]);
+    return sampled;
+  }, [historyData, tickCount]);
 
   // Prepare chart data - memoized to prevent unnecessary re-renders
   const chartData = useMemo(() => {
@@ -265,6 +349,7 @@ const HistoryChart = () => {
           data: sampleData.map(item => item.cpu),
           borderColor: 'rgb(255, 71, 87)',
           backgroundColor: 'rgba(255, 71, 87, 0.1)',
+          borderWidth: CHART_LINE_BORDER_WIDTH,
           fill: true,
           tension: 0.4,
           yAxisID: 'y',
@@ -276,6 +361,7 @@ const HistoryChart = () => {
           data: sampleData.map(item => item.ram),
           borderColor: 'rgb(55, 66, 250)',
           backgroundColor: 'rgba(55, 66, 250, 0.1)',
+          borderWidth: CHART_LINE_BORDER_WIDTH,
           fill: true,
           tension: 0.4,
           yAxisID: 'y',
@@ -287,6 +373,7 @@ const HistoryChart = () => {
           data: sampleData.map(item => item.disk),
           borderColor: 'rgb(46, 213, 115)',
           backgroundColor: 'rgba(46, 213, 115, 0.1)',
+          borderWidth: CHART_LINE_BORDER_WIDTH,
           fill: true,
           tension: 0.4,
           yAxisID: 'y',
@@ -298,6 +385,7 @@ const HistoryChart = () => {
           data: sampleData.map(item => item.network),
           borderColor: 'rgb(255, 165, 0)',
           backgroundColor: 'rgba(255, 165, 0, 0.1)',
+          borderWidth: CHART_LINE_BORDER_WIDTH,
           fill: true,
           tension: 0.4,
           yAxisID: 'y1',
@@ -309,6 +397,7 @@ const HistoryChart = () => {
           data: sampleData.map(item => item.battery !== null && item.battery !== undefined ? item.battery : null),
           borderColor: 'rgb(147, 51, 234)',
           backgroundColor: 'rgba(147, 51, 234, 0.1)',
+          borderWidth: CHART_LINE_BORDER_WIDTH,
           fill: true,
           tension: 0.4,
           yAxisID: 'y',
@@ -414,7 +503,7 @@ const HistoryChart = () => {
             font: {
               size: 11
             },
-            maxTicksLimit: 24 // Limit the number of X-axis labels to reduce clutter
+            maxTicksLimit: tickCount // Width-based: TICK_SPACING_PX between ticks for all ranges
           },
           grid: {
             color: borderColorValue,
@@ -468,7 +557,7 @@ const HistoryChart = () => {
         intersect: false
       }
     };
-  }, [themeColors, selectedMetrics]);
+  }, [themeColors, selectedMetrics, tickCount]);
 
   return (
     <div className="bg-theme-card border border-theme rounded-lg p-4 mb-4">
@@ -495,8 +584,8 @@ const HistoryChart = () => {
         </div>
       </div>
 
-      {/* Range selector */}
-      <div className="flex flex-wrap gap-2 mb-4">
+      {/* Range selector + custom date range picker */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         {rangeOptions.map(option => (
           <button
             key={option.value}
@@ -510,10 +599,32 @@ const HistoryChart = () => {
             {option.label}
           </button>
         ))}
+        {selectedRange === 'custom' && (
+          <div className="flex flex-wrap items-center gap-2 ml-2 pl-2 border-l border-theme">
+            <label className="flex items-center gap-1.5 text-sm text-theme-muted">
+              <span>From</span>
+              <input
+                type="datetime-local"
+                value={customRangeStart}
+                onChange={(e) => handleCustomRangeChange('start', e.target.value)}
+                className="bg-theme-secondary border border-theme rounded px-2 py-1 text-sm text-theme-primary focus:outline-none focus:ring-1 focus:ring-red-500"
+              />
+            </label>
+            <label className="flex items-center gap-1.5 text-sm text-theme-muted">
+              <span>To</span>
+              <input
+                type="datetime-local"
+                value={customRangeEnd}
+                onChange={(e) => handleCustomRangeChange('end', e.target.value)}
+                className="bg-theme-secondary border border-theme rounded px-2 py-1 text-sm text-theme-primary focus:outline-none focus:ring-1 focus:ring-red-500"
+              />
+            </label>
+          </div>
+        )}
       </div>
 
-      {/* Chart */}
-      <div className="h-64">
+      {/* Chart - ref used to measure width for tick count (1h, 6h, 24h, 7d, 30d, custom) */}
+      <div ref={chartContainerRef} className="h-64">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
