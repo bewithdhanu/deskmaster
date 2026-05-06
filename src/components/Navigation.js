@@ -1,5 +1,5 @@
 import React from 'react';
-import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity } from 'react-icons/md';
+import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity, MdNotes } from 'react-icons/md';
 
 const Navigation = ({ activeTab, onTabChange }) => {
   const menuItems = [
@@ -17,6 +17,11 @@ const Navigation = ({ activeTab, onTabChange }) => {
       id: 'system-performance',
       label: 'Performance',
       icon: <MdSpeed className="w-5 h-5" />
+    },
+    {
+      id: 'notes',
+      label: 'Notes',
+      icon: <MdNotes className="w-5 h-5" />
     },
     {
       id: 'clipboard',

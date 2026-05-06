@@ -188,6 +188,119 @@ const createBrowserIpcRenderer = () => {
             return await response.json();
           }
           throw new Error('Failed to get settings');
+        } else if (channel === 'notes:has-pages') {
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/notes/has-pages`, { headers });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to check notes');
+          }
+          const result = await response.json();
+          return Boolean(result.hasPages);
+        } else if (channel === 'notes:list-tree') {
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/notes/tree`, { headers });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to load notes tree');
+          }
+          return await response.json();
+        } else if (channel === 'notes:get-page-state') {
+          const [id] = args;
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/notes/page?id=${encodeURIComponent(id || '')}`, { headers });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to load note');
+          }
+          return await response.json();
+        } else if (channel === 'notes:save-page-state') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/notes/save-page-state`, { method: 'POST', headers, body: JSON.stringify(payload || {}) });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to save note');
+          }
+          const result = await response.json();
+          return Boolean(result.success);
+        } else if (channel === 'notes:create-page') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/notes/create-page`, { method: 'POST', headers, body: JSON.stringify(payload || {}) });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to create page');
+          }
+          return await response.json();
+        } else if (channel === 'notes:rename-page') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/notes/rename-page`, { method: 'POST', headers, body: JSON.stringify(payload || {}) });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to rename page');
+          }
+          const result = await response.json();
+          return Boolean(result.success);
+        } else if (channel === 'notes:delete-page') {
+          const [id] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/notes/delete-page`, { method: 'POST', headers, body: JSON.stringify({ id }) });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to delete page');
+          }
+          const result = await response.json();
+          return Boolean(result.success);
+        } else if (channel === 'notes:move-page') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/notes/move-page`, { method: 'POST', headers, body: JSON.stringify(payload || {}) });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to move page');
+          }
+          const result = await response.json();
+          return Boolean(result.success);
+        } else if (channel === 'notes:copy-page') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/notes/copy-page`, { method: 'POST', headers, body: JSON.stringify(payload || {}) });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to copy page');
+          }
+          return await response.json();
+        } else if (channel === 'notes:cut-page') {
+          const [id] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/notes/cut-page`, { method: 'POST', headers, body: JSON.stringify({ id }) });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to cut page');
+          }
+          const result = await response.json();
+          return Boolean(result.success);
+        } else if (channel === 'notes:paste-cut') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/notes/paste-cut`, { method: 'POST', headers, body: JSON.stringify(payload || {}) });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to paste page');
+          }
+          return await response.json();
+        } else if (channel === 'notes:migrate-legacy') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/notes/migrate-legacy`, { method: 'POST', headers, body: JSON.stringify(payload || {}) });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to migrate notes');
+          }
+          const result = await response.json();
+          return Boolean(result.success);
         } else if (channel === 'update-settings') {
           const [newSettings] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
@@ -353,6 +466,25 @@ const createBrowserIpcRenderer = () => {
           }
           const error = await response.json();
           throw new Error(error.error || 'Failed to translate text');
+        } else if (channel === 'ai-edit-text') {
+          const [text, action, extra] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const payload = { text, action: action || 'improve' };
+          if (extra && typeof extra === 'object') {
+            if (extra.instruction != null) payload.instruction = extra.instruction;
+            if (extra.targetLanguage != null) payload.targetLanguage = extra.targetLanguage;
+          }
+          const response = await fetch(`${API_BASE}/ai-edit-text`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload)
+          });
+          if (response.ok) {
+            const result = await response.json();
+            return result.text;
+          }
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to apply AI edit');
         } else if (channel === 'create-onetimesecret') {
           const [secret, ttl] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });

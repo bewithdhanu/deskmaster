@@ -106,6 +106,57 @@ Tone: ${toneInstruction}`;
   ];
 }
 
+/** Prompts for Notes markdown editor — AI actions on selected text (same API key as Tools > Text reformat). */
+const AI_SELECTION_ACTIONS = {
+  improve:
+    'Rewrite the following text to be clearer and more polished while preserving meaning and tone. Output only the rewritten text, with no preamble or quotes.',
+  shorten:
+    'Shorten the following text while keeping every important fact and the overall tone. Output only the shortened text, with no preamble or quotes.',
+  expand:
+    'Expand the following text with useful detail and smoother sentences. Do not invent facts. Output only the expanded text, with no preamble or quotes.',
+  'fix-grammar':
+    'Fix grammar, spelling, and punctuation. Preserve meaning and tone. Output only the corrected text, with no preamble or quotes.',
+  simplify:
+    'Simplify the wording: use shorter sentences and simpler vocabulary where possible, while preserving the original meaning. Output only the simplified text, with no preamble or quotes.'
+};
+
+function getAiSelectionMessages(text, action, extra = {}) {
+  const trimmed = typeof text === 'string' ? text.trim() : '';
+
+  if (action === 'custom') {
+    const instr = typeof extra.instruction === 'string' ? extra.instruction.trim() : '';
+    return [
+      {
+        role: 'system',
+        content:
+          'Apply the following instruction to the user text. Output only the resulting text, with no preamble, quotes, or explanation.\n\nInstruction: ' +
+          instr
+      },
+      { role: 'user', content: trimmed }
+    ];
+  }
+
+  if (action === 'translate') {
+    const lang =
+      typeof extra.targetLanguage === 'string' && extra.targetLanguage.trim()
+        ? extra.targetLanguage.trim()
+        : 'English';
+    return [
+      {
+        role: 'system',
+        content: `Translate the following text into ${lang}. Preserve meaning and tone. Output only the translated text, with no preamble or quotes.`
+      },
+      { role: 'user', content: trimmed }
+    ];
+  }
+
+  const instruction = AI_SELECTION_ACTIONS[action] || AI_SELECTION_ACTIONS.improve;
+  return [
+    { role: 'system', content: instruction },
+    { role: 'user', content: trimmed }
+  ];
+}
+
 // Helper function to get the effective theme based on user preference
 function getEffectiveTheme() {
   if (appSettings.theme === 'system') {
@@ -779,6 +830,38 @@ function startBrowserServers() {
       if (req.url === '/api/get-settings') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(appSettings));
+      } else if (req.url === '/api/notes/has-pages') {
+        try {
+          ensureNotesDirs();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ hasPages: notesHasPages() }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/notes/tree') {
+        try {
+          ensureNotesDirs();
+          const tree = getNotesTreePayload();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(tree));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url.startsWith('/api/notes/page')) {
+        try {
+          const url = new URL(req.url, `http://localhost:${HTTP_PORT}`);
+          const id = url.searchParams.get('id');
+          ensureNotesDirs();
+          const dir = id ? findPageDirById(getNotesRootDir(), id) : null;
+          const state = dir ? readJsonFile(getContentPath(dir), null) : null;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(state));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
       } else if (req.url.startsWith('/api/history') && req.url !== '/api/history/range') {
         // Parse query parameters
         const url = new URL(req.url, `http://localhost:${HTTP_PORT}`);
@@ -929,6 +1012,252 @@ function startBrowserServers() {
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(appSettings));
+      } else if (req.url === '/api/notes/save-page-state') {
+        try {
+          const payload = JSON.parse(body);
+          ensureNotesDirs();
+          const id = payload?.id;
+          const state = payload?.state;
+          const dir = id ? findPageDirById(getNotesRootDir(), id) : null;
+          if (!dir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          writeJsonFile(getContentPath(dir), state || { blocks: [] });
+          const metaPath = getMetaPath(dir);
+          const meta = readJsonFile(metaPath, null);
+          if (meta) {
+            writeJsonFile(metaPath, { ...meta, updatedAt: new Date().toISOString() });
+            updateFolderNameToMatchMeta(dir);
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/notes/create-page') {
+        try {
+          const payload = JSON.parse(body);
+          ensureNotesDirs();
+          const parentDir = resolveParentDir(payload?.parentId);
+          if (!parentDir) throw new Error('Invalid parent');
+          const title = payload?.title || 'New page';
+          const type = payload?.type;
+          const id = createPageOnDisk({ parentDir, title, type });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ id }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/notes/rename-page') {
+        try {
+          const payload = JSON.parse(body);
+          ensureNotesDirs();
+          const id = payload?.id;
+          const title = String(payload?.title || '').trim();
+          if (!id || !title) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          const dir = findPageDirById(getNotesRootDir(), id);
+          if (!dir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          const metaPath = getMetaPath(dir);
+          const meta = readJsonFile(metaPath, null);
+          if (!meta) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          writeJsonFile(metaPath, { ...meta, title, updatedAt: new Date().toISOString() });
+          updateFolderNameToMatchMeta(dir);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/notes/delete-page') {
+        try {
+          const payload = JSON.parse(body);
+          ensureNotesDirs();
+          const id = payload?.id;
+          if (!id || id === 'notes_archived_root') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          const dir = findPageDirById(getNotesRootDir(), id);
+          if (!dir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          deleteDirRecursive(dir);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/notes/move-page') {
+        try {
+          const payload = JSON.parse(body);
+          ensureNotesDirs();
+          const id = payload?.id;
+          const targetParentId = payload?.targetParentId ?? null;
+          if (!id || id === 'notes_archived_root') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          const srcDir = findPageDirById(getNotesRootDir(), id);
+          if (!srcDir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          const destParentDir = resolveParentDir(targetParentId);
+          if (!destParentDir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          const metaPath = getMetaPath(srcDir);
+          const meta = readJsonFile(metaPath, null);
+          if (!meta) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          const nextOrder = getNextOrder(destParentDir);
+          const nextMeta = { ...meta, order: nextOrder, updatedAt: new Date().toISOString() };
+          const destName = makePageFolderName({ order: nextMeta.order, title: nextMeta.title || 'Untitled', id: nextMeta.id });
+          const destDir = path.join(destParentDir, destName);
+          fs.renameSync(srcDir, destDir);
+          writeJsonFile(getMetaPath(destDir), nextMeta);
+          updateFolderNameToMatchMeta(destDir);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/notes/copy-page') {
+        try {
+          const payload = JSON.parse(body);
+          ensureNotesDirs();
+          const id = payload?.id;
+          const targetParentId = payload?.targetParentId ?? null;
+          if (!id || id === 'notes_archived_root') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: null }));
+            return;
+          }
+          const srcDir = findPageDirById(getNotesRootDir(), id);
+          if (!srcDir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: null }));
+            return;
+          }
+          const destParentDir = resolveParentDir(targetParentId);
+          if (!destParentDir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: null }));
+            return;
+          }
+          const nextOrder = getNextOrder(destParentDir);
+          const newId = copyDirWithNewIds(srcDir, destParentDir, nextOrder);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ id: newId }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/notes/cut-page') {
+        try {
+          const payload = JSON.parse(body);
+          ensureNotesDirs();
+          const id = payload?.id;
+          if (!id || id === 'notes_archived_root') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          const srcDir = findPageDirById(getNotesRootDir(), id);
+          if (!srcDir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false }));
+            return;
+          }
+          const clipboardDir = getNotesClipboardDir();
+          deleteDirRecursive(clipboardDir);
+          fs.mkdirSync(clipboardDir, { recursive: true });
+          const dest = path.join(clipboardDir, path.basename(srcDir));
+          fs.renameSync(srcDir, dest);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/notes/paste-cut') {
+        try {
+          const payload = JSON.parse(body);
+          ensureNotesDirs();
+          const targetParentId = payload?.targetParentId ?? null;
+          const clipboardDir = getNotesClipboardDir();
+          const entries = listChildPageDirs(clipboardDir);
+          const srcDir = entries[0];
+          if (!srcDir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: null }));
+            return;
+          }
+          const meta = readJsonFile(getMetaPath(srcDir), null);
+          if (!meta || !meta.id) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: null }));
+            return;
+          }
+          const destParentDir = resolveParentDir(targetParentId);
+          if (!destParentDir) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ id: null }));
+            return;
+          }
+          const nextOrder = getNextOrder(destParentDir);
+          const nextMeta = { ...meta, order: nextOrder, updatedAt: new Date().toISOString() };
+          const destName = makePageFolderName({ order: nextMeta.order, title: nextMeta.title || 'Untitled', id: nextMeta.id });
+          const destDir = path.join(destParentDir, destName);
+          fs.renameSync(srcDir, destDir);
+          writeJsonFile(getMetaPath(destDir), nextMeta);
+          deleteDirRecursive(clipboardDir);
+          fs.mkdirSync(clipboardDir, { recursive: true });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ id: nextMeta.id }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      } else if (req.url === '/api/notes/migrate-legacy') {
+        try {
+          const payload = JSON.parse(body);
+          ensureNotesDirs();
+          importNotesFromLegacy(payload?.tree, payload?.pageStatesById);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
       } else if (req.url === '/api/toggle-auto-start') {
         const { enabled } = JSON.parse(body);
         const success = await toggleAutoStart(enabled);
@@ -1041,6 +1370,12 @@ function startBrowserServers() {
               'text-reformat': true,
               'password-generator': true,
               'onetimesecret': true
+            },
+            notesUi: {
+              mode: 'notes',
+              selectedId: null,
+              expandedIds: [],
+              newPageType: 'canvas'
             }
           };
           config.setAppSettings(defaultSettings);
@@ -1527,6 +1862,103 @@ function startBrowserServers() {
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message || 'Failed to reformat text' }));
+        }
+      } else if (req.url === '/api/ai-edit-text') {
+        const bodyData = JSON.parse(body);
+        const text = bodyData.text;
+        const action = typeof bodyData.action === 'string' ? bodyData.action : 'improve';
+        const extra = {
+          instruction: typeof bodyData.instruction === 'string' ? bodyData.instruction : undefined,
+          targetLanguage: typeof bodyData.targetLanguage === 'string' ? bodyData.targetLanguage : undefined
+        };
+        try {
+          const apiKey = appSettings.apiKeys?.chatgpt;
+
+          if (!apiKey) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'ChatGPT API key not found. Please set it in Settings > API Keys' }));
+            return;
+          }
+
+          const trimmed = typeof text === 'string' ? text.trim() : '';
+          if (!trimmed) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Select some text first' }));
+            return;
+          }
+
+          if (action === 'custom' && (!extra.instruction || !String(extra.instruction).trim())) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Enter a prompt for AI' }));
+            return;
+          }
+
+          const https = require('https');
+          const messages = getAiSelectionMessages(trimmed, action, extra);
+          const requestData = JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages,
+            temperature: 0.35,
+            max_tokens: 2000
+          });
+
+          const options = {
+            hostname: 'api.openai.com',
+            port: 443,
+            path: '/v1/chat/completions',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Length': Buffer.byteLength(requestData)
+            },
+            timeout: 45000
+          };
+
+          const apiReq = https.request(options, (apiRes) => {
+            let data = '';
+            apiRes.on('data', (chunk) => {
+              data += chunk;
+            });
+            apiRes.on('end', () => {
+              try {
+                if (apiRes.statusCode !== 200) {
+                  const error = JSON.parse(data);
+                  res.writeHead(apiRes.statusCode, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: error.error?.message || `API returned status ${apiRes.statusCode}` }));
+                  return;
+                }
+                const result = JSON.parse(data);
+                if (result.choices && result.choices.length > 0) {
+                  res.writeHead(200, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ text: String(result.choices[0].message.content || '').trim() }));
+                } else {
+                  res.writeHead(500, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ error: 'No response from ChatGPT API' }));
+                }
+              } catch (error) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: 'Failed to parse API response' }));
+              }
+            });
+          });
+
+          apiReq.on('error', (error) => {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `Request failed: ${error.message}` }));
+          });
+
+          apiReq.on('timeout', () => {
+            apiReq.destroy();
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Request timeout' }));
+          });
+
+          apiReq.write(requestData);
+          apiReq.end();
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message || 'Failed to apply AI edit' }));
         }
       } else if (req.url === '/api/get-pinggy-instances') {
         try {
@@ -2214,6 +2646,436 @@ async function promptEncryptionKey(title, message) {
   });
 }
 
+function getNotesRootDir() {
+  return path.join(app.getPath('userData'), 'notes');
+}
+
+function getNotesArchivedDir() {
+  return path.join(getNotesRootDir(), 'Archived');
+}
+
+function getNotesClipboardDir() {
+  return path.join(getNotesRootDir(), '_clipboard');
+}
+
+function ensureNotesDirs() {
+  fs.mkdirSync(getNotesRootDir(), { recursive: true });
+  fs.mkdirSync(getNotesArchivedDir(), { recursive: true });
+  fs.mkdirSync(getNotesClipboardDir(), { recursive: true });
+}
+
+function sanitizeFolderPart(value) {
+  const v = String(value || '').trim();
+  const cleaned = v.replace(/[\\/:"*?<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned || 'Untitled';
+}
+
+function createNoteId() {
+  return `note_${Date.now().toString(36)}_${randomUUID().slice(0, 8)}`;
+}
+
+function getMetaPath(dir) {
+  return path.join(dir, 'meta.json');
+}
+
+function getContentPath(dir) {
+  return path.join(dir, 'content.json');
+}
+
+function readJsonFile(filePath, fallback) {
+  try {
+    if (!fs.existsSync(filePath)) return fallback;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJsonFile(filePath, data) {
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+}
+
+function makePageFolderName({ order, title, id }) {
+  const orderPart = String(order || 0).padStart(6, '0');
+  const titlePart = sanitizeFolderPart(title);
+  return `${orderPart}__${titlePart}__${id}`;
+}
+
+function listChildPageDirs(parentDir) {
+  try {
+    return fs
+      .readdirSync(parentDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => path.join(parentDir, d.name));
+  } catch {
+    return [];
+  }
+}
+
+function findPageDirById(rootDir, id) {
+  const scan = (startDir) => {
+    const stack = [startDir];
+    while (stack.length) {
+      const dir = stack.pop();
+      const meta = readJsonFile(getMetaPath(dir), null);
+      if (meta && meta.id === id) return dir;
+      const children = listChildPageDirs(dir);
+      for (const child of children) stack.push(child);
+    }
+    return null;
+  };
+
+  const inRoot = scan(rootDir);
+  if (inRoot) return inRoot;
+  const inArchived = scan(getNotesArchivedDir());
+  if (inArchived) return inArchived;
+  const inClipboard = scan(getNotesClipboardDir());
+  if (inClipboard) return inClipboard;
+  return null;
+}
+
+function buildTreeFromDir(parentDir) {
+  const dirs = listChildPageDirs(parentDir)
+    .filter((p) => p !== getNotesArchivedDir() && p !== getNotesClipboardDir())
+    .map((dir) => {
+      const meta = readJsonFile(getMetaPath(dir), null);
+      if (!meta || !meta.id) return null;
+      const order = typeof meta.order === 'number' ? meta.order : 0;
+      const type = meta.type || 'canvas';
+      const children = buildTreeFromDir(dir);
+      return { id: meta.id, title: meta.title || 'Untitled', type, order, children };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  return dirs.map(({ order, ...rest }) => rest);
+}
+
+function getNotesTreePayload() {
+  ensureNotesDirs();
+  const rootNodes = buildTreeFromDir(getNotesRootDir());
+  const archivedChildren = buildTreeFromDir(getNotesArchivedDir());
+  return [...rootNodes, { id: 'notes_archived_root', title: 'Archived', children: archivedChildren }];
+}
+
+function notesHasPages() {
+  ensureNotesDirs();
+  const rootDirs = listChildPageDirs(getNotesRootDir()).filter((p) => p !== getNotesArchivedDir() && p !== getNotesClipboardDir());
+  const archivedDirs = listChildPageDirs(getNotesArchivedDir());
+  return rootDirs.length > 0 || archivedDirs.length > 0;
+}
+
+function resolveParentDir(targetParentId) {
+  if (!targetParentId) return getNotesRootDir();
+  if (targetParentId === 'notes_archived_root') return getNotesArchivedDir();
+  return findPageDirById(getNotesRootDir(), targetParentId);
+}
+
+function getNextOrder(parentDir) {
+  const children = listChildPageDirs(parentDir);
+  let maxOrder = 0;
+  for (const c of children) {
+    const meta = readJsonFile(getMetaPath(c), null);
+    if (meta && typeof meta.order === 'number') maxOrder = Math.max(maxOrder, meta.order);
+  }
+  return maxOrder + 1;
+}
+
+function createPageOnDisk({ parentDir, title, type }) {
+  const id = createNoteId();
+  const order = getNextOrder(parentDir);
+  const dirName = makePageFolderName({ order, title, id });
+  const dir = path.join(parentDir, dirName);
+  fs.mkdirSync(dir, { recursive: true });
+  const normalizedType = ['canvas', 'markdown', 'text'].includes(String(type)) ? String(type) : 'canvas';
+  writeJsonFile(getMetaPath(dir), { id, title, type: normalizedType, order, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  if (normalizedType === 'canvas') writeJsonFile(getContentPath(dir), { blocks: [] });
+  else writeJsonFile(getContentPath(dir), { text: '' });
+  return id;
+}
+
+function updateFolderNameToMatchMeta(dir) {
+  const meta = readJsonFile(getMetaPath(dir), null);
+  if (!meta || !meta.id) return dir;
+  const parent = path.dirname(dir);
+  const nextName = makePageFolderName({ order: meta.order || 0, title: meta.title || 'Untitled', id: meta.id });
+  const nextDir = path.join(parent, nextName);
+  if (nextDir === dir) return dir;
+  try {
+    fs.renameSync(dir, nextDir);
+    return nextDir;
+  } catch {
+    return dir;
+  }
+}
+
+function deleteDirRecursive(dir) {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {}
+}
+
+function copyDirWithNewIds(srcDir, destParentDir, overrideOrder) {
+  const srcMeta = readJsonFile(getMetaPath(srcDir), null);
+  if (!srcMeta || !srcMeta.id) return null;
+  const newId = createNoteId();
+  const order = typeof overrideOrder === 'number' ? overrideOrder : (typeof srcMeta.order === 'number' ? srcMeta.order : 0);
+  const title = srcMeta.title || 'Untitled';
+  const destDirName = makePageFolderName({ order, title, id: newId });
+  const destDir = path.join(destParentDir, destDirName);
+  fs.mkdirSync(destDir, { recursive: true });
+
+  const nextMeta = { ...srcMeta, id: newId, order, updatedAt: new Date().toISOString() };
+  writeJsonFile(getMetaPath(destDir), nextMeta);
+
+  const srcContent = readJsonFile(getContentPath(srcDir), { blocks: [] });
+  writeJsonFile(getContentPath(destDir), srcContent);
+
+  const children = listChildPageDirs(srcDir);
+  for (const child of children) {
+    copyDirWithNewIds(child, destDir);
+  }
+
+  return newId;
+}
+
+async function getNotesExportPayload() {
+  ensureNotesDirs();
+  const root = getNotesRootDir();
+  const files = [];
+
+  const walk = (dir) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (full === getNotesClipboardDir()) continue;
+      if (e.isDirectory()) {
+        walk(full);
+      } else if (e.isFile()) {
+        const rel = path.relative(root, full).split(path.sep).join('/');
+        const data = fs.readFileSync(full);
+        files.push({ path: rel, data: data.toString('base64') });
+      }
+    }
+  };
+
+  walk(root);
+  return { version: 1, files };
+}
+
+function clearNotesStorage() {
+  ensureNotesDirs();
+  const root = getNotesRootDir();
+  try {
+    fs.rmSync(root, { recursive: true, force: true });
+  } catch {}
+  ensureNotesDirs();
+}
+
+function importNotesFromPayload(notesPayload) {
+  if (!notesPayload || !Array.isArray(notesPayload.files)) return;
+  clearNotesStorage();
+  const root = getNotesRootDir();
+
+  for (const f of notesPayload.files) {
+    const rel = String(f.path || '');
+    if (!rel || rel.includes('..') || path.isAbsolute(rel)) continue;
+    const safeRel = rel.split('/').join(path.sep);
+    const dest = path.join(root, safeRel);
+    if (!dest.startsWith(root)) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    const buf = Buffer.from(String(f.data || ''), 'base64');
+    fs.writeFileSync(dest, buf);
+  }
+}
+
+function importNotesFromLegacy(tree, pageStatesById) {
+  if (!Array.isArray(tree)) return;
+  clearNotesStorage();
+  ensureNotesDirs();
+
+  const writeNode = (node, parentDir) => {
+    if (!node || !node.id) return;
+    const title = node.title || 'Untitled';
+    const order = getNextOrder(parentDir);
+    const dirName = makePageFolderName({ order, title, id: node.id });
+    const dir = path.join(parentDir, dirName);
+    fs.mkdirSync(dir, { recursive: true });
+    writeJsonFile(getMetaPath(dir), { id: node.id, title, type: 'canvas', order, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    const raw = pageStatesById && pageStatesById[node.id];
+    if (raw) {
+      try {
+        writeJsonFile(getContentPath(dir), JSON.parse(raw));
+      } catch {
+        writeJsonFile(getContentPath(dir), { blocks: [] });
+      }
+    } else {
+      writeJsonFile(getContentPath(dir), { blocks: [] });
+    }
+    if (Array.isArray(node.children)) node.children.forEach((c) => writeNode(c, dir));
+  };
+
+  const archiveNode = tree.find((n) => n && n.id === 'notes_archived_root');
+  const rootNodes = tree.filter((n) => n && n.id !== 'notes_archived_root');
+  rootNodes.forEach((n) => writeNode(n, getNotesRootDir()));
+  if (archiveNode && Array.isArray(archiveNode.children)) {
+    archiveNode.children.forEach((n) => writeNode(n, getNotesArchivedDir()));
+  }
+}
+
+ipcMain.handle('notes:has-pages', async () => {
+  try {
+    ensureNotesDirs();
+    return notesHasPages();
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('notes:list-tree', async () => {
+  ensureNotesDirs();
+  return getNotesTreePayload();
+});
+
+ipcMain.handle('notes:get-page-state', async (event, id) => {
+  ensureNotesDirs();
+  const dir = findPageDirById(getNotesRootDir(), id);
+  if (!dir) return null;
+  return readJsonFile(getContentPath(dir), null);
+});
+
+ipcMain.handle('notes:save-page-state', async (event, payload) => {
+  try {
+    ensureNotesDirs();
+    const id = payload?.id;
+    const state = payload?.state;
+    const dir = findPageDirById(getNotesRootDir(), id);
+    if (!dir) return false;
+    writeJsonFile(getContentPath(dir), state || { blocks: [] });
+    const metaPath = getMetaPath(dir);
+    const meta = readJsonFile(metaPath, null);
+    if (meta) {
+      writeJsonFile(metaPath, { ...meta, updatedAt: new Date().toISOString() });
+      updateFolderNameToMatchMeta(dir);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+ipcMain.handle('notes:create-page', async (event, payload) => {
+  ensureNotesDirs();
+  const parentDir = resolveParentDir(payload?.parentId);
+  if (!parentDir) throw new Error('Invalid parent');
+  const title = payload?.title || 'New page';
+  const type = payload?.type;
+  const id = createPageOnDisk({ parentDir, title, type });
+  return { id };
+});
+
+ipcMain.handle('notes:rename-page', async (event, payload) => {
+  ensureNotesDirs();
+  const id = payload?.id;
+  const title = String(payload?.title || '').trim();
+  if (!id || !title) return false;
+  const dir = findPageDirById(getNotesRootDir(), id);
+  if (!dir) return false;
+  const metaPath = getMetaPath(dir);
+  const meta = readJsonFile(metaPath, null);
+  if (!meta) return false;
+  writeJsonFile(metaPath, { ...meta, title, updatedAt: new Date().toISOString() });
+  updateFolderNameToMatchMeta(dir);
+  return true;
+});
+
+ipcMain.handle('notes:delete-page', async (event, id) => {
+  ensureNotesDirs();
+  if (!id || id === 'notes_archived_root') return false;
+  const dir = findPageDirById(getNotesRootDir(), id);
+  if (!dir) return false;
+  deleteDirRecursive(dir);
+  return true;
+});
+
+ipcMain.handle('notes:move-page', async (event, payload) => {
+  ensureNotesDirs();
+  const id = payload?.id;
+  const targetParentId = payload?.targetParentId ?? null;
+  if (!id || id === 'notes_archived_root') return false;
+  const srcDir = findPageDirById(getNotesRootDir(), id);
+  if (!srcDir) return false;
+  const destParentDir = resolveParentDir(targetParentId);
+  if (!destParentDir) return false;
+  const metaPath = getMetaPath(srcDir);
+  const meta = readJsonFile(metaPath, null);
+  if (!meta) return false;
+  const nextOrder = getNextOrder(destParentDir);
+  const nextMeta = { ...meta, order: nextOrder, updatedAt: new Date().toISOString() };
+  const destName = makePageFolderName({ order: nextMeta.order, title: nextMeta.title || 'Untitled', id: nextMeta.id });
+  const destDir = path.join(destParentDir, destName);
+  fs.renameSync(srcDir, destDir);
+  writeJsonFile(getMetaPath(destDir), nextMeta);
+  updateFolderNameToMatchMeta(destDir);
+  return true;
+});
+
+ipcMain.handle('notes:copy-page', async (event, payload) => {
+  ensureNotesDirs();
+  const id = payload?.id;
+  const targetParentId = payload?.targetParentId ?? null;
+  if (!id || id === 'notes_archived_root') return null;
+  const srcDir = findPageDirById(getNotesRootDir(), id);
+  if (!srcDir) return null;
+  const destParentDir = resolveParentDir(targetParentId);
+  if (!destParentDir) return null;
+  const nextOrder = getNextOrder(destParentDir);
+  const newId = copyDirWithNewIds(srcDir, destParentDir, nextOrder);
+  return newId ? { id: newId } : null;
+});
+
+ipcMain.handle('notes:cut-page', async (event, id) => {
+  ensureNotesDirs();
+  if (!id || id === 'notes_archived_root') return false;
+  const srcDir = findPageDirById(getNotesRootDir(), id);
+  if (!srcDir) return false;
+  const clipboardDir = getNotesClipboardDir();
+  deleteDirRecursive(clipboardDir);
+  fs.mkdirSync(clipboardDir, { recursive: true });
+  const dest = path.join(clipboardDir, path.basename(srcDir));
+  fs.renameSync(srcDir, dest);
+  return true;
+});
+
+ipcMain.handle('notes:paste-cut', async (event, payload) => {
+  ensureNotesDirs();
+  const targetParentId = payload?.targetParentId ?? null;
+  const clipboardDir = getNotesClipboardDir();
+  const entries = listChildPageDirs(clipboardDir);
+  const srcDir = entries[0];
+  if (!srcDir) return null;
+  const meta = readJsonFile(getMetaPath(srcDir), null);
+  if (!meta || !meta.id) return null;
+  const destParentDir = resolveParentDir(targetParentId);
+  if (!destParentDir) return null;
+  const nextOrder = getNextOrder(destParentDir);
+  const nextMeta = { ...meta, order: nextOrder, updatedAt: new Date().toISOString() };
+  const destName = makePageFolderName({ order: nextMeta.order, title: nextMeta.title || 'Untitled', id: nextMeta.id });
+  const destDir = path.join(destParentDir, destName);
+  fs.renameSync(srcDir, destDir);
+  writeJsonFile(getMetaPath(destDir), nextMeta);
+  deleteDirRecursive(clipboardDir);
+  fs.mkdirSync(clipboardDir, { recursive: true });
+  return { id: nextMeta.id };
+});
+
+ipcMain.handle('notes:migrate-legacy', async (event, payload) => {
+  ensureNotesDirs();
+  importNotesFromLegacy(payload?.tree, payload?.pageStatesById);
+  return true;
+});
+
 // Export all data handler
 ipcMain.handle('export-all-data', async (event) => {
   try {
@@ -2227,7 +3089,8 @@ ipcMain.handle('export-all-data', async (event) => {
       settings: config.getAppSettings(),
       authenticators: await authenticator.getAllAuthenticators(),
       clipboardHistory: await clipboardTracker.getClipboardHistory(10000), // Export all clipboard entries
-      history: await history.getHistory(0, Date.now()) // Export all history
+      history: await history.getHistory(0, Date.now()), // Export all history
+      notes: await getNotesExportPayload()
     };
 
     // Show save dialog
@@ -2353,6 +3216,10 @@ ipcMain.handle('import-all-data', async (event) => {
       await history.importHistoryEntries(importData.history);
     }
 
+    if (importData.notes) {
+      importNotesFromPayload(importData.notes);
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Error importing data:', error);
@@ -2403,10 +3270,18 @@ ipcMain.handle('reset-all-data', async (event) => {
         'text-reformat': true,
         'password-generator': true,
         'onetimesecret': true
+      },
+      notesUi: {
+        mode: 'notes',
+        selectedId: null,
+        expandedIds: [],
+        newPageType: 'canvas'
       }
     };
     config.setAppSettings(defaultSettings);
     appSettings = config.getAppSettings();
+
+    clearNotesStorage();
 
     return { success: true };
   } catch (error) {
@@ -2520,6 +3395,92 @@ ipcMain.handle('translate-text', async (event, text, targetLanguage) => {
     });
   } catch (error) {
     console.error('Error translating text:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('ai-edit-text', async (event, text, action, extra = {}) => {
+  try {
+    const https = require('https');
+    const apiKey = appSettings.apiKeys?.chatgpt;
+
+    if (!apiKey) {
+      throw new Error('ChatGPT API key not found. Please set it in Settings > API Keys');
+    }
+
+    const trimmed = typeof text === 'string' ? text.trim() : '';
+    if (!trimmed) {
+      throw new Error('Select some text first');
+    }
+
+    const resolvedAction = typeof action === 'string' && action ? action : 'improve';
+    if (resolvedAction === 'custom') {
+      const instr = typeof extra?.instruction === 'string' ? extra.instruction.trim() : '';
+      if (!instr) {
+        throw new Error('Enter a prompt for AI');
+      }
+    }
+
+    const messages = getAiSelectionMessages(trimmed, resolvedAction, extra && typeof extra === 'object' ? extra : {});
+    const requestData = JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages,
+      temperature: 0.35,
+      max_tokens: 2000
+    });
+
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.openai.com',
+        port: 443,
+        path: '/v1/chat/completions',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Length': Buffer.byteLength(requestData)
+        },
+        timeout: 45000
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          try {
+            if (res.statusCode !== 200) {
+              const error = JSON.parse(data);
+              reject(new Error(error.error?.message || `API returned status ${res.statusCode}`));
+              return;
+            }
+            const response = JSON.parse(data);
+            if (response.choices && response.choices[0] && response.choices[0].message) {
+              resolve(String(response.choices[0].message.content || '').trim());
+            } else {
+              reject(new Error('Invalid response from API'));
+            }
+          } catch (err) {
+            reject(new Error('Failed to parse API response'));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        reject(new Error(`Network error: ${error.message}`));
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+
+      req.write(requestData);
+      req.end();
+    });
+  } catch (error) {
+    console.error('Error applying AI edit:', error);
     throw error;
   }
 });
@@ -3363,4 +4324,3 @@ ipcMain.on('tray-icon-screenshot', (event, dataUrl) => {
     console.error('Failed to set tray icon from html2canvas:', err)
   }
 })
-

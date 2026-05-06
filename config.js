@@ -31,6 +31,12 @@ let appSettings = {
     'text-reformat': true,
     'password-generator': true,
     'onetimesecret': true
+  },
+  notesUi: {
+    mode: 'notes',
+    selectedId: null,
+    expandedIds: [],
+    newPageType: 'canvas'
   }
 };
 

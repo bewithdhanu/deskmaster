@@ -4,6 +4,7 @@ import SystemPerformance from './components/SystemPerformance';
 import Tools from './components/Tools';
 import ClipboardHistory from './components/ClipboardHistory';
 import Authenticator from './components/Authenticator';
+import Notes from './components/Notes';
 import Settings from './components/Settings';
 import Navigation from './components/Navigation';
 import { getIpcRenderer } from './utils/electron';
@@ -173,6 +174,8 @@ function App() {
         return <ClipboardHistory />;
       case 'authenticator':
         return <Authenticator />;
+      case 'notes':
+        return <Notes />;
       case 'settings':
         return <Settings />;
       default:
