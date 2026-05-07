@@ -313,6 +313,63 @@ const createBrowserIpcRenderer = () => {
             return await response.json();
           }
           throw new Error('Failed to update settings');
+        } else if (channel === 'export-all-data') {
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/export-all-data`, { method: 'POST', headers, body: '{}' })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to export data')
+          }
+          return await response.json()
+        } else if (channel === 'import-all-data') {
+          const [payload] = args
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/import-all-data`, { method: 'POST', headers, body: JSON.stringify(payload || {}) })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to import data')
+          }
+          return await response.json()
+        } else if (channel === 'reset-all-data') {
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/reset-all-data`, { method: 'POST', headers, body: '{}' })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to reset data')
+          }
+          return await response.json()
+        } else if (channel === 'gdrive:status') {
+          const headers = await addApiTokenToHeaders()
+          const response = await fetch(`${API_BASE}/gdrive/status`, { headers })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to get Drive status')
+          }
+          return await response.json()
+        } else if (channel === 'gdrive:connect') {
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/gdrive/connect`, { method: 'POST', headers, body: '{}' })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to connect Drive')
+          }
+          return await response.json()
+        } else if (channel === 'gdrive:disconnect') {
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/gdrive/disconnect`, { method: 'POST', headers, body: '{}' })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to disconnect Drive')
+          }
+          return await response.json()
+        } else if (channel === 'gdrive:backup-now') {
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/gdrive/backup-now`, { method: 'POST', headers, body: '{}' })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to back up now')
+          }
+          return await response.json()
         } else if (channel === 'toggle-auto-start') {
           const [enabled] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });

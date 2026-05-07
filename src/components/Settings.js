@@ -36,6 +36,9 @@ const Settings = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [backupStatus, setBackupStatus] = useState({ connected: false, enabled: false, intervalHours: 4, keepLast: 10, lastBackupAt: null, lastBackupStatus: null, lastBackupError: null, running: false });
+  const [isConnectingDrive, setIsConnectingDrive] = useState(false);
+  const [isBackingUpNow, setIsBackingUpNow] = useState(false);
 
   const datetimeFormats = [
     { value: 'HH:mm:ss', label: '24-hour (14:30:25)' },
@@ -48,6 +51,7 @@ const Settings = () => {
 
   useEffect(() => {
     loadSettings();
+    loadBackupStatus();
     
     // Listen for settings updates
     ipcRenderer.on('settings-updated', handleSettingsUpdate);
@@ -66,6 +70,13 @@ const Settings = () => {
     }
   };
 
+  const loadBackupStatus = async () => {
+    try {
+      const st = await ipcRenderer.invoke('gdrive:status');
+      if (st) setBackupStatus(st);
+    } catch {}
+  };
+
   const handleSettingsUpdate = (event, newSettings) => {
     setSettings(newSettings);
   };
@@ -77,6 +88,18 @@ const Settings = () => {
     } catch (error) {
       console.error('Error updating settings:', error);
     }
+  };
+
+  const updateBackupSettings = async (patch) => {
+    const next = {
+      ...settings,
+      cloudBackup: {
+        ...(settings.cloudBackup || {}),
+        ...(patch || {})
+      }
+    };
+    await updateSettings(next);
+    await loadBackupStatus();
   };
 
   const toggleStat = (statName) => {
@@ -243,7 +266,23 @@ const Settings = () => {
     try {
       const result = await ipcRenderer.invoke('export-all-data');
       if (result.success) {
-        alert(`Data exported successfully to:\n${result.filePath}`);
+        if (result.filePath) {
+          alert(`Data exported successfully to:\n${result.filePath}`);
+        } else if (result.data) {
+          const json = JSON.stringify(result.data, null, 2)
+          const blob = new Blob([json], { type: 'application/json' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `deskmaster-export-${new Date().toISOString().slice(0, 10)}.json`
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          URL.revokeObjectURL(url)
+          alert('Data exported successfully (download started).')
+        } else {
+          alert('Export completed, but no file was returned.')
+        }
       }
     } catch (error) {
       console.error('Error exporting data:', error);
@@ -265,7 +304,25 @@ const Settings = () => {
 
     setIsImporting(true);
     try {
-      const result = await ipcRenderer.invoke('import-all-data');
+      let result
+      if (isElectron()) {
+        result = await ipcRenderer.invoke('import-all-data')
+      } else {
+        const file = await new Promise((resolve) => {
+          const input = document.createElement('input')
+          input.type = 'file'
+          input.accept = 'application/json,.json'
+          input.onchange = () => resolve(input.files && input.files[0] ? input.files[0] : null)
+          input.click()
+        })
+        if (!file) {
+          setIsImporting(false)
+          return
+        }
+        const text = await file.text()
+        const data = JSON.parse(text)
+        result = await ipcRenderer.invoke('import-all-data', { data })
+      }
       if (result.success) {
         alert('Data imported successfully! The application will reload.');
         // Reload settings
@@ -620,31 +677,22 @@ const Settings = () => {
               <h3 className="text-sm font-semibold text-theme-primary">Data Management</h3>
             </div>
             <div className="space-y-2">
-              {!isElectron() ? (
-                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
-                  <p className="text-yellow-600 dark:text-yellow-400 text-xs font-medium mb-1">Browser Mode</p>
-                  <p className="text-theme-muted text-xs">Export and Import are only available in the desktop app.</p>
-                </div>
-              ) : (
-                <>
-                  <button
-                    onClick={handleExport}
-                    disabled={isExporting}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
-                  >
-                    <MdFileDownload className="w-4 h-4" />
-                    {isExporting ? 'Exporting...' : 'Export All Data'}
-                  </button>
-                  <button
-                    onClick={handleImport}
-                    disabled={isImporting}
-                    className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
-                  >
-                    <MdFileUpload className="w-4 h-4" />
-                    {isImporting ? 'Importing...' : 'Import Data'}
-                  </button>
-                </>
-              )}
+              <button
+                onClick={handleExport}
+                disabled={isExporting}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
+              >
+                <MdFileDownload className="w-4 h-4" />
+                {isExporting ? 'Exporting...' : 'Export All Data'}
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={isImporting}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
+              >
+                <MdFileUpload className="w-4 h-4" />
+                {isImporting ? 'Importing...' : 'Import Data'}
+              </button>
               <button
                 onClick={handleReset}
                 disabled={isResetting}
@@ -659,6 +707,117 @@ const Settings = () => {
                 <p>Reset: Permanently delete all data and restore defaults.</p>
               </div>
             </div>
+          </div>
+
+          {/* Cloud Backup Card */}
+          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
+            <div className="flex items-center gap-2 mb-3">
+              <MdSettings className="w-4 h-4 text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-primary">Cloud Backup (Google Drive)</h3>
+            </div>
+
+            <div className="space-y-2">
+                <div className="text-theme-muted text-xs">
+                  Stores backups in a Google Drive folder named <span className="text-theme-primary font-medium">DeskMaster Backups</span>, keeping the last {backupStatus.keepLast || 10}.
+                </div>
+
+                <div className="flex items-center justify-between gap-2 rounded border border-theme bg-theme-secondary px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-theme-primary text-xs font-medium">Connection</div>
+                    <div className="text-theme-muted text-xs truncate">
+                      {backupStatus.connected ? 'Connected' : 'Not connected'}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {!backupStatus.connected ? (
+                      <button
+                        className="px-3 py-1.5 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-xs disabled:opacity-60"
+                        disabled={isConnectingDrive}
+                        onClick={async () => {
+                          setIsConnectingDrive(true);
+                          try {
+                            await ipcRenderer.invoke('gdrive:connect');
+                            await loadBackupStatus();
+                          } catch (e) {
+                            alert(e?.message || 'Failed to connect Google Drive');
+                          } finally {
+                            setIsConnectingDrive(false);
+                          }
+                        }}
+                      >
+                        {isConnectingDrive ? 'Connecting…' : 'Connect'}
+                      </button>
+                    ) : (
+                      <button
+                        className="px-3 py-1.5 rounded-md bg-theme-secondary hover:bg-theme-card-hover border border-theme text-theme-primary text-xs"
+                        onClick={async () => {
+                          try {
+                            await ipcRenderer.invoke('gdrive:disconnect');
+                            await loadBackupStatus();
+                          } catch (e) {
+                            alert(e?.message || 'Failed to disconnect');
+                          }
+                        }}
+                      >
+                        Disconnect
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 rounded border border-theme bg-theme-secondary px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-theme-primary text-xs font-medium">Automatic backup</div>
+                    <div className="text-theme-muted text-xs truncate">Every {settings.cloudBackup?.intervalHours || 4} hours</div>
+                  </div>
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-xs ${settings.cloudBackup?.enabled ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-theme-secondary hover:bg-theme-card-hover border border-theme text-theme-primary'}`}
+                    disabled={!backupStatus.connected}
+                    onClick={() => updateBackupSettings({ enabled: !settings.cloudBackup?.enabled })}
+                    title={!backupStatus.connected ? 'Connect Google Drive first' : ''}
+                  >
+                    {settings.cloudBackup?.enabled ? 'Enabled' : 'Disabled'}
+                  </button>
+                </div>
+
+                <SelectOption
+                  value={String(settings.cloudBackup?.intervalHours || 4)}
+                  onChange={(v) => updateBackupSettings({ intervalHours: Number(v) || 4 })}
+                  options={[
+                    { value: '3', label: 'Every 3 hours' },
+                    { value: '4', label: 'Every 4 hours' }
+                  ]}
+                  label="Backup frequency"
+                  description="Runs in background when DeskMaster is open"
+                />
+
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 px-3 py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-xs disabled:opacity-60"
+                    disabled={!backupStatus.connected || isBackingUpNow}
+                    onClick={async () => {
+                      setIsBackingUpNow(true);
+                      try {
+                        await ipcRenderer.invoke('gdrive:backup-now');
+                        await loadBackupStatus();
+                      } catch (e) {
+                        alert(e?.message || 'Backup failed');
+                      } finally {
+                        setIsBackingUpNow(false);
+                      }
+                    }}
+                  >
+                    {isBackingUpNow ? 'Backing up…' : 'Backup now'}
+                  </button>
+                </div>
+
+                <div className="text-theme-muted text-xs pt-2 border-t border-theme">
+                  <div>Last backup: {backupStatus.lastBackupAt ? new Date(backupStatus.lastBackupAt).toLocaleString() : 'Never'}</div>
+                  {backupStatus.lastBackupStatus === 'error' ? (
+                    <div className="text-red-500 mt-1">Error: {backupStatus.lastBackupError || 'Unknown error'}</div>
+                  ) : null}
+                </div>
+              </div>
           </div>
 
         </div>
