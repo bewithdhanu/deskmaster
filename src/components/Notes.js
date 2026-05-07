@@ -757,7 +757,81 @@ const Notes = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [textValue, setTextValue] = useState('');
+  const textEditorRef = useRef(null);
+  const [textAi, setTextAi] = useState({ open: false, busy: false, selection: '', history: [], prompt: '' });
   const [markdownInitialBlocks, setMarkdownInitialBlocks] = useState(null);
+  const getMonacoSelectedText = useCallback(() => {
+    const ed = textEditorRef.current;
+    if (!ed) return '';
+    try {
+      const sel = ed.getSelection?.();
+      const model = ed.getModel?.();
+      if (!sel || !model) return '';
+      return String(model.getValueInRange(sel) || '');
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const applyMonacoReplaceSelection = useCallback((newText) => {
+    const ed = textEditorRef.current;
+    if (!ed) return false;
+    try {
+      const sel = ed.getSelection?.();
+      if (!sel) return false;
+      ed.executeEdits('ai', [{ range: sel, text: newText, forceMoveMarkers: true }]);
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const runTextAi = useCallback(
+    async (actionKey, extra = {}) => {
+      const selected = getMonacoSelectedText().trim();
+      if (!selected) return;
+      setTextAi((p) => ({ ...p, open: true, busy: true, selection: selected }));
+      try {
+        const result = await ipcRenderer.invoke('ai-edit-text', selected, actionKey, extra);
+        if (typeof result === 'string' && result.trim()) {
+          setTextAi((p) => ({
+            ...p,
+            history: [...(p.history || []), { q: actionKey === 'custom' ? extra?.instruction || 'Custom' : actionKey, a: result }]
+          }));
+        }
+      } catch (e) {
+        window.alert(e?.message || 'AI request failed');
+      } finally {
+        setTextAi((p) => ({ ...p, busy: false }));
+      }
+    },
+    [getMonacoSelectedText]
+  );
+
+  const runTextAiFollowup = useCallback(async () => {
+    const instruction = String(textAi.prompt || '').trim();
+    if (!instruction) return;
+    const last = Array.isArray(textAi.history) && textAi.history.length ? textAi.history[textAi.history.length - 1] : null;
+    const base = String(textAi.selection || getMonacoSelectedText() || '').trim();
+    if (!base) return;
+    // Include last answer as context for follow-ups.
+    const contextText = last?.a ? `${base}\n\n---\nAI_OUTPUT:\n${last.a}` : base;
+    setTextAi((p) => ({ ...p, open: true, busy: true }));
+    try {
+      const result = await ipcRenderer.invoke('ai-edit-text', contextText, 'custom', { instruction });
+      if (typeof result === 'string' && result.trim()) {
+        setTextAi((p) => ({
+          ...p,
+          prompt: '',
+          history: [...(p.history || []), { q: instruction, a: result }]
+        }));
+      }
+    } catch (e) {
+      window.alert(e?.message || 'AI request failed');
+    } finally {
+      setTextAi((p) => ({ ...p, busy: false }));
+    }
+  }, [textAi.prompt, textAi.history, textAi.selection, getMonacoSelectedText]);
   const [markdownLegacyText, setMarkdownLegacyText] = useState('');
   const [markdownHydrationKey, setMarkdownHydrationKey] = useState(0);
 
@@ -1693,7 +1767,93 @@ const Notes = () => {
           {selectedId && selectedType === PAGE_TYPE_CANVAS && <div ref={editorHostRef} className="w-full h-full" />}
 
           {selectedId && selectedType === PAGE_TYPE_TEXT && (
-            <div className="h-full w-full overflow-hidden">
+            <div className="h-full w-full overflow-hidden relative">
+              <div className="absolute top-2 right-2 z-20 flex items-center gap-2">
+                <button
+                  className="px-2 py-1 rounded-md border border-theme bg-theme-card hover:bg-theme-card-hover text-theme-primary text-xs"
+                  onClick={() => {
+                    const sel = getMonacoSelectedText().trim();
+                    if (!sel) return;
+                    setTextAi((p) => ({ ...p, open: true, selection: sel }));
+                  }}
+                  title="Edit selection with AI"
+                >
+                  AI
+                </button>
+              </div>
+
+              {textAi.open ? (
+                <div className="absolute top-10 right-2 z-30 w-[420px] max-h-[60vh] overflow-hidden rounded-lg border border-theme bg-theme-secondary shadow-xl flex flex-col">
+                  <div className="px-3 py-2 border-b border-theme flex items-center justify-between">
+                    <div className="text-theme-primary text-sm font-medium">AI</div>
+                    <button
+                      className="text-theme-muted hover:text-theme-primary text-sm"
+                      onClick={() => setTextAi((p) => ({ ...p, open: false, prompt: '' }))}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="p-3 flex flex-col gap-2 overflow-auto">
+                    <div className="flex gap-2 flex-wrap">
+                      <button className="px-2 py-1 rounded border border-theme text-xs hover:bg-theme-card-hover" disabled={textAi.busy} onClick={() => void runTextAi('improve')}>
+                        Improve
+                      </button>
+                      <button className="px-2 py-1 rounded border border-theme text-xs hover:bg-theme-card-hover" disabled={textAi.busy} onClick={() => void runTextAi('fix-grammar')}>
+                        Fix
+                      </button>
+                      <button className="px-2 py-1 rounded border border-theme text-xs hover:bg-theme-card-hover" disabled={textAi.busy} onClick={() => void runTextAi('simplify')}>
+                        Simplify
+                      </button>
+                    </div>
+
+                    {Array.isArray(textAi.history) && textAi.history.length ? (
+                      <div className="space-y-2">
+                        {textAi.history.slice(-3).map((h, idx) => (
+                          // eslint-disable-next-line react/no-array-index-key
+                          <div key={idx} className="rounded border border-theme bg-theme-card p-2">
+                            <div className="text-[11px] text-theme-muted mb-1">Q: {h.q}</div>
+                            <div className="text-xs text-theme-primary whitespace-pre-wrap">{h.a}</div>
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                className="px-2 py-1 rounded border border-theme text-xs hover:bg-theme-card-hover"
+                                onClick={() => applyMonacoReplaceSelection(h.a)}
+                                disabled={textAi.busy}
+                              >
+                                Apply to selection
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-theme-muted">Select text in the editor, then choose an AI action.</div>
+                    )}
+
+                    <div className="pt-2 border-t border-theme">
+                      <div className="text-[11px] text-theme-muted mb-1">Follow-up</div>
+                      <div className="flex gap-2">
+                        <input
+                          value={textAi.prompt}
+                          disabled={textAi.busy}
+                          onChange={(e) => setTextAi((p) => ({ ...p, prompt: e.target.value }))}
+                          className="flex-1 px-2 py-1 rounded border border-theme bg-theme-primary text-theme-primary text-xs outline-none"
+                          placeholder="Ask a follow-up..."
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              void runTextAiFollowup();
+                            }
+                          }}
+                        />
+                        <button className="px-2 py-1 rounded border border-theme text-xs hover:bg-theme-card-hover" disabled={textAi.busy} onClick={() => void runTextAiFollowup()}>
+                          Send
+                        </button>
+                      </div>
+                      {textAi.busy ? <div className="mt-2 text-[11px] text-theme-muted">AI is working…</div> : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
               <MonacoEditor
                 value={textValue}
                 language="plaintext"
@@ -1706,6 +1866,9 @@ const Notes = () => {
                   wordWrap: 'on',
                   scrollBeyondLastLine: false,
                   automaticLayout: true
+                }}
+                onMount={(editor) => {
+                  textEditorRef.current = editor;
                 }}
                 onChange={(value) => setTextValue(typeof value === 'string' ? value : '')}
               />
