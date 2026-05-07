@@ -146,6 +146,14 @@
   border-radius: 4px;
 }
 
+.one-block__content p {
+  margin: 0;
+}
+
+.one-block__content p:empty {
+  display: none;
+}
+
 .one-block__content:empty::before {
   content: attr(data-placeholder);
   color: #aaa;
