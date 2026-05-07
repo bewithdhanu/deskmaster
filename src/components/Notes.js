@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MdAdd, MdArchive, MdChevronRight, MdExpandMore, MdNotes } from 'react-icons/md';
 import MonacoEditor, { loader as monacoLoader } from '@monaco-editor/react';
 import { FormattingToolbarController, useCreateBlockNote, useEditorChange } from '@blocknote/react';
@@ -356,6 +356,41 @@ function BlockNoteMarkdownEditor({ initialBlocks, legacyMarkdown, pageTitle, dar
     initialContent: isValidBlockNoteBlocks(initialBlocks) ? initialBlocks : undefined
   });
 
+  const handlePaste = useCallback(
+    (e) => {
+      try {
+        const cd = e.clipboardData;
+        if (!cd) return;
+        const text = cd.getData('text/plain');
+        if (typeof text !== 'string' || !text) return;
+
+        // Only intercept when the clipboard clearly contains Markdown *structure*.
+        // Plain paragraphs (even with punctuation) should use the editor's native paste.
+        const hasStructuralMd = /(^|\n)\s{0,3}(#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s+|```)/.test(text);
+        const hasMdLinksOrEmphasis = /(\[[^\]]+\]\([^)]+\)|\*\*[^*]+\*\*|__[^_]+__)/.test(text);
+        const hasMultipleLines = text.split('\n').filter((l) => l.trim().length > 0).length >= 2;
+        const looksLikeMd = hasStructuralMd || (hasMultipleLines && hasMdLinksOrEmphasis) || (hasMultipleLines && hasStructuralMd);
+
+        if (!looksLikeMd) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        void (async () => {
+          try {
+            const blocks = await editor.tryParseMarkdownToBlocks(text);
+            if (!Array.isArray(blocks) || !blocks.length) return;
+
+            const ref = editor.getTextCursorPosition?.()?.block || editor.document?.[editor.document.length - 1] || null;
+            if (ref) editor.insertBlocks(blocks, ref, 'after');
+            else editor.replaceBlocks(editor.document, blocks);
+          } catch {}
+        })();
+      } catch {}
+    },
+    [editor]
+  );
+
   useEffect(() => {
     if (typeof onEditorReady === 'function') onEditorReady(editor);
     return () => {
@@ -398,6 +433,7 @@ function BlockNoteMarkdownEditor({ initialBlocks, legacyMarkdown, pageTitle, dar
         shadCNComponents={blockNoteShadcnOverrides}
         className="flex-1 min-h-0 overflow-y-auto"
         formattingToolbar={false}
+        onPasteCapture={handlePaste}
       >
         <FormattingToolbarController formattingToolbar={DeskMasterFormattingToolbar} />
       </BlockNoteView>
@@ -443,6 +479,18 @@ function containsIdInSubtree(node, id) {
   if (node.id === id) return true;
   if (!Array.isArray(node.children) || !node.children.length) return false;
   return node.children.some((c) => containsIdInSubtree(c, id));
+}
+
+function findParentId(nodes, id, parentId = null) {
+  for (const n of nodes || []) {
+    if (n.id === id) return parentId;
+    if (Array.isArray(n.children) && n.children.length) {
+      const found = findParentId(n.children, id, n.id);
+      if (found !== undefined) return found;
+    }
+  }
+  // Important: undefined means "not found". null means "found at root".
+  return undefined;
 }
 
 function removeNodeById(nodes, id) {
@@ -535,6 +583,7 @@ function TreeRow({
   depth,
   expanded,
   selectedId,
+  selectedIds,
   onSelect,
   onToggle,
   onAddChild,
@@ -549,36 +598,46 @@ function TreeRow({
   onCancelRename,
   onDragStart,
   onDragOver,
+  onDragLeave,
   onDrop,
   dragOverId,
+  dragOverPosition,
   mode
 }) {
   const isExpanded = expanded.has(node.id);
   const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-  const isSelected = selectedId === node.id;
+  const isSelected = selectedId === node.id || Boolean(selectedIds?.has?.(node.id));
   const isRenaming = renamingId === node.id;
   const isDragOver = dragOverId === node.id;
+  const dropPos = isDragOver ? dragOverPosition : null; // 'before' | 'after' | 'inside' | null
   const showAddChild = mode === 'notes';
 
   return (
     <div>
       <div
-        className={`flex items-center gap-2 rounded-md px-2 py-1 cursor-pointer select-none ${
-          isDragOver ? 'ring-2 ring-red-500 ring-offset-0' : ''
+        className={`relative flex items-center gap-1 rounded px-2 py-0.5 cursor-pointer select-none ${
+          dropPos === 'inside' ? 'ring-1 ring-[#0078d4] bg-theme-card-hover/60' : ''
         } ${
           isSelected ? 'bg-theme-card-hover text-theme-primary' : 'text-theme-secondary hover:bg-theme-card-hover'
         }`}
         style={{ paddingLeft: 8 + depth * 14 }}
-        onClick={() => onSelect(node.id)}
+        onClick={(e) => onSelect(node.id, e)}
         onDoubleClick={() => onStartRename(node.id)}
         onContextMenu={(e) => onContextMenu(e, node.id)}
         draggable={node.id !== ARCHIVE_ROOT_ID}
         onDragStart={(e) => onDragStart(e, node.id)}
         onDragOver={(e) => onDragOver(e, node.id)}
+        onDragLeave={(e) => onDragLeave?.(e, node.id)}
         onDrop={(e) => onDrop(e, node.id)}
       >
+        {dropPos === 'before' ? (
+          <div className="absolute left-0 right-0 -top-[2px] h-[2px] bg-[#0078d4] rounded-full" />
+        ) : null}
+        {dropPos === 'after' ? (
+          <div className="absolute left-0 right-0 -bottom-[2px] h-[2px] bg-[#0078d4] rounded-full" />
+        ) : null}
         <button
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-theme-card border-none bg-transparent text-theme-muted"
+          className="w-5 h-5 flex items-center justify-center rounded hover:bg-theme-card border-none bg-transparent text-theme-muted"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -589,7 +648,7 @@ function TreeRow({
           {hasChildren ? (isExpanded ? <MdExpandMore className="w-5 h-5" /> : <MdChevronRight className="w-5 h-5" />) : null}
         </button>
 
-        <MdNotes className="w-4 h-4 text-theme-muted flex-shrink-0" />
+        <MdNotes className="w-3.5 h-3.5 text-theme-muted flex-shrink-0" />
         <div className={`flex-1 min-w-0 ${isRenaming ? 'select-text' : ''}`}>
           {isRenaming ? (
             <input
@@ -597,7 +656,7 @@ function TreeRow({
               aria-label="Rename page"
               autoComplete="off"
               spellCheck
-              className="w-full h-7 px-2 rounded border border-theme bg-theme-primary text-theme-primary text-sm outline-none select-text"
+              className="w-full h-6 px-2 rounded border border-theme bg-theme-primary text-theme-primary text-sm outline-none select-text"
               style={{ WebkitUserSelect: 'text', userSelect: 'text' }}
               value={renameValue}
               onChange={(e) => onRenameValueChange(e.target.value)}
@@ -628,7 +687,7 @@ function TreeRow({
 
         {showAddChild && (
           <button
-            className="w-7 h-7 flex items-center justify-center rounded hover:bg-theme-card border-none bg-transparent text-theme-muted"
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-theme-card border-none bg-transparent text-theme-muted"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -636,7 +695,7 @@ function TreeRow({
             }}
             title="Add nested page"
           >
-            <MdAdd className="w-5 h-5" />
+            <MdAdd className="w-4 h-4" />
           </button>
         )}
       </div>
@@ -650,6 +709,7 @@ function TreeRow({
               depth={depth + 1}
               expanded={expanded}
               selectedId={selectedId}
+              selectedIds={selectedIds}
               onSelect={onSelect}
               onToggle={onToggle}
               onAddChild={onAddChild}
@@ -664,8 +724,10 @@ function TreeRow({
               onCancelRename={onCancelRename}
               onDragStart={onDragStart}
               onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
               onDrop={onDrop}
               dragOverId={dragOverId}
+              dragOverPosition={dragOverPosition}
               mode={mode}
             />
           ))}
@@ -680,11 +742,12 @@ const Notes = () => {
   const allIds = useMemo(() => flattenIds(tree).filter((id) => id !== ARCHIVE_ROOT_ID), [tree]);
   const [expanded, setExpanded] = useState(() => new Set());
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState({ open: false, x: 0, y: 0, targetId: null });
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState('');
-  const [dragOverId, setDragOverId] = useState(null);
+  const [dragOver, setDragOver] = useState({ id: null, position: null });
   const [mode, setMode] = useState('notes');
   const [archiveConfirm, setArchiveConfirm] = useState({ open: false, targetId: null });
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, targetId: null });
@@ -1063,9 +1126,23 @@ const Notes = () => {
     }
   };
 
-  const selectPage = (id) => {
+  const selectPage = (id, event) => {
     if (!id) return;
     setRenamingId(null);
+    const isMulti = Boolean(event && (event.ctrlKey || event.metaKey));
+    if (isMulti) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        if (!next.size) next.add(id);
+        return next;
+      });
+      setSelectedId(id);
+      return;
+    }
+
+    setSelectedIds(new Set([id]));
     if (id === selectedId) return;
     void (async () => {
       await saveSelectedPageState();
@@ -1111,9 +1188,35 @@ const Notes = () => {
     if (!id) return;
     const nextTitle = (renameValue || '').trim();
     setRenamingId(null);
-    if (!nextTitle) return;
     void (async () => {
-      await ipcRenderer.invoke('notes:rename-page', { id, title: nextTitle });
+      let title = nextTitle;
+      if (!title) {
+        try {
+          const state = await ipcRenderer.invoke('notes:get-page-state', id);
+          const derive = (s) => {
+            if (!s) return '';
+            if (typeof s.text === 'string') return s.text;
+            if (Array.isArray(s.blocks)) {
+              return s.blocks.map((b) => (typeof b?.content === 'string' ? b.content : '')).join('\n');
+            }
+            if (Array.isArray(s.blocknote)) {
+              // Best-effort: stringify minimal text-ish parts.
+              return JSON.stringify(s.blocknote);
+            }
+            return '';
+          };
+          const raw = derive(state);
+          const visible = String(raw || '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          title = visible.slice(0, 40).trim();
+        } catch {}
+      }
+
+      if (!title) title = 'Untitled';
+
+      await ipcRenderer.invoke('notes:rename-page', { id, title });
       await refreshTree();
     })();
   };
@@ -1127,7 +1230,7 @@ const Notes = () => {
   const openContextMenu = (event, id) => {
     event.preventDefault();
     event.stopPropagation();
-    selectPage(id);
+    selectPage(id, event);
     setContextMenu({ open: true, x: event.clientX, y: event.clientY, targetId: id });
   };
 
@@ -1184,7 +1287,30 @@ const Notes = () => {
   const requestDeletePermanently = (id) => {
     if (!id) return;
     if (id === ARCHIVE_ROOT_ID) return;
-    setDeleteConfirm({ open: true, targetId: id });
+    void (async () => {
+      try {
+        const state = await ipcRenderer.invoke('notes:get-page-state', id);
+        const hasContent = (() => {
+          if (!state) return false;
+          if (Array.isArray(state.blocks)) {
+            return state.blocks.some((b) => String(b?.content || '').replace(/<[^>]+>/g, '').trim());
+          }
+          if (Array.isArray(state.blocknote)) {
+            return state.blocknote.length > 0;
+          }
+          if (typeof state.text === 'string') {
+            return state.text.trim().length > 0;
+          }
+          return false;
+        })();
+
+        if (!hasContent) {
+          deletePage(id);
+          return;
+        }
+      } catch {}
+      setDeleteConfirm({ open: true, targetId: id });
+    })();
   };
 
   const confirmDeletePermanently = () => {
@@ -1260,7 +1386,7 @@ const Notes = () => {
   const menuTop = contextMenu.open ? Math.min(contextMenu.y, window.innerHeight - 260) : 0;
   const canPaste = Boolean(clipboard);
 
-  const movePage = (sourceId, targetId) => {
+  const movePageAsync = async (sourceId, targetId, opts = {}) => {
     if (!sourceId) return;
     if (sourceId === targetId) return;
     if (sourceId === ARCHIVE_ROOT_ID) return;
@@ -1269,17 +1395,22 @@ const Notes = () => {
     if (!sourceNode) return;
     if (targetId && containsIdInSubtree(sourceNode, targetId)) return;
     if (mode === 'archive' && targetId === null) return;
-    void (async () => {
-      await saveSelectedPageState();
-      await ipcRenderer.invoke('notes:move-page', { id: sourceId, targetParentId: targetId });
-      await refreshTree();
-      if (targetId) setExpanded((prev) => new Set([...prev, targetId]));
-    })();
+
+    await saveSelectedPageState();
+    await ipcRenderer.invoke('notes:move-page', { id: sourceId, targetParentId: targetId, ...opts });
+    await refreshTree();
+    if (targetId) setExpanded((prev) => new Set([...prev, targetId]));
+  };
+
+  const movePage = (sourceId, targetId, opts = {}) => {
+    void movePageAsync(sourceId, targetId, opts);
   };
 
   const handleDragStart = (event, id) => {
     event.stopPropagation();
     try {
+      const ids = selectedIds?.has?.(id) ? Array.from(selectedIds) : [id];
+      event.dataTransfer.setData('application/x-deskmaster-page-ids', JSON.stringify(ids));
       event.dataTransfer.setData('text/plain', id);
       event.dataTransfer.effectAllowed = 'move';
     } catch {}
@@ -1288,19 +1419,92 @@ const Notes = () => {
   const handleDragOver = (event, id) => {
     event.preventDefault();
     event.stopPropagation();
-    setDragOverId(id);
+    const rect = event.currentTarget?.getBoundingClientRect?.();
+    let position = 'inside';
+    if (rect) {
+      const y = event.clientY - rect.top;
+      const ratio = rect.height ? y / rect.height : 0.5;
+      if (ratio < 0.25) position = 'before';
+      else if (ratio > 0.75) position = 'after';
+      else position = 'inside';
+    }
+    setDragOver({ id, position });
     try {
       event.dataTransfer.dropEffect = 'move';
     } catch {}
   };
 
+  const handleDragLeave = (event, id) => {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    const cur = event.currentTarget;
+    const rel = event.relatedTarget;
+    // If we're still within the row (e.g. moving between icon/text inside), don't clear.
+    if (cur && rel && cur.contains(rel)) return;
+    setDragOver((prev) => (prev.id === id ? { id: null, position: null } : prev));
+  };
+
   const handleDrop = (event, targetId) => {
     event.preventDefault();
     event.stopPropagation();
-    setDragOverId(null);
-    const sourceId = event.dataTransfer.getData('text/plain');
-    if (!sourceId) return;
-    movePage(sourceId, targetId);
+    // Recompute drop position from actual drop cursor location,
+    // so behavior always matches the visual suggestion line.
+    const rect = event.currentTarget?.getBoundingClientRect?.();
+    let position = 'inside';
+    if (rect) {
+      const y = event.clientY - rect.top;
+      const ratio = rect.height ? y / rect.height : 0.5;
+      if (ratio < 0.25) position = 'before';
+      else if (ratio > 0.75) position = 'after';
+      else position = 'inside';
+    } else if (dragOver.id === targetId && dragOver.position) {
+      position = dragOver.position;
+    }
+    setDragOver({ id: null, position: null });
+    let ids = [];
+    try {
+      const raw = event.dataTransfer.getData('application/x-deskmaster-page-ids');
+      if (raw) ids = JSON.parse(raw);
+    } catch {}
+    if (!Array.isArray(ids) || !ids.length) {
+      const sourceId = event.dataTransfer.getData('text/plain');
+      if (sourceId) ids = [sourceId];
+    }
+    ids = ids.filter((x) => x && x !== ARCHIVE_ROOT_ID);
+    if (!ids.length) return;
+
+    // If any selected id is the target itself, ignore it for the move.
+    ids = ids.filter((x) => x !== targetId);
+    if (!ids.length) return;
+
+    if (position === 'inside') {
+      void (async () => {
+        for (const id of ids) {
+          await movePageAsync(id, targetId);
+        }
+      })();
+      return;
+    }
+
+    const parentId = findParentId(tree, targetId);
+    const destParent = parentId === undefined ? null : parentId; // undefined => not found (treat as root)
+    if (position === 'before') {
+      // Preserve ordering by moving in reverse before the same pivot.
+      void (async () => {
+        for (const id of [...ids].reverse()) {
+          await movePageAsync(id, destParent, { beforeId: targetId });
+        }
+      })();
+    } else {
+      // Preserve ordering by chaining after the last inserted.
+      void (async () => {
+        let pivot = targetId;
+        for (const id of ids) {
+          await movePageAsync(id, destParent, { afterId: pivot });
+          pivot = id;
+        }
+      })();
+    }
   };
 
   const visibleTree = useMemo(() => {
@@ -1365,14 +1569,23 @@ const Notes = () => {
           className="p-2 overflow-auto flex-1"
           onDragOver={(e) => {
             e.preventDefault();
-            setDragOverId(null);
+            setDragOver({ id: null, position: null });
           }}
           onDrop={(e) => {
             e.preventDefault();
-            setDragOverId(null);
+            setDragOver({ id: null, position: null });
             const sourceId = e.dataTransfer.getData('text/plain');
             if (!sourceId) return;
-            movePage(sourceId, null);
+            void (async () => {
+              let ids = [];
+              try {
+                const raw = e.dataTransfer.getData('application/x-deskmaster-page-ids');
+                if (raw) ids = JSON.parse(raw);
+              } catch {}
+              if (!Array.isArray(ids) || !ids.length) ids = [sourceId];
+              ids = ids.filter((x) => x && x !== ARCHIVE_ROOT_ID);
+              for (const id of ids) await movePageAsync(id, null);
+            })();
           }}
         >
           {visibleTree.map((node) => (
@@ -1382,6 +1595,7 @@ const Notes = () => {
               depth={0}
               expanded={expanded}
               selectedId={selectedId}
+              selectedIds={selectedIds}
               onSelect={selectPage}
               onToggle={toggleExpanded}
               onAddChild={addChildPage}
@@ -1396,8 +1610,10 @@ const Notes = () => {
               onCancelRename={cancelInlineRename}
               onDragStart={handleDragStart}
               onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              dragOverId={dragOverId}
+              dragOverId={dragOver.id}
+              dragOverPosition={dragOver.position}
               mode={mode}
             />
           ))}
