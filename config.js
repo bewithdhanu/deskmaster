@@ -37,6 +37,15 @@ let appSettings = {
     selectedId: null,
     expandedIds: [],
     newPageType: 'canvas'
+  },
+  cloudBackup: {
+    provider: 'gdrive',
+    enabled: false,
+    intervalHours: 4,
+    keepLast: 10,
+    lastBackupAt: null,
+    lastBackupStatus: null,
+    lastBackupError: null
   }
 };
 
