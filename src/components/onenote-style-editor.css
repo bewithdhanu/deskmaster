@@ -39,97 +39,66 @@
 }
 
 .one-block:hover {
-  border-color: rgba(0, 120, 212, 0.4);
+  border-color: #616161;
 }
 
 .one-block.one-block--active {
-  border-color: #0078d4;
-  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.18);
+  border-color: #616161;
+  /* box-shadow: 0 0 0 1px #616161; */
   z-index: 20;
 }
 
-.one-block__handle {
-  position: absolute;
-  top: -14px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 48px;
-  height: 12px;
-  background: #0078d4;
-  border-radius: 6px 6px 0 0;
+.one-block.one-block--selected {
   cursor: grab;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
 }
 
-.one-block__handle::before,
-.one-block__handle::after {
-  content: '';
-  width: 12px;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 1px;
-}
-
-.one-block__handle:active {
+.one-block.one-block--selected:active {
   cursor: grabbing;
 }
 
-.one-block:hover .one-block__handle,
-.one-block--active .one-block__handle {
-  opacity: 1;
-}
 
-.one-block__actions {
+.one-block__grip {
   position: absolute;
   top: -14px;
-  right: 0;
-  display: flex;
-  gap: 2px;
+  left: 0;
+  width: 100%;
+  height: 14px;
+  cursor: grab;
   opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.one-block:hover .one-block__actions,
-.one-block--active .one-block__actions {
-  opacity: 1;
-}
-
-.one-block__btn {
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
-  border: none;
-  cursor: pointer;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  font-size: 10px;
-  line-height: 1;
-  transition: background 0.12s ease;
-  padding: 0;
+  pointer-events: auto;
 }
 
-.one-block__btn--delete {
-  background: #e81123;
-  color: #fff;
+.one-block__grip:active {
+  cursor: grabbing;
 }
 
-.one-block__btn--delete:hover {
-  background: #c50f1f;
+.one-block__grip::before {
+  content: '';
+  width: 100%;
+  height: 14px;
+  border-radius: 4px 4px 0 0;
+  background: #616161;
 }
 
-.one-block__btn--duplicate {
-  background: #0078d4;
-  color: #fff;
+.one-block__grip::after {
+  content: '\22EF';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-weight: 900;
+  font-size: 18px;
+  line-height: 14px;
+  color: rgba(255, 255, 255, 0.9);
 }
 
-.one-block__btn--duplicate:hover {
-  background: #106ebe;
+.one-block:hover .one-block__grip,
+.one-block--active .one-block__grip,
+.one-block--selected .one-block__grip {
+  opacity: 1;
 }
 
 .one-block__content {
@@ -162,13 +131,12 @@
 
 .one-block__resize {
   position: absolute;
-  bottom: -4px;
-  right: -4px;
+  top: 0;
+  right: -6px;
   width: 12px;
-  height: 12px;
-  background: #0078d4;
-  border-radius: 2px;
-  cursor: se-resize;
+  height: 100%;
+  background: transparent;
+  cursor: ew-resize;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -194,6 +162,9 @@
   overflow-x: auto;
   min-height: 44px;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
 }
 
 .one-header-toolbar--dark {
@@ -260,7 +231,7 @@
 
 .one-ht-btn--active {
   background: #e8e8e8;
-  color: #0078d4;
+  color: #616161;
 }
 
 .one-header-toolbar--dark .one-ht-btn {
@@ -321,7 +292,7 @@
 }
 
 .one-ht-select:focus {
-  border-color: #0078d4;
+  border-color: #616161;
 }
 
 .one-header-toolbar--dark .one-ht-select {
@@ -406,39 +377,13 @@
 }
 
 .one-block--selected {
-  border-color: #7c3aed !important;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25), 0 2px 12px rgba(124, 58, 237, 0.15) !important;
-  background: rgba(124, 58, 237, 0.04) !important;
+  border-color: #616161 !important;
   z-index: 15 !important;
-}
-
-.one-block--selected .one-block__handle {
-  opacity: 1;
-  background: #7c3aed;
 }
 
 .one-block--selected .one-block__resize {
   opacity: 1;
-  background: #7c3aed;
-}
-
-.one-block--selected::after {
-  content: '\2713';
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  width: 16px;
-  height: 16px;
-  background: #7c3aed;
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 16px;
-  text-align: center;
+  background: transparent;
 }
 
 .one-selection-rect {

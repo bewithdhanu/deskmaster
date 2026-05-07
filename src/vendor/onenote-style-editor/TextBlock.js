@@ -30,25 +30,9 @@ export class TextBlock extends EventEmitter {
     this.el.style.top = `${this.y}px`;
     this.el.style.width = `${this.width}px`;
 
-    this._handleEl = document.createElement('div');
-    this._handleEl.className = 'one-block__handle';
-    this._handleEl.title = 'Drag to move';
-
-    this._actionsEl = document.createElement('div');
-    this._actionsEl.className = 'one-block__actions';
-
-    this._duplicateBtn = document.createElement('button');
-    this._duplicateBtn.className = 'one-block__btn one-block__btn--duplicate';
-    this._duplicateBtn.innerHTML = '⧉';
-    this._duplicateBtn.title = 'Duplicate';
-
-    this._deleteBtn = document.createElement('button');
-    this._deleteBtn.className = 'one-block__btn one-block__btn--delete';
-    this._deleteBtn.innerHTML = '✕';
-    this._deleteBtn.title = 'Delete block';
-
-    this._actionsEl.appendChild(this._duplicateBtn);
-    this._actionsEl.appendChild(this._deleteBtn);
+    this._gripEl = document.createElement('div');
+    this._gripEl.className = 'one-block__grip';
+    this._gripEl.title = 'Drag to move';
 
     this._contentEl = document.createElement('div');
     this._contentEl.className = 'one-block__content';
@@ -58,10 +42,9 @@ export class TextBlock extends EventEmitter {
 
     this._resizeEl = document.createElement('div');
     this._resizeEl.className = 'one-block__resize';
-    this._resizeEl.title = 'Resize';
+    this._resizeEl.title = 'Resize width';
 
-    this.el.appendChild(this._handleEl);
-    this.el.appendChild(this._actionsEl);
+    this.el.appendChild(this._gripEl);
     this.el.appendChild(this._contentEl);
     this.el.appendChild(this._resizeEl);
   }
@@ -90,20 +73,9 @@ export class TextBlock extends EventEmitter {
     });
 
     this.el.addEventListener('dblclick', (e) => e.stopPropagation());
-
-    this._deleteBtn.addEventListener('click', (e) => {
+    this._gripEl.addEventListener('mousedown', (e) => {
       e.stopPropagation();
-      this.emit('delete', this);
-    });
-
-    this._duplicateBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.emit('duplicate', this);
-    });
-
-    this._handleEl.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      this.emit('handle:mousedown', this, e);
+      this.emit('grip:mousedown', this, e);
     });
 
     this._resizeEl.addEventListener('mousedown', (e) => this._onResizeStart(e));
