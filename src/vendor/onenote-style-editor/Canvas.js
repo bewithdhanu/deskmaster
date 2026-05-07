@@ -12,7 +12,8 @@ export class Canvas extends EventEmitter {
     this.containerEl.classList.add('one-editor');
     this.containerEl.style.display = 'flex';
     this.containerEl.style.flexDirection = 'column';
-    this.containerEl.style.height = '100vh';
+    // Use the parent layout height; 100vh can clip the header toolbar in nested layouts.
+    this.containerEl.style.height = '100%';
     this.containerEl.style.overflow = 'hidden';
 
     if (dark === 'auto') {
@@ -529,6 +530,11 @@ export class Canvas extends EventEmitter {
     });
 
     block.on('block:mousedown', (b, e) => {
+      const inGrip = Boolean(e.target?.closest?.('.one-block__grip'));
+      const inResize = Boolean(e.target?.closest?.('.one-block__resize'));
+      const inContent = Boolean(e.target?.closest?.('.one-block__content'));
+      const isEditing = document.activeElement === b._contentEl;
+
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         this._selectionManager.clear();
@@ -546,19 +552,32 @@ export class Canvas extends EventEmitter {
           }
         }
       }
-    });
 
-    block.on('handle:mousedown', (b, e) => {
+      // Drag from anywhere on selected blocks (except resize and while actively editing text).
+      if (inResize) return;
+      if (inContent && isEditing) return;
+
       if (this._selectionManager.isSelected(b) && this._selectionManager.selectedCount >= 2) {
         this._startGroupDrag(b, e);
-      } else {
-        if (!this._selectionManager.isSelected(b)) {
-          this._selectionManager.clear();
-          this._selectionManager.setMultiSelection([b]);
-          this._toolbar.syncState();
-        }
+        return;
+      }
+      if (this._selectionManager.isSelected(b) && this._selectionManager.selectedCount === 1) {
         b.startDrag(e);
       }
+    });
+
+    // Explicit drag grip at top-center.
+    block.on('grip:mousedown', (b, e) => {
+      if (this._selectionManager.isSelected(b) && this._selectionManager.selectedCount >= 2) {
+        this._startGroupDrag(b, e);
+        return;
+      }
+      if (!this._selectionManager.isSelected(b)) {
+        this._selectionManager.clear();
+        this._selectionManager.setMultiSelection([b]);
+        this._toolbar.syncState();
+      }
+      b.startDrag(e);
     });
   }
 
