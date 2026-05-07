@@ -1113,6 +1113,8 @@ function startBrowserServers() {
           ensureNotesDirs();
           const id = payload?.id;
           const targetParentId = payload?.targetParentId ?? null;
+          const beforeId = payload?.beforeId || null;
+          const afterId = payload?.afterId || null;
           if (!id || id === 'notes_archived_root') {
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false }));
@@ -1137,13 +1139,25 @@ function startBrowserServers() {
             res.end(JSON.stringify({ success: false }));
             return;
           }
-          const nextOrder = getNextOrder(destParentDir);
-          const nextMeta = { ...meta, order: nextOrder, updatedAt: new Date().toISOString() };
-          const destName = makePageFolderName({ order: nextMeta.order, title: nextMeta.title || 'Untitled', id: nextMeta.id });
-          const destDir = path.join(destParentDir, destName);
-          fs.renameSync(srcDir, destDir);
-          writeJsonFile(getMetaPath(destDir), nextMeta);
-          updateFolderNameToMatchMeta(destDir);
+          const provisionalOrder = getNextOrder(destParentDir);
+          const provisionalMeta = { ...meta, order: provisionalOrder, updatedAt: new Date().toISOString() };
+          const provisionalName = makePageFolderName({ order: provisionalMeta.order, title: provisionalMeta.title || 'Untitled', id: provisionalMeta.id });
+          const provisionalDir = path.join(destParentDir, provisionalName);
+          fs.renameSync(srcDir, provisionalDir);
+          writeJsonFile(getMetaPath(provisionalDir), provisionalMeta);
+          updateFolderNameToMatchMeta(provisionalDir);
+
+          if (beforeId || afterId) {
+            const children = listDirectChildrenMeta(destParentDir).map((c) => c.meta.id).filter((x) => x !== id);
+            const insertIdx = (() => {
+              const pivot = beforeId || afterId;
+              const at = children.indexOf(pivot);
+              if (at === -1) return children.length;
+              return beforeId ? at : at + 1;
+            })();
+            children.splice(insertIdx, 0, id);
+            resequenceChildrenInDir(destParentDir, children);
+          }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
         } catch (error) {
@@ -2782,6 +2796,57 @@ function getNextOrder(parentDir) {
   return maxOrder + 1;
 }
 
+function listDirectChildrenMeta(parentDir) {
+  const children = listChildPageDirs(parentDir);
+  const out = [];
+  for (const dir of children) {
+    if (dir === getNotesArchivedDir() || dir === getNotesClipboardDir()) continue;
+    const meta = readJsonFile(getMetaPath(dir), null);
+    if (!meta || !meta.id) continue;
+    out.push({ dir, meta });
+  }
+  out.sort((a, b) => (Number(a.meta.order) || 0) - (Number(b.meta.order) || 0));
+  return out;
+}
+
+function resequenceChildrenInDir(parentDir, orderedIds) {
+  const children = listDirectChildrenMeta(parentDir);
+  const byId = new Map(children.map((c) => [c.meta.id, c]));
+
+  const ids = Array.isArray(orderedIds) && orderedIds.length ? orderedIds.filter((id) => byId.has(id)) : children.map((c) => c.meta.id);
+  // Ensure we keep any children not mentioned in orderedIds (append them).
+  for (const c of children) {
+    if (!ids.includes(c.meta.id)) ids.push(c.meta.id);
+  }
+
+  const tmpPrefix = `__tmp__${Date.now()}__`;
+  const tempMoves = [];
+
+  // First pass: rename everything to temporary names to avoid collisions.
+  ids.forEach((id) => {
+    const entry = byId.get(id);
+    if (!entry) return;
+    const tmpDir = path.join(parentDir, `${tmpPrefix}${id}`);
+    try {
+      fs.renameSync(entry.dir, tmpDir);
+      entry.dir = tmpDir;
+      tempMoves.push(entry);
+    } catch {}
+  });
+
+  // Second pass: write new orders and rename to final names.
+  let order = 1;
+  ids.forEach((id) => {
+    const entry = byId.get(id);
+    if (!entry) return;
+    const nextMeta = { ...entry.meta, order, updatedAt: new Date().toISOString() };
+    order += 1;
+    writeJsonFile(getMetaPath(entry.dir), nextMeta);
+    entry.meta = nextMeta;
+    updateFolderNameToMatchMeta(entry.dir);
+  });
+}
+
 function createPageOnDisk({ parentDir, title, type }) {
   const id = createNoteId();
   const order = getNextOrder(parentDir);
@@ -3003,6 +3068,8 @@ ipcMain.handle('notes:move-page', async (event, payload) => {
   ensureNotesDirs();
   const id = payload?.id;
   const targetParentId = payload?.targetParentId ?? null;
+  const beforeId = payload?.beforeId || null;
+  const afterId = payload?.afterId || null;
   if (!id || id === 'notes_archived_root') return false;
   const srcDir = findPageDirById(getNotesRootDir(), id);
   if (!srcDir) return false;
@@ -3011,13 +3078,29 @@ ipcMain.handle('notes:move-page', async (event, payload) => {
   const metaPath = getMetaPath(srcDir);
   const meta = readJsonFile(metaPath, null);
   if (!meta) return false;
-  const nextOrder = getNextOrder(destParentDir);
-  const nextMeta = { ...meta, order: nextOrder, updatedAt: new Date().toISOString() };
-  const destName = makePageFolderName({ order: nextMeta.order, title: nextMeta.title || 'Untitled', id: nextMeta.id });
-  const destDir = path.join(destParentDir, destName);
-  fs.renameSync(srcDir, destDir);
-  writeJsonFile(getMetaPath(destDir), nextMeta);
-  updateFolderNameToMatchMeta(destDir);
+
+  // Move into destination first (with a temporary order/name); we'll resequence next.
+  const provisionalOrder = getNextOrder(destParentDir);
+  const provisionalMeta = { ...meta, order: provisionalOrder, updatedAt: new Date().toISOString() };
+  const provisionalName = makePageFolderName({ order: provisionalMeta.order, title: provisionalMeta.title || 'Untitled', id: provisionalMeta.id });
+  const provisionalDir = path.join(destParentDir, provisionalName);
+  fs.renameSync(srcDir, provisionalDir);
+  writeJsonFile(getMetaPath(provisionalDir), provisionalMeta);
+  updateFolderNameToMatchMeta(provisionalDir);
+
+  // Reorder within destination if requested.
+  if (beforeId || afterId) {
+    const children = listDirectChildrenMeta(destParentDir).map((c) => c.meta.id).filter((x) => x !== id);
+    const insertIdx = (() => {
+      const pivot = beforeId || afterId;
+      const at = children.indexOf(pivot);
+      if (at === -1) return children.length;
+      return beforeId ? at : at + 1;
+    })();
+    children.splice(insertIdx, 0, id);
+    resequenceChildrenInDir(destParentDir, children);
+  }
+
   return true;
 });
 

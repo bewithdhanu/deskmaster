@@ -44,8 +44,45 @@ function MarkdownAiToolbarButtonsInner() {
   const Components = useComponentsContext();
   const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [busyRects, setBusyRects] = useState([]);
   const [customPrompt, setCustomPrompt] = useState('');
   const promptInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!busy) {
+      setBusyRects([]);
+      return;
+    }
+
+    const update = () => {
+      try {
+        const sel = editor?.prosemirrorState?.selection;
+        const view = editor?.prosemirrorView;
+        const from = sel?.from;
+        const to = sel?.to;
+        if (!view || typeof from !== 'number' || typeof to !== 'number') return;
+        if (from === to) return;
+
+        const a = Math.min(from, to);
+        const b = Math.max(from, to);
+        const start = view.domAtPos(a);
+        const end = view.domAtPos(b);
+
+        const range = document.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+
+        const rects = Array.from(range.getClientRects?.() || [])
+          .map((r) => ({ left: r.left, top: r.top, width: r.width, height: r.height }))
+          .filter((r) => r.width > 1 && r.height > 1);
+        setBusyRects(rects);
+      } catch {}
+    };
+
+    update();
+    const t = setInterval(update, 120);
+    return () => clearInterval(t);
+  }, [busy, editor]);
 
   const canUseAi = useEditorState({
     editor,
@@ -91,6 +128,36 @@ function MarkdownAiToolbarButtonsInner() {
 
   return (
     <>
+      <style>{`
+        @keyframes dmAiShimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+
+      {busy && busyRects.length
+        ? busyRects.map((r, idx) => (
+            <div
+              // eslint-disable-next-line react/no-array-index-key
+              key={idx}
+              style={{
+                position: 'fixed',
+                left: r.left,
+                top: r.top,
+                width: r.width,
+                height: r.height,
+                zIndex: 2000,
+                pointerEvents: 'none',
+                borderRadius: 3,
+                background:
+                  'linear-gradient(90deg, rgba(0,120,212,0.10) 0%, rgba(0,120,212,0.30) 50%, rgba(0,120,212,0.10) 100%)',
+                backgroundSize: '200% 100%',
+                animation: 'dmAiShimmer 1.0s linear infinite'
+              }}
+              aria-hidden
+            />
+          ))
+        : null}
       <span
         key="ai-divider"
         className="mx-1 w-px self-stretch shrink-0 bg-border opacity-70"

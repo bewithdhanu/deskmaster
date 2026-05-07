@@ -112,10 +112,17 @@ export class Canvas extends EventEmitter {
   }
 
   _bindEvents() {
+    this._mouseInside = false;
     // Track last pointer position to anchor paste near where the user is working.
     this.el.addEventListener('mousemove', (e) => {
       if (e.target !== this._surfaceEl) return;
       this._lastPointerPos = this._getRelativePosition(e);
+    });
+    this.el.addEventListener('mouseenter', () => {
+      this._mouseInside = true;
+    });
+    this.el.addEventListener('mouseleave', () => {
+      this._mouseInside = false;
     });
 
     this.el.addEventListener('dblclick', (e) => {
@@ -136,11 +143,12 @@ export class Canvas extends EventEmitter {
       this._startRubberBand(e);
     });
 
-    this.el.addEventListener('paste', (e) => {
+    const handlePaste = (e) => {
       // Only handle system-clipboard paste when user is pasting onto the empty surface (not inside a text block).
       const isEditing = document.activeElement?.classList.contains('one-block__content');
       if (isEditing) return;
-      if (e.target !== this.el && e.target !== this._surfaceEl) return;
+      // Allow menu-triggered paste as long as the cursor is inside the canvas.
+      if (!this._mouseInside && e.target !== this.el && e.target !== this._surfaceEl) return;
 
       const cd = e.clipboardData;
       if (!cd) return;
@@ -174,7 +182,12 @@ export class Canvas extends EventEmitter {
       this._selectionManager.setMultiSelection(created);
       this._toolbar.syncState();
       this._scheduleSurfaceResize();
-    });
+    };
+
+    // Paste when focused on canvas.
+    this.el.addEventListener('paste', handlePaste);
+    // Paste when user triggers app/menu paste while cursor is inside the canvas.
+    document.addEventListener('paste', handlePaste, true);
 
     this.el.addEventListener(
       'wheel',
@@ -188,7 +201,20 @@ export class Canvas extends EventEmitter {
     );
 
     document.addEventListener('keydown', (e) => {
-      const isEditing = document.activeElement?.classList.contains('one-block__content');
+      const ae = document.activeElement;
+      const tag = ae?.tagName?.toLowerCase?.() || '';
+      const isTextField =
+        tag === 'input' ||
+        tag === 'textarea' ||
+        tag === 'select' ||
+        Boolean(ae?.isContentEditable) ||
+        Boolean(ae?.closest?.('[contenteditable="true"]'));
+
+      // If user is typing/renaming elsewhere in the app (e.g. sidebar rename input),
+      // do not steal shortcuts for the canvas.
+      if (isTextField && !ae?.classList?.contains?.('one-block__content')) return;
+
+      const isEditing = ae?.classList?.contains?.('one-block__content');
       const activeBlock = this._selectionManager.activeBlock;
       const selectedBlocks = this._selectionManager.getSelectedBlocks();
       const hasMultiSelect = selectedBlocks.length >= 1;
