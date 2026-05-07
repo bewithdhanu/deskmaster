@@ -743,6 +743,7 @@ const Notes = () => {
   const [expanded, setExpanded] = useState(() => new Set());
   const [selectedId, setSelectedId] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const selectionAnchorIdRef = useRef(null);
   const [clipboard, setClipboard] = useState(null);
   const [contextMenu, setContextMenu] = useState({ open: false, x: 0, y: 0, targetId: null });
   const [renamingId, setRenamingId] = useState(null);
@@ -1126,10 +1127,48 @@ const Notes = () => {
     }
   };
 
+  const getVisiblePageIdsInOrder = useCallback(
+    () => {
+      const roots = mode === 'notes' ? tree.filter((n) => n.id !== ARCHIVE_ROOT_ID) : getArchivedChildren(tree);
+      const out = [];
+      const walk = (nodes) => {
+        (nodes || []).forEach((n) => {
+          if (!n?.id) return;
+          out.push(n.id);
+          if (Array.isArray(n.children) && n.children.length && expanded.has(n.id)) {
+            walk(n.children);
+          }
+        });
+      };
+      walk(roots);
+      return out;
+    },
+    [tree, mode, expanded]
+  );
+
   const selectPage = (id, event) => {
     if (!id) return;
     setRenamingId(null);
     const isMulti = Boolean(event && (event.ctrlKey || event.metaKey));
+    const isRange = Boolean(event && event.shiftKey);
+
+    if (isRange) {
+      const anchor = selectionAnchorIdRef.current || selectedId || id;
+      const ordered = getVisiblePageIdsInOrder();
+      const a = ordered.indexOf(anchor);
+      const b = ordered.indexOf(id);
+      if (a !== -1 && b !== -1) {
+        const [from, to] = a < b ? [a, b] : [b, a];
+        const rangeIds = ordered.slice(from, to + 1);
+        const next = new Set(isMulti ? Array.from(selectedIds) : []);
+        rangeIds.forEach((x) => next.add(x));
+        setSelectedIds(next);
+        setSelectedId(id);
+        return;
+      }
+      // Fallback: if we can't compute range, behave like single select.
+    }
+
     if (isMulti) {
       setSelectedIds((prev) => {
         const next = new Set(prev);
@@ -1139,10 +1178,12 @@ const Notes = () => {
         return next;
       });
       setSelectedId(id);
+      selectionAnchorIdRef.current = id;
       return;
     }
 
     setSelectedIds(new Set([id]));
+    selectionAnchorIdRef.current = id;
     if (id === selectedId) return;
     void (async () => {
       await saveSelectedPageState();
