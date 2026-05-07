@@ -3,7 +3,7 @@ import { SelectionManager } from './SelectionManager.js';
 import { Toolbar } from './Toolbar.js';
 import { HistoryManager } from './HistoryManager.js';
 import { EventEmitter } from './EventEmitter.js';
-import { getRelativePosition, isDescendant, clamp } from './utils.js';
+import { clipboardHtmlToCanvasBlocks, clipboardPlainTextToCanvasBlocks, isDescendant, clamp } from './utils.js';
 
 export class Canvas extends EventEmitter {
   constructor(containerEl, { dark = 'auto', showHint = true } = {}) {
@@ -36,6 +36,7 @@ export class Canvas extends EventEmitter {
     this._contentChangeTimer = null;
     this._hintShown = false;
     this._surfaceResizeRaf = null;
+    this._lastPointerPos = null;
 
     this._buildDOM();
     this._bindEvents();
@@ -52,6 +53,8 @@ export class Canvas extends EventEmitter {
     if (this.dark) this.el.classList.add('one-canvas--dark');
     this.el.setAttribute('role', 'presentation');
     this.el.setAttribute('aria-label', 'OneNote-style canvas editor');
+    // Allow the canvas to receive focus so 'paste' events fire here when user clicks the surface.
+    this.el.tabIndex = 0;
     this.containerEl.appendChild(this.el);
 
     this._surfaceEl = document.createElement('div');
@@ -74,10 +77,12 @@ export class Canvas extends EventEmitter {
   }
 
   _getRelativePosition(event) {
+    // Use the surface rect directly. Since the surface scrolls with the container,
+    // its boundingClientRect already reflects scroll offset (so we must NOT add scrollTop).
     const rect = this._surfaceEl.getBoundingClientRect();
     return {
-      x: event.clientX - rect.left + this.el.scrollLeft,
-      y: event.clientY - rect.top + this.el.scrollTop
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
     };
   }
 
@@ -106,8 +111,15 @@ export class Canvas extends EventEmitter {
   }
 
   _bindEvents() {
+    // Track last pointer position to anchor paste near where the user is working.
+    this.el.addEventListener('mousemove', (e) => {
+      if (e.target !== this._surfaceEl) return;
+      this._lastPointerPos = this._getRelativePosition(e);
+    });
+
     this.el.addEventListener('dblclick', (e) => {
       if (e.target !== this._surfaceEl) return;
+      this.el.focus();
       this._historyPush();
       const pos = this._getRelativePosition(e);
       const block = this.addBlock({ x: pos.x - 100, y: pos.y - 16 });
@@ -116,10 +128,51 @@ export class Canvas extends EventEmitter {
 
     this.el.addEventListener('mousedown', (e) => {
       if (e.target !== this._surfaceEl) return;
+      this.el.focus();
       this._selectionManager.clear();
       this._toolbar.syncState();
       if (e.button !== 0) return;
       this._startRubberBand(e);
+    });
+
+    this.el.addEventListener('paste', (e) => {
+      // Only handle system-clipboard paste when user is pasting onto the empty surface (not inside a text block).
+      const isEditing = document.activeElement?.classList.contains('one-block__content');
+      if (isEditing) return;
+      if (e.target !== this.el && e.target !== this._surfaceEl) return;
+
+      const cd = e.clipboardData;
+      if (!cd) return;
+
+      const anchor = this._lastPointerPos || { x: this.el.scrollLeft + 80, y: this.el.scrollTop + 80 };
+      const maxWidth = Math.max(240, Math.min(720, (this.el.clientWidth || 720) - 160));
+
+      const html = cd.getData('text/html');
+      const text = cd.getData('text/plain');
+      const parsed = html
+        ? clipboardHtmlToCanvasBlocks(html, { anchorX: anchor.x, anchorY: anchor.y, maxWidth })
+        : { blocks: clipboardPlainTextToCanvasBlocks(text, { anchorX: anchor.x, anchorY: anchor.y, maxWidth }), usedAbsolute: false };
+
+      const blocks = Array.isArray(parsed?.blocks) ? parsed.blocks : [];
+      const usedAbsolute = Boolean(parsed?.usedAbsolute);
+
+      if (!blocks.length) return;
+
+      e.preventDefault();
+      this._historyPush();
+      this._clearMultiSelection();
+      this._selectionManager.clear();
+
+      const created = blocks.map((b) => this.addBlock({ x: b.x, y: b.y, width: b.width || 240, content: b.content }));
+      if (!usedAbsolute) {
+        this._reflowBlocks(created, { anchorX: anchor.x, anchorY: anchor.y, gap: 18 });
+      }
+      // Adjust positions after render to account for real block heights (images load async)
+      // and prevent overlaps regardless of paste mode.
+      this._resolveOverlapsAfterRender(created, { gap: 14 });
+      this._selectionManager.setMultiSelection(created);
+      this._toolbar.syncState();
+      this._scheduleSurfaceResize();
     });
 
     this.el.addEventListener(
@@ -231,6 +284,91 @@ export class Canvas extends EventEmitter {
         }
       }
     });
+  }
+
+  _reflowBlocks(blocks, { anchorX = 80, anchorY = 80, gap = 18 } = {}) {
+    if (!Array.isArray(blocks) || !blocks.length) return;
+    requestAnimationFrame(() => {
+      let y = anchorY;
+      for (const b of blocks) {
+        if (!b?.el) continue;
+        b.x = anchorX;
+        b.y = y;
+        b.el.style.left = `${b.x}px`;
+        b.el.style.top = `${b.y}px`;
+        const h = b.el.offsetHeight || 56;
+        y += h + gap;
+      }
+      this._scheduleSurfaceResize();
+      // Persist updated positions (Notes.js listens to 'content:changed' with debounce).
+      this.emit('content:changed', { source: 'layout:reflow' });
+    });
+  }
+
+  _resolveOverlapsAfterRender(blocks, { gap = 14 } = {}) {
+    if (!Array.isArray(blocks) || !blocks.length) return;
+    const run = () => {
+      const items = blocks
+        .filter((b) => b && b.el)
+        .map((b) => ({
+          b,
+          x: Number(b.x) || 0,
+          y: Number(b.y) || 0,
+          w: b.el.offsetWidth || b.width || 240,
+          h: b.el.offsetHeight || 56
+        }))
+        .sort((a, b) => (a.y - b.y) || (a.x - b.x));
+
+      const placed = [];
+      const overlaps = (r1, r2) =>
+        !(r1.x + r1.w <= r2.x || r2.x + r2.w <= r1.x || r1.y + r1.h <= r2.y || r2.y + r2.h <= r1.y);
+
+      for (const it of items) {
+        let rect = { x: it.x, y: it.y, w: it.w, h: it.h };
+        let guard = 0;
+        while (placed.some((p) => overlaps(rect, p))) {
+          const colliders = placed.filter((p) => overlaps(rect, p));
+          const nextY = Math.max(...colliders.map((p) => p.y + p.h)) + gap;
+          rect = { ...rect, y: nextY };
+          guard++;
+          if (guard > 80) break;
+        }
+        placed.push(rect);
+        it.b.x = rect.x;
+        it.b.y = rect.y;
+        it.b.el.style.left = `${rect.x}px`;
+        it.b.el.style.top = `${rect.y}px`;
+      }
+
+      this._scheduleSurfaceResize();
+      // Persist updated positions (Notes.js listens to 'content:changed' with debounce).
+      this.emit('content:changed', { source: 'layout:resolve-overlaps' });
+    };
+
+    // Run after initial layout.
+    requestAnimationFrame(run);
+    // Run again shortly after (images/fonts can change heights after first paint).
+    setTimeout(() => requestAnimationFrame(run), 250);
+
+    // Re-run when pasted images finish loading.
+    try {
+      const handled = new WeakSet();
+      blocks.forEach((b) => {
+        const imgs = b?.el?.querySelectorAll ? b.el.querySelectorAll('img') : [];
+        imgs.forEach((img) => {
+          if (handled.has(img)) return;
+          handled.add(img);
+          img.addEventListener(
+            'load',
+            () => {
+              requestAnimationFrame(run);
+              setTimeout(() => requestAnimationFrame(run), 120);
+            },
+            { once: true }
+          );
+        });
+      });
+    } catch {}
   }
 
   _startRubberBand(e) {
