@@ -99,10 +99,19 @@ function loadConfig() {
 function saveConfig() {
   try {
     const storagePath = getConfigStoragePath();
-    const config = {
+    let config = {};
+
+    if (fs.existsSync(storagePath)) {
+      const data = fs.readFileSync(storagePath, 'utf8');
+      config = JSON.parse(data);
+    }
+
+    config = {
+      ...config,
       timezones: timezones,
       appSettings: appSettings
     };
+
     fs.writeFileSync(storagePath, JSON.stringify(config, null, 2));
   } catch (error) {
     console.error('Error saving config:', error);
