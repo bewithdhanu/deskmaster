@@ -65,7 +65,7 @@ function setGdriveAuthConfig(next) {
 
 function getCloudBackupSettings() {
   const s = config.getAppSettings()
-  return s?.cloudBackup || { provider: 'gdrive', enabled: false, intervalHours: 4, keepLast: 10 }
+  return s?.cloudBackup || { provider: 'gdrive', clientId: '', clientSecret: '', enabled: false, intervalHours: 4, keepLast: 10 }
 }
 
 function setCloudBackupSettings(patch) {
@@ -78,11 +78,35 @@ function setCloudBackupSettings(patch) {
   return next
 }
 
+function getGdriveOAuthCredentials() {
+  const cloudBackup = getCloudBackupSettings()
+  const authCfg = getGdriveAuthConfig()
+  const clientId = (
+    process.env.GDRIVE_CLIENT_ID ||
+    process.env.GOOGLE_CLIENT_ID ||
+    cloudBackup?.clientId ||
+    authCfg?.client_id ||
+    ''
+  ).trim()
+  const clientSecret = (
+    process.env.GDRIVE_CLIENT_SECRET ||
+    process.env.GOOGLE_CLIENT_SECRET ||
+    cloudBackup?.clientSecret ||
+    authCfg?.client_secret ||
+    ''
+  ).trim()
+  return { clientId, clientSecret }
+}
+
+function hasGdriveOAuthCredentials() {
+  const { clientId, clientSecret } = getGdriveOAuthCredentials()
+  return Boolean(clientId && clientSecret)
+}
+
 function getGdriveOAuthClient(redirectUri) {
-  const clientId = process.env.GDRIVE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
-  const clientSecret = process.env.GDRIVE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
+  const { clientId, clientSecret } = getGdriveOAuthCredentials()
   if (!clientId || !clientSecret) {
-    throw new Error('Missing Google OAuth credentials. Set GDRIVE_CLIENT_ID and GDRIVE_CLIENT_SECRET in environment.')
+    throw new Error('Missing Google OAuth credentials. Add the Google Drive Client ID and Client Secret in Settings > Cloud Backup, or set GDRIVE_CLIENT_ID and GDRIVE_CLIENT_SECRET in the environment.')
   }
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri)
 }
@@ -1018,6 +1042,7 @@ function startBrowserServers() {
             enabled: Boolean(s?.enabled),
             intervalHours: Number(s?.intervalHours) || 4,
             keepLast: Number(s?.keepLast) || 10,
+            oauthConfigured: hasGdriveOAuthCredentials(),
             lastBackupAt: s?.lastBackupAt || null,
             lastBackupStatus: s?.lastBackupStatus || null,
             lastBackupError: s?.lastBackupError || null,
@@ -2734,7 +2759,13 @@ async function gdriveConnectFlow() {
   const tokenRes = await oauth2.getToken(code)
   const refresh = tokenRes?.tokens?.refresh_token
   if (!refresh) throw new Error('Google did not return a refresh token. Try connecting again.')
-  setGdriveAuthConfig({ refresh_token: refresh, connectedAt: new Date().toISOString() })
+  const { clientId, clientSecret } = getGdriveOAuthCredentials()
+  setGdriveAuthConfig({
+    refresh_token: refresh,
+    client_id: clientId,
+    client_secret: clientSecret,
+    connectedAt: new Date().toISOString()
+  })
   restartGdriveBackupScheduler()
   return { success: true }
 }
@@ -2761,6 +2792,7 @@ ipcMain.handle('gdrive:status', async () => {
     enabled: Boolean(s?.enabled),
     intervalHours: Number(s?.intervalHours) || 4,
     keepLast: Number(s?.keepLast) || 10,
+    oauthConfigured: hasGdriveOAuthCredentials(),
     lastBackupAt: s?.lastBackupAt || null,
     lastBackupStatus: s?.lastBackupStatus || null,
     lastBackupError: s?.lastBackupError || null,
