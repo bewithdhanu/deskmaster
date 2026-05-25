@@ -53,6 +53,7 @@ let appSettings = {};
 // Google Drive backup
 let gdriveBackupTimer = null
 let gdriveBackupRunning = false
+let gdriveStartupBackupTimer = null
 
 function getGdriveAuthConfig() {
   return config.getConfigSection('gdriveAuth') || null
@@ -186,13 +187,28 @@ function restartGdriveBackupScheduler() {
     clearInterval(gdriveBackupTimer)
     gdriveBackupTimer = null
   }
+  if (gdriveStartupBackupTimer) {
+    clearTimeout(gdriveStartupBackupTimer)
+    gdriveStartupBackupTimer = null
+  }
   const s = getCloudBackupSettings()
   const enabled = Boolean(s?.enabled)
   const intervalHours = Math.max(1, Number(s?.intervalHours) || 4)
-  if (!enabled) return
+  const auth = getGdriveAuthConfig()
+  if (!enabled || !auth?.refresh_token) return
   gdriveBackupTimer = setInterval(() => {
     void uploadBackupToDrive()
   }, intervalHours * 60 * 60 * 1000)
+
+  const lastBackupAt = s?.lastBackupAt ? Date.parse(s.lastBackupAt) : 0
+  const intervalMs = intervalHours * 60 * 60 * 1000
+  const backupIsDue = !lastBackupAt || Number.isNaN(lastBackupAt) || Date.now() - lastBackupAt >= intervalMs
+  if (backupIsDue) {
+    gdriveStartupBackupTimer = setTimeout(() => {
+      gdriveStartupBackupTimer = null
+      void uploadBackupToDrive()
+    }, 10000)
+  }
 }
 
 // Pinggy tunnel instances
@@ -2543,6 +2559,7 @@ app.whenReady().then(async () => {
     startBrowserServers()
   }
 
+  restartGdriveBackupScheduler()
   uptimeMonitor.startBackgroundSync()
 
   createWindow()
@@ -2718,6 +2735,7 @@ async function gdriveConnectFlow() {
   const refresh = tokenRes?.tokens?.refresh_token
   if (!refresh) throw new Error('Google did not return a refresh token. Try connecting again.')
   setGdriveAuthConfig({ refresh_token: refresh, connectedAt: new Date().toISOString() })
+  restartGdriveBackupScheduler()
   return { success: true }
 }
 
@@ -2727,6 +2745,7 @@ ipcMain.handle('gdrive:connect', async () => {
 
 ipcMain.handle('gdrive:disconnect', async () => {
   setGdriveAuthConfig(null)
+  restartGdriveBackupScheduler()
   return { success: true }
 })
 
@@ -4698,6 +4717,14 @@ app.on("window-all-closed", (e) => {
 })
 
 app.on("before-quit", async () => {
+  if (gdriveBackupTimer) {
+    clearInterval(gdriveBackupTimer)
+    gdriveBackupTimer = null
+  }
+  if (gdriveStartupBackupTimer) {
+    clearTimeout(gdriveStartupBackupTimer)
+    gdriveStartupBackupTimer = null
+  }
   uptimeMonitor.stopBackgroundSync()
 
   // Kill all Pinggy tunnel processes
