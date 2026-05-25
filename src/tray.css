@@ -209,6 +209,31 @@ body {
   border-radius: 2px;
 }
 
+.uptime-cell {
+  width: 50px;
+  background-color: transparent;
+  color: #ffffff;
+  border-radius: 2px;
+}
+
+.uptime-value {
+  letter-spacing: 0;
+}
+
+.uptime-down {
+  color: #ff4757;
+}
+
+.uptime-attention {
+  color: #ffa502;
+}
+
+.uptime-separator {
+  color: #ffffff;
+  opacity: 0.7;
+  padding: 0 1px;
+}
+
 .charging-indicator {
   color: #ffffff;
   animation: pulse 2s infinite;

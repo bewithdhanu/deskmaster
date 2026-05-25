@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import StatsManager from './StatsManager';
+import UptimeStatsSummary from './UptimeStatsSummary';
 import BcryptHashGenerator from './tools/BcryptHashGenerator';
 import PublicIPTool from './tools/PublicIPTool';
 import IPLocationTool from './tools/IPLocationTool';
@@ -272,6 +273,7 @@ const Tools = () => {
   return (
     <div className="h-full flex flex-col overflow-y-auto p-4 gap-4">
       <StatsManager />
+      <UptimeStatsSummary />
       {/* <div className="mb-4 mt-2">
         <h1 className="text-2xl font-bold text-theme-primary">Tools</h1>
         <p className="text-theme-muted text-sm mt-1">Utility tools for your productivity</p>

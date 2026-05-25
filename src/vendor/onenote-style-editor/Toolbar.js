@@ -5,6 +5,8 @@ export class Toolbar {
     this.containerEl = containerEl;
     this.canvas = canvas;
     this.dark = dark;
+    this._lastRange = null;
+    this._selectionChangeHandler = null;
     this._buildDOM();
     this._bindEvents();
   }
@@ -38,19 +40,23 @@ export class Toolbar {
         <button class="one-ht-btn" id="ht-italic" data-cmd="italic" title="Italic (Ctrl+I)">${ICONS.italic}</button>
         <button class="one-ht-btn" id="ht-underline" data-cmd="underline" title="Underline (Ctrl+U)">${ICONS.underline}</button>
         <button class="one-ht-btn" id="ht-strike" data-cmd="strikeThrough" title="Strikethrough">${ICONS.strikethrough}</button>
-        <button class="one-ht-btn" id="ht-clear" title="Clear formatting">${ICONS.clearFormat}</button>
+        <button class="one-ht-btn" id="ht-clear" title="Clear formatting / selected object styles">${ICONS.clearFormat}</button>
       </div>
 
       <div class="one-ht-sep"></div>
 
-      <div class="one-ht-group">
-        <div class="one-ht-color-wrap" title="Text color">
-          ${ICONS.textColor}
-          <input type="color" class="one-ht-color-input" id="ht-text-color" value="#000000">
+      <div class="one-ht-group one-ht-color-group">
+        <div class="one-ht-color-control" title="Text color">
+          <div class="one-ht-color-wrap">
+            ${ICONS.textColor}
+            <input type="color" class="one-ht-color-input" id="ht-text-color" value="#000000">
+          </div>
         </div>
-        <div class="one-ht-color-wrap" title="Highlight color">
-          ${ICONS.highlight}
-          <input type="color" class="one-ht-color-input" id="ht-highlight-color" value="#ffff00">
+        <div class="one-ht-color-control" title="Highlight color">
+          <div class="one-ht-color-wrap">
+            ${ICONS.highlight}
+            <input type="color" class="one-ht-color-input" id="ht-highlight-color" value="#ffff00">
+          </div>
         </div>
       </div>
 
@@ -125,26 +131,44 @@ export class Toolbar {
       if (sel) sel.emit('change', sel);
     });
 
-    this._textColorEl.addEventListener('input', (e) => {
+    const applyTextColor = () => {
       this.canvas._historyPush();
-      document.execCommand('foreColor', false, e.target.value);
+      this._applyInlineStyle('color', this._textColorEl.value);
       const sel = this.canvas._selectionManager.activeBlock;
       if (sel) sel.emit('change', sel);
-    });
+    };
 
-    this._highlightColorEl.addEventListener('input', (e) => {
+    const applyHighlightColor = () => {
       this.canvas._historyPush();
-      document.execCommand('hiliteColor', false, e.target.value);
+      this._applyInlineStyle('backgroundColor', this._highlightColorEl.value);
       const sel = this.canvas._selectionManager.activeBlock;
       if (sel) sel.emit('change', sel);
-    });
+    };
+
+    this._textColorEl.addEventListener('input', applyTextColor);
+    this._highlightColorEl.addEventListener('input', applyHighlightColor);
 
     this.el.querySelector('#ht-clear').addEventListener('mousedown', (e) => {
       e.preventDefault();
-      this.canvas._historyPush();
-      document.execCommand('removeFormat', false, null);
-      const sel = this.canvas._selectionManager.activeBlock;
-      if (sel) sel.emit('change', sel);
+      const restored = this._restoreSelectionRange();
+      const selection = window.getSelection();
+      const active = this.canvas._selectionManager.activeBlock;
+      const hasTextSelection =
+        restored &&
+        selection &&
+        selection.rangeCount > 0 &&
+        !selection.isCollapsed &&
+        active &&
+        active._contentEl.contains(selection.getRangeAt(0).commonAncestorContainer);
+
+      if (hasTextSelection) {
+        this.canvas._historyPush();
+        document.execCommand('removeFormat', false, null);
+        if (active) active.emit('change', active);
+      } else {
+        this.canvas._bulkClearStyles();
+      }
+      this.syncState();
     });
 
     this._bulkCopy.addEventListener('mousedown', (e) => {
@@ -168,7 +192,62 @@ export class Toolbar {
       });
     });
 
-    document.addEventListener('selectionchange', () => this.syncState());
+    this._selectionChangeHandler = () => {
+      this._rememberSelectionRange();
+      this.syncState();
+    };
+    document.addEventListener('selectionchange', this._selectionChangeHandler);
+  }
+
+  _rememberSelectionRange() {
+    try {
+      const active = this.canvas._selectionManager.activeBlock;
+      const sel = window.getSelection();
+      if (!active || !sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+      const range = sel.getRangeAt(0);
+      if (!active._contentEl.contains(range.commonAncestorContainer)) return;
+      this._lastRange = range.cloneRange();
+    } catch {}
+  }
+
+  _restoreSelectionRange() {
+    try {
+      const active = this.canvas._selectionManager.activeBlock;
+      if (!active || !this._lastRange || !active._contentEl.contains(this._lastRange.commonAncestorContainer)) return false;
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(this._lastRange);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  _applyInlineStyle(styleName, value) {
+    this._restoreSelectionRange();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+
+    const range = sel.getRangeAt(0);
+    const active = this.canvas._selectionManager.activeBlock;
+    if (!active || !active._contentEl.contains(range.commonAncestorContainer)) return;
+
+    const span = document.createElement('span');
+    span.style[styleName] = value;
+
+    try {
+      range.surroundContents(span);
+    } catch {
+      const fragment = range.extractContents();
+      span.appendChild(fragment);
+      range.insertNode(span);
+    }
+
+    const nextRange = document.createRange();
+    nextRange.selectNodeContents(span);
+    sel.removeAllRanges();
+    sel.addRange(nextRange);
+    this._lastRange = nextRange.cloneRange();
   }
 
   _applyFontSize(px) {
@@ -215,6 +294,12 @@ export class Toolbar {
   }
 
   destroy() {
+    if (this._selectionChangeHandler) {
+      try {
+        document.removeEventListener('selectionchange', this._selectionChangeHandler);
+      } catch {}
+      this._selectionChangeHandler = null;
+    }
     this.el.remove();
   }
 }

@@ -21,6 +21,11 @@ let appSettings = {
     chatgpt: '',
     ipLocation: ''
   },
+  uptimeKuma: {
+    url: '',
+    username: '',
+    password: ''
+  },
   toolOrder: [],
   activeTools: {
     'bcrypt-generate': true,

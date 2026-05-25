@@ -11,6 +11,7 @@ const stats = require("./stats")
 const history = require("./history")
 const clipboardTracker = require("./clipboard")
 const authenticator = require("./authenticator")
+const uptimeMonitor = require("./uptimeMonitor")
 const bcrypt = require("bcryptjs")
 const { spawn } = require("child_process")
 const { randomUUID } = require("crypto")
@@ -497,11 +498,13 @@ async function updateTrayIcon() {
 
     // Get effective theme based on user preference
     const effectiveTheme = getEffectiveTheme();
+    const uptimeTraySummary = uptimeMonitor.getTraySummary();
     
     // Send current stats to tray icon window
     trayIconWindow.webContents.send('update-tray-stats', {
       ...currentStats,
       timezones: timezones,
+      uptime: uptimeTraySummary,
       theme: effectiveTheme,
       settings: appSettings
     })
@@ -520,9 +523,11 @@ async function updateTrayIcon() {
     const baseWidth = 20; // Base padding
     const statWidth = enabledStatsCount * 18; // Each stat takes ~18px
     const timezoneWidth = timezones.length * 72; // Each timezone takes ~72px (only those shown in tray)
-    const padding = (enabledStatsCount + timezones.length) * 4; // 4px padding between items
+    const hasUptimeNotification = uptimeTraySummary.down > 0 || uptimeTraySummary.sslAttention > 0 || uptimeTraySummary.domainAttention > 0;
+    const uptimeWidth = hasUptimeNotification ? 50 : 0;
+    const padding = (enabledStatsCount + timezones.length + (hasUptimeNotification ? 1 : 0)) * 4; // 4px padding between items
     
-    const width = baseWidth + statWidth + timezoneWidth + padding;
+    const width = baseWidth + statWidth + timezoneWidth + uptimeWidth + padding;
     const height = 17;
     
     // Resize the tray window to accommodate all content
@@ -977,6 +982,16 @@ function startBrowserServers() {
       if (req.url === '/api/get-settings') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(appSettings));
+      } else if (req.url.startsWith('/api/uptime/monitors')) {
+        try {
+          const url = new URL(req.url, `http://localhost:${HTTP_PORT}`)
+          const data = await uptimeMonitor.getMonitorResponse({ force: url.searchParams.get('refresh') === '1' || url.searchParams.get('refresh') === 'true' })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(data))
+        } catch (error) {
+          res.writeHead(error.status || 500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ message: error.message || 'Unable to load uptime monitors' }))
+        }
       } else if (req.url === '/api/gdrive/status') {
         const auth = getGdriveAuthConfig()
         const s = getCloudBackupSettings()
@@ -1159,6 +1174,10 @@ function startBrowserServers() {
         const newSettings = JSON.parse(body);
         config.setAppSettings(newSettings);
         appSettings = config.getAppSettings();
+
+        if (newSettings.uptimeKuma !== undefined) {
+          uptimeMonitor.invalidateMonitorCache()
+        }
         
         // Broadcast settings update to WebSocket clients
         if (wss && connectedClients.size > 0) {
@@ -1505,6 +1524,40 @@ function startBrowserServers() {
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ success: false, error: error.message }))
+        }
+      } else if (req.url === '/api/uptime/monitors') {
+        try {
+          const payload = JSON.parse(body || '{}')
+          const r = await uptimeMonitor.addMonitor(payload)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(r))
+        } catch (error) {
+          res.writeHead(error.status || 500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ message: error.message || 'Unable to create monitor' }))
+        }
+      } else if (/^\/api\/uptime\/monitors\/\d+$/.test(req.url)) {
+        try {
+          const monitorId = Number(req.url.split('/').pop())
+          const payload = JSON.parse(body || '{}')
+          const r = payload?._method === 'DELETE'
+            ? await uptimeMonitor.deleteMonitor(monitorId, { deleteChildren: Boolean(payload.deleteChildren) })
+            : await uptimeMonitor.updateMonitor(monitorId, payload)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(r))
+        } catch (error) {
+          res.writeHead(error.status || 500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ message: error.message || 'Unable to update monitor' }))
+        }
+      } else if (/^\/api\/uptime\/monitors\/\d+\/pause$/.test(req.url)) {
+        try {
+          const monitorId = Number(req.url.split('/').at(-2))
+          const payload = JSON.parse(body || '{}')
+          const r = await uptimeMonitor.pauseMonitor(monitorId, Boolean(payload.paused))
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify(r))
+        } catch (error) {
+          res.writeHead(error.status || 500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ message: error.message || 'Unable to update monitor pause state' }))
         }
       } else if (req.url === '/api/export-all-data') {
         const exportData = {
@@ -2490,6 +2543,8 @@ app.whenReady().then(async () => {
     startBrowserServers()
   }
 
+  uptimeMonitor.startBackgroundSync()
+
   createWindow()
   createTrayIconWindow()
 
@@ -2694,6 +2749,26 @@ ipcMain.handle('gdrive:status', async () => {
   }
 })
 
+ipcMain.handle('uptime:get-monitors', async (event, payload) => {
+  return await uptimeMonitor.getMonitorResponse({ force: Boolean(payload?.refresh) })
+})
+
+ipcMain.handle('uptime:create-monitor', async (event, payload) => {
+  return await uptimeMonitor.addMonitor(payload || {})
+})
+
+ipcMain.handle('uptime:update-monitor', async (event, payload) => {
+  return await uptimeMonitor.updateMonitor(payload?.id, payload?.monitor || {})
+})
+
+ipcMain.handle('uptime:delete-monitor', async (event, payload) => {
+  return await uptimeMonitor.deleteMonitor(payload?.id, { deleteChildren: Boolean(payload?.deleteChildren) })
+})
+
+ipcMain.handle('uptime:pause-monitor', async (event, payload) => {
+  return await uptimeMonitor.pauseMonitor(payload?.id, Boolean(payload?.paused))
+})
+
 // Function to update dock visibility
 function updateDockVisibility() {
   if (process.platform === 'darwin') {
@@ -2740,6 +2815,10 @@ ipcMain.handle('update-settings', (event, newSettings) => {
   // Restart cloud backup scheduler when backup settings change.
   if (newSettings.cloudBackup !== undefined) {
     restartGdriveBackupScheduler()
+  }
+
+  if (newSettings.uptimeKuma !== undefined) {
+    uptimeMonitor.invalidateMonitorCache()
   }
   
   // Broadcast settings update to WebSocket clients
@@ -4619,6 +4698,8 @@ app.on("window-all-closed", (e) => {
 })
 
 app.on("before-quit", async () => {
+  uptimeMonitor.stopBackgroundSync()
+
   // Kill all Pinggy tunnel processes
   console.log('[Pinggy] Cleaning up all tunnel processes...');
   for (const [instanceId, instance] of pinggyInstances.entries()) {

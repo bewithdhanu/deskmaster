@@ -22,7 +22,8 @@ const TrayIcon = () => {
         battery: true
       },
       datetimeFormat: 'HH:mm:ss'
-    }
+    },
+    uptime: { down: 0, sslAttention: 0, domainAttention: 0 }
   });
 
   useEffect(() => {
@@ -138,6 +139,27 @@ const TrayIcon = () => {
       </td>
     );
   });
+
+  const uptime = stats.uptime || {};
+  const hasUptimeNotification = (uptime.down || 0) > 0 || (uptime.sslAttention || 0) > 0 || (uptime.domainAttention || 0) > 0;
+  if (hasUptimeNotification) {
+    enabledLabelCells.push(
+      <td key="uptime-label" className="stat-cell uptime-cell">
+        <div className="stat-label">UPT</div>
+      </td>
+    );
+    enabledValueCells.push(
+      <td key="uptime-value" className="stat-cell uptime-cell">
+        <div className="stat-value uptime-value" title="Uptime Down | SSL Attention | Domain Attention">
+          <span className="uptime-down">{uptime.down || 0}</span>
+          <span className="uptime-separator">|</span>
+          <span className="uptime-attention">{uptime.sslAttention || 0}</span>
+          <span className="uptime-separator">|</span>
+          <span className="uptime-attention">{uptime.domainAttention || 0}</span>
+        </div>
+      </td>
+    );
+  }
 
   return (
     <div className="tray-container">
