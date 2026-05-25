@@ -7,7 +7,7 @@
   
   [![macOS](https://img.shields.io/badge/macOS-10.12+-blue.svg)](https://www.apple.com/macos/)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-  [![Version](https://img.shields.io/badge/version-2.4.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
+  [![Version](https://img.shields.io/badge/version-2.7.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
 </div>
 
 
@@ -20,6 +20,26 @@
 - **Network activity** with upload/download speeds
 - **Battery status** (on laptops)
 - **Live updates** every second in the system tray
+- **Home dashboard cards** for both system stats and Uptime Kuma monitor health
+
+### 📈 **Uptime Monitoring**
+- **Uptime Kuma integration** as a native Uptime tab
+- **Local-first monitor cache** for fast loading and offline-friendly viewing
+- **Hourly background sync** with Uptime Kuma plus manual force refresh
+- **Optimistic create/edit/delete/pause/resume actions** with queued background sync
+- **Automatic retry and rollback** if a queued Uptime Kuma action fails twice
+- **SSL and domain expiry attention tracking** alongside down monitor counts
+- **Tray status indicator** for Down | SSL Attention | Domain Attention counts
+- **Settings-managed Uptime Kuma credentials** using URL, username, and password
+
+### 📝 **Notes**
+- **OneNote-style canvas editor** with movable/resizable text blocks
+- **Multi-select, drag, clone, cut/copy/paste, align, and clear-style actions**
+- **Improved OneNote paste handling** that preserves blocks, positions, and formatting
+- **Markdown editor** powered by BlockNote with structured Markdown paste support
+- **Plain text editor** powered by Monaco
+- **AI text editing tools** for Markdown and plain text selections
+- **Page tree management** with rename, archive, restore, delete, drag reorder, and multi-selection
 
 ### 🌍 **World Clocks**
 - **Multiple timezone support** - add unlimited timezones
@@ -91,11 +111,19 @@
 - **Optional encryption** - Protect exported data with encryption key
 - **Reset all data** - Complete data reset to factory defaults
 - **Authentication required** - All data operations require computer authentication
+- **Browser mode support** - Export/import/reset works through the desktop app API when web access is enabled
+
+### ☁️ **Cloud Backup**
+- **Google Drive backup** from Settings
+- **OAuth-based connection** with token storage in local app config
+- **Automatic scheduled backups** every 3-4 hours when enabled
+- **Manual backup now** action
+- **Retention control** that keeps only the latest 10 Drive backups
 
 ### 🌐 **Web Access** (New!)
 - **Browser access** - View and control DeskMaster from any web browser
 - **Real-time data** - Live system stats and timezone updates via WebSocket
-- **Full functionality** - All features work in browser (stats, timezones, settings)
+- **Full functionality** - Notes, Uptime, data management, cloud backup, tools, stats, timezones, and settings work through browser mode
 - **Easy setup** - Enable with a single toggle in Settings
 - **Secure** - Only accessible when explicitly enabled
 
@@ -212,7 +240,7 @@ DeskMaster can be accessed from any web browser on your local network:
    - API token authentication required for all requests
    - Can be disabled at any time from Settings
 
-**Note**: The desktop app must be running for web access to work. The browser connects to the app via WebSocket and HTTP API for real-time data. Export/Import features are only available in the desktop app (not in browser mode).
+**Note**: The desktop app must be running for web access to work. The browser connects to the app via WebSocket and HTTP API for real-time data and management actions.
 
 ## 🛠️ System Requirements
 

@@ -23,6 +23,11 @@ const Settings = () => {
     apiKeys: {
       chatgpt: '',
       ipLocation: ''
+    },
+    uptimeKuma: {
+      url: '',
+      username: '',
+      password: ''
     }
   });
 
@@ -33,6 +38,7 @@ const Settings = () => {
   const [showInTray, setShowInTray] = useState(true);
   const [showChatGPTKey, setShowChatGPTKey] = useState(false);
   const [showIPLocationKey, setShowIPLocationKey] = useState(false);
+  const [showUptimePassword, setShowUptimePassword] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -100,6 +106,17 @@ const Settings = () => {
     };
     await updateSettings(next);
     await loadBackupStatus();
+  };
+
+  const updateUptimeKumaSettings = (patch) => {
+    const newSettings = {
+      ...settings,
+      uptimeKuma: {
+        ...(settings.uptimeKuma || {}),
+        ...(patch || {})
+      }
+    };
+    updateSettings(newSettings);
   };
 
   const toggleStat = (statName) => {
@@ -666,6 +683,68 @@ const Settings = () => {
                   </button>
                 </div>
                 <div className="text-theme-muted text-xs mt-1">For IP location lookup tool</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Uptime Kuma Card */}
+          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
+            <div className="flex items-center gap-2 mb-3">
+              <MdSettings className="w-4 h-4 text-theme-muted" />
+              <h3 className="text-sm font-semibold text-theme-primary">Uptime Kuma</h3>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-theme-primary mb-1">
+                  Uptime Kuma URL
+                </label>
+                <input
+                  type="url"
+                  value={settings.uptimeKuma?.url || ''}
+                  onChange={(e) => updateUptimeKumaSettings({ url: e.target.value })}
+                  placeholder="https://uptime-kuma.example.com"
+                  className="w-full px-2 py-1.5 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+                <div className="text-theme-muted text-xs mt-1">Used by the Uptime tab to connect to your Uptime Kuma instance</div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-theme-primary mb-1">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={settings.uptimeKuma?.username || ''}
+                  onChange={(e) => updateUptimeKumaSettings({ username: e.target.value })}
+                  placeholder="Uptime Kuma username"
+                  className="w-full px-2 py-1.5 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-theme-primary mb-1">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showUptimePassword ? "text" : "password"}
+                    value={settings.uptimeKuma?.password || ''}
+                    onChange={(e) => updateUptimeKumaSettings({ password: e.target.value })}
+                    placeholder="Uptime Kuma password"
+                    className="w-full px-2 py-1.5 pr-8 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowUptimePassword(!showUptimePassword)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary transition-colors"
+                    title={showUptimePassword ? "Hide password" : "Show password"}
+                  >
+                    {showUptimePassword ? (
+                      <MdVisibilityOff className="w-4 h-4" />
+                    ) : (
+                      <MdVisibility className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                <div className="text-theme-muted text-xs mt-1">Token authentication is intentionally not used</div>
               </div>
             </div>
           </div>

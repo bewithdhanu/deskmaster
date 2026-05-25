@@ -38,6 +38,7 @@ export class Canvas extends EventEmitter {
     this._hintShown = false;
     this._surfaceResizeRaf = null;
     this._lastPointerPos = null;
+    this._documentHandlers = [];
 
     this._buildDOM();
     this._bindEvents();
@@ -188,6 +189,7 @@ export class Canvas extends EventEmitter {
     this.el.addEventListener('paste', handlePaste);
     // Paste when user triggers app/menu paste while cursor is inside the canvas.
     document.addEventListener('paste', handlePaste, true);
+    this._documentHandlers.push({ type: 'paste', handler: handlePaste, options: true });
 
     this.el.addEventListener(
       'wheel',
@@ -200,7 +202,7 @@ export class Canvas extends EventEmitter {
       { passive: false }
     );
 
-    document.addEventListener('keydown', (e) => {
+    const handleKeyDown = (e) => {
       const ae = document.activeElement;
       const tag = ae?.tagName?.toLowerCase?.() || '';
       const isTextField =
@@ -310,7 +312,9 @@ export class Canvas extends EventEmitter {
           return;
         }
       }
-    });
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    this._documentHandlers.push({ type: 'keydown', handler: handleKeyDown });
   }
 
   _reflowBlocks(blocks, { anchorX = 80, anchorY = 80, gap = 18 } = {}) {
@@ -627,6 +631,7 @@ export class Canvas extends EventEmitter {
     this._selectionManager.clear();
     const newBlocks = this._clipboard.map((snap) => this.addBlock({ x: snap.x + offset, y: snap.y + offset, content: snap.content, width: snap.width }));
     this._selectionManager.setMultiSelection(newBlocks);
+    this._selectionManager.setActive(newBlocks[0] || null);
     this._toolbar.syncState();
     this.emit('bulk:paste', this._clipboard);
   }
@@ -655,6 +660,29 @@ export class Canvas extends EventEmitter {
     this._clearMultiSelection();
     ids.forEach((id) => this.removeBlock(id));
     this.emit('bulk:delete', { count: ids.length });
+  }
+
+  _clearStylesForBlocks(blocks) {
+    const targets = (Array.isArray(blocks) ? blocks : []).filter((b) => b?._contentEl);
+    if (!targets.length) return false;
+
+    this._historyPush();
+    targets.forEach((b) => {
+      const plainText = b._contentEl.innerText || b._contentEl.textContent || '';
+      b._contentEl.textContent = plainText;
+      this.emit('content:changed', b.toJSON());
+    });
+    this._scheduleSurfaceResize();
+    this._toolbar.syncState();
+    return true;
+  }
+
+  _bulkClearStyles() {
+    const selected = this._selectionManager.getSelectedBlocks();
+    const targets = selected.length ? selected : this._selectionManager.activeBlock ? [this._selectionManager.activeBlock] : [];
+    const changed = this._clearStylesForBlocks(targets);
+    if (changed) this.emit('bulk:clear-styles', { count: targets.length });
+    return changed;
   }
 
   _bulkAlign(direction) {
@@ -696,7 +724,7 @@ export class Canvas extends EventEmitter {
     this._wireBlock(block);
     this._blocks.set(block.id, block);
     this._surfaceEl.appendChild(block.el);
-    this.emit('block:created', block.toJSON());
+    if (!_silent) this.emit('block:created', block.toJSON());
     this._scheduleSurfaceResize();
     return block;
   }
@@ -710,7 +738,7 @@ export class Canvas extends EventEmitter {
     }
     block.destroy();
     this._blocks.delete(id);
-    this.emit('block:deleted', { id });
+    if (!_silent) this.emit('block:deleted', { id });
     this._scheduleSurfaceResize();
   }
 
@@ -719,7 +747,7 @@ export class Canvas extends EventEmitter {
   }
 
   _watchSelectionChange() {
-    document.addEventListener('selectionchange', () => {
+    const handleSelectionChange = () => {
       const active = this._selectionManager.activeBlock;
       if (!active) return;
       const sel = window.getSelection();
@@ -727,7 +755,9 @@ export class Canvas extends EventEmitter {
         this._toolbar.show(active.el);
         this._toolbar._syncState();
       }
-    });
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    this._documentHandlers.push({ type: 'selectionchange', handler: handleSelectionChange });
 
     this._selectionManager.onChange((block) => {
       if (!block) {
@@ -747,9 +777,9 @@ export class Canvas extends EventEmitter {
     this._clearMultiSelection();
     this._selectionManager.clear();
     this._toolbar.syncState();
-    [...this._blocks.keys()].forEach((id) => this.removeBlock(id));
+    [...this._blocks.keys()].forEach((id) => this.removeBlock(id, true));
     if (state && Array.isArray(state.blocks)) {
-      state.blocks.forEach((b) => this.addBlock(b));
+      state.blocks.forEach((b) => this.addBlock({ ...b, _silent: true }));
     }
     this._scheduleSurfaceResize();
   }
@@ -784,6 +814,12 @@ export class Canvas extends EventEmitter {
 
   destroy() {
     clearTimeout(this._contentChangeTimer);
+    this._documentHandlers.forEach(({ type, handler, options }) => {
+      try {
+        document.removeEventListener(type, handler, options);
+      } catch {}
+    });
+    this._documentHandlers = [];
     if (this._surfaceResizeRaf) cancelAnimationFrame(this._surfaceResizeRaf);
     this._surfaceResizeRaf = null;
     if (this._mediaQuery && this._onSystemThemeChange) {

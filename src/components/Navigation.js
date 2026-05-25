@@ -1,5 +1,5 @@
 import React from 'react';
-import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity, MdNotes } from 'react-icons/md';
+import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity, MdNotes, MdComputer } from 'react-icons/md';
 
 const Navigation = ({ activeTab, onTabChange }) => {
   const menuItems = [
@@ -22,6 +22,11 @@ const Navigation = ({ activeTab, onTabChange }) => {
       id: 'notes',
       label: 'Notes',
       icon: <MdNotes className="w-5 h-5" />
+    },
+    {
+      id: 'uptime',
+      label: 'Uptime',
+      icon: <MdComputer className="w-5 h-5" />
     },
     {
       id: 'clipboard',
@@ -53,7 +58,9 @@ const Navigation = ({ activeTab, onTabChange }) => {
                 : 'hover:bg-theme-card-hover hover:text-theme-primary'
             }`}
           >
-            <span className="flex items-center justify-center flex-shrink-0">{item.icon}</span>
+            <span className="relative flex items-center justify-center flex-shrink-0 min-w-6">
+              {item.icon}
+            </span>
             <span className="font-medium text-xs text-center">{item.label}</span>
           </button>
         ))}

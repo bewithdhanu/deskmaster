@@ -370,6 +370,59 @@ const createBrowserIpcRenderer = () => {
             throw new Error(error.error || 'Failed to back up now')
           }
           return await response.json()
+        } else if (channel === 'uptime:get-monitors') {
+          const [payload] = args
+          const headers = await addApiTokenToHeaders()
+          const response = await fetch(`${API_BASE}/uptime/monitors${payload?.refresh ? '?refresh=1' : ''}`, { headers })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.message || 'Failed to load uptime monitors')
+          }
+          return await response.json()
+        } else if (channel === 'uptime:create-monitor') {
+          const [payload] = args
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/uptime/monitors`, { method: 'POST', headers, body: JSON.stringify(payload || {}) })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.message || 'Failed to create uptime monitor')
+          }
+          return await response.json()
+        } else if (channel === 'uptime:update-monitor') {
+          const [payload] = args
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/uptime/monitors/${encodeURIComponent(payload?.id || '')}`, { method: 'POST', headers, body: JSON.stringify(payload?.monitor || {}) })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.message || 'Failed to update uptime monitor')
+          }
+          return await response.json()
+        } else if (channel === 'uptime:delete-monitor') {
+          const [payload] = args
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/uptime/monitors/${encodeURIComponent(payload?.id || '')}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ _method: 'DELETE', deleteChildren: Boolean(payload?.deleteChildren) })
+          })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.message || 'Failed to delete uptime monitor')
+          }
+          return await response.json()
+        } else if (channel === 'uptime:pause-monitor') {
+          const [payload] = args
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' })
+          const response = await fetch(`${API_BASE}/uptime/monitors/${encodeURIComponent(payload?.id || '')}/pause`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ paused: Boolean(payload?.paused) })
+          })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.message || 'Failed to update uptime monitor pause state')
+          }
+          return await response.json()
         } else if (channel === 'toggle-auto-start') {
           const [enabled] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });

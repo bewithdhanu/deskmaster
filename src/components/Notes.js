@@ -334,6 +334,7 @@ function syncMarkdownTitleHeadingEditor(editor, pageTitle) {
     }
     const first = doc[0];
     if (first.type === 'heading' && Number(first.props?.level) === 1) {
+      if (inlineContentToPlainString(first.content) === title) return;
       editor.updateBlock(first, {
         type: 'heading',
         props: { level: 1 },
@@ -1158,6 +1159,10 @@ const Notes = () => {
     const frame = requestAnimationFrame(() => {
       const ed = blockNoteEditorRef.current;
       if (!ed) return;
+      const first = Array.isArray(ed.document) ? ed.document[0] : null;
+      const cursorBlock = ed.getTextCursorPosition?.()?.block;
+      const isEditingTitle = first && cursorBlock && cursorBlock.id === first.id;
+      if (isEditingTitle) return;
       markdownSuppressSaveUntilRef.current = Date.now() + 400;
       syncMarkdownTitleHeadingEditor(ed, markdownPageTitle);
     });

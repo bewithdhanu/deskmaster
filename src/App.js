@@ -5,6 +5,7 @@ import Tools from './components/Tools';
 import ClipboardHistory from './components/ClipboardHistory';
 import Authenticator from './components/Authenticator';
 import Notes from './components/Notes';
+import UptimeMonitor from './components/UptimeMonitor';
 import Settings from './components/Settings';
 import Navigation from './components/Navigation';
 import { getIpcRenderer } from './utils/electron';
@@ -176,6 +177,8 @@ function App() {
         return <Authenticator />;
       case 'notes':
         return <Notes />;
+      case 'uptime':
+        return <UptimeMonitor />;
       case 'settings':
         return <Settings />;
       default:
