@@ -45,6 +45,8 @@ let appSettings = {
   },
   cloudBackup: {
     provider: 'gdrive',
+    clientId: '',
+    clientSecret: '',
     enabled: false,
     intervalHours: 4,
     keepLast: 10,

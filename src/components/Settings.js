@@ -28,6 +28,14 @@ const Settings = () => {
       url: '',
       username: '',
       password: ''
+    },
+    cloudBackup: {
+      provider: 'gdrive',
+      clientId: '',
+      clientSecret: '',
+      enabled: false,
+      intervalHours: 4,
+      keepLast: 10
     }
   });
 
@@ -39,10 +47,11 @@ const Settings = () => {
   const [showChatGPTKey, setShowChatGPTKey] = useState(false);
   const [showIPLocationKey, setShowIPLocationKey] = useState(false);
   const [showUptimePassword, setShowUptimePassword] = useState(false);
+  const [showDriveClientSecret, setShowDriveClientSecret] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  const [backupStatus, setBackupStatus] = useState({ connected: false, enabled: false, intervalHours: 4, keepLast: 10, lastBackupAt: null, lastBackupStatus: null, lastBackupError: null, running: false });
+  const [backupStatus, setBackupStatus] = useState({ connected: false, enabled: false, intervalHours: 4, keepLast: 10, oauthConfigured: false, lastBackupAt: null, lastBackupStatus: null, lastBackupError: null, running: false });
   const [isConnectingDrive, setIsConnectingDrive] = useState(false);
   const [isBackingUpNow, setIsBackingUpNow] = useState(false);
 
@@ -800,18 +809,63 @@ const Settings = () => {
                   Stores backups in a Google Drive folder named <span className="text-theme-primary font-medium">DeskMaster Backups</span>, keeping the last {backupStatus.keepLast || 10}.
                 </div>
 
+                <div className="space-y-2 rounded border border-theme bg-theme-secondary px-3 py-2">
+                  <div>
+                    <label className="block text-xs font-medium text-theme-primary mb-1">
+                      Google OAuth Client ID
+                    </label>
+                    <input
+                      type="text"
+                      value={settings.cloudBackup?.clientId || ''}
+                      onChange={(e) => updateBackupSettings({ clientId: e.target.value })}
+                      placeholder="Google OAuth client ID"
+                      className="w-full px-2 py-1.5 bg-theme-card border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-theme-primary mb-1">
+                      Google OAuth Client Secret
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showDriveClientSecret ? "text" : "password"}
+                        value={settings.cloudBackup?.clientSecret || ''}
+                        onChange={(e) => updateBackupSettings({ clientSecret: e.target.value })}
+                        placeholder="Google OAuth client secret"
+                        className="w-full px-2 py-1.5 pr-8 bg-theme-card border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowDriveClientSecret(!showDriveClientSecret)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary transition-colors"
+                        title={showDriveClientSecret ? "Hide password" : "Show password"}
+                      >
+                        {showDriveClientSecret ? (
+                          <MdVisibilityOff className="w-4 h-4" />
+                        ) : (
+                          <MdVisibility className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                    <div className="text-theme-muted text-xs mt-1">
+                      Required in installed builds because release apps cannot read your development .env file.
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between gap-2 rounded border border-theme bg-theme-secondary px-3 py-2">
                   <div className="min-w-0">
                     <div className="text-theme-primary text-xs font-medium">Connection</div>
                     <div className="text-theme-muted text-xs truncate">
-                      {backupStatus.connected ? 'Connected' : 'Not connected'}
+                      {backupStatus.connected ? 'Connected' : backupStatus.oauthConfigured ? 'Not connected' : 'Add OAuth credentials first'}
                     </div>
                   </div>
                   <div className="flex gap-2">
                     {!backupStatus.connected ? (
                       <button
                         className="px-3 py-1.5 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-xs disabled:opacity-60"
-                        disabled={isConnectingDrive}
+                        disabled={isConnectingDrive || !backupStatus.oauthConfigured}
+                        title={!backupStatus.oauthConfigured ? 'Add Google OAuth Client ID and Client Secret first' : ''}
                         onClick={async () => {
                           setIsConnectingDrive(true);
                           try {
