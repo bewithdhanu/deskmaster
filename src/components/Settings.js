@@ -400,20 +400,21 @@ const Settings = () => {
   };
 
   const ToggleSwitch = ({ enabled, onChange, label, description }) => (
-    <div className="flex items-center justify-between py-1">
-      <div className="flex-1">
-        <div className="text-theme-primary font-medium text-xs">{label}</div>
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-theme bg-theme-secondary/60 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="text-theme-primary font-medium text-sm">{label}</div>
         {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
       </div>
       <button
         onClick={onChange}
-        className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 ${
-          enabled ? 'bg-red-500' : 'bg-theme-secondary'
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ${
+          enabled ? 'bg-red-500' : 'bg-theme-secondary border border-theme'
         }`}
+        aria-pressed={enabled}
       >
         <span
-          className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform duration-200 ${
-            enabled ? 'translate-x-3.5' : 'translate-x-0.5'
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+            enabled ? 'translate-x-6' : 'translate-x-1'
           }`}
         />
       </button>
@@ -421,15 +422,15 @@ const Settings = () => {
   );
 
   const SelectOption = ({ value, onChange, options, label, description }) => (
-    <div className="py-1">
-      <div className="mb-1">
-        <div className="text-theme-primary font-medium text-xs">{label}</div>
+    <div className="rounded-lg border border-theme bg-theme-secondary/60 px-4 py-3">
+      <div className="mb-2">
+        <div className="text-theme-primary font-medium text-sm">{label}</div>
         {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
       </div>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-2 py-1.5 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+        className="w-full px-3 py-2 bg-theme-card border border-theme rounded-md text-theme-primary text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -440,18 +441,106 @@ const Settings = () => {
     </div>
   );
 
+  const SectionCard = ({ id, icon: Icon, title, description, children }) => (
+    <section id={id} className="scroll-mt-6 rounded-xl border border-theme bg-theme-card shadow-sm">
+      <div className="flex items-start gap-3 border-b border-theme px-5 py-4">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-secondary text-theme-muted">
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-theme-primary">{title}</h3>
+          {description && <p className="mt-1 text-xs leading-5 text-theme-muted">{description}</p>}
+        </div>
+      </div>
+      <div className="space-y-3 p-5">{children}</div>
+    </section>
+  );
+
+  const StatusPill = ({ tone = 'muted', children }) => {
+    const toneClass = tone === 'success'
+      ? 'border-green-500/30 bg-green-500/10 text-green-500'
+      : tone === 'warning'
+        ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-500'
+        : tone === 'danger'
+          ? 'border-red-500/30 bg-red-500/10 text-red-500'
+          : 'border-theme bg-theme-secondary text-theme-muted';
+
+    return (
+      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClass}`}>
+        {children}
+      </span>
+    );
+  };
+
+  const settingsSections = [
+    { id: 'system-stats', label: 'System Stats', icon: MdMemory },
+    { id: 'world-clocks', label: 'World Clocks', icon: MdAccessTime },
+    { id: 'system-behavior', label: 'System', icon: MdPowerSettingsNew },
+    { id: 'appearance', label: 'Appearance', icon: MdPalette },
+    { id: 'api-keys', label: 'API Keys', icon: MdSettings },
+    { id: 'uptime-kuma', label: 'Uptime Kuma', icon: MdNetworkCheck },
+    { id: 'data-management', label: 'Data Management', icon: MdStorage },
+    { id: 'cloud-backup', label: 'Cloud Backup', icon: MdFileUpload }
+  ];
+
   return (
-    <div className="h-full flex flex-col bg-theme-primary overflow-y-auto p-4">
-      <div className="flex-1 mx-auto w-full">
-        {/* Responsive Grid Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          
-          {/* System Stats Card */}
-          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
-            <div className="flex items-center gap-2 mb-3">
-              <MdMemory className="w-4 h-4 text-theme-muted" />
-              <h3 className="text-sm font-semibold text-theme-primary">System Stats</h3>
+    <div className="h-full bg-theme-primary overflow-hidden">
+      <div className="flex h-full min-h-0">
+        <aside className="hidden w-64 shrink-0 border-r border-theme bg-theme-card/70 p-4 lg:block">
+          <div className="mb-5">
+            <div className="text-lg font-semibold text-theme-primary">Settings</div>
+            <div className="mt-1 text-xs leading-5 text-theme-muted">Configure DeskMaster tools, integrations, backup, and system behavior.</div>
+          </div>
+          <nav className="space-y-1">
+            {settingsSections.map((section) => {
+              const Icon = section.icon;
+              return (
+                <a
+                  key={section.id}
+                  href={`#${section.id}`}
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-theme-muted transition-colors hover:bg-theme-secondary hover:text-theme-primary"
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{section.label}</span>
+                </a>
+              );
+            })}
+          </nav>
+        </aside>
+
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 sm:px-6">
+            <div className="rounded-xl border border-theme bg-theme-card px-5 py-5 shadow-sm">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-500">DeskMaster</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-theme-primary">Settings</h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-theme-muted">
+                    A cleaner control center for tray stats, clocks, integrations, cloud backup, and data management.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <StatusPill tone={settings.webAccess ? 'success' : 'muted'}>
+                    Web {settings.webAccess ? 'On' : 'Off'}
+                  </StatusPill>
+                  <StatusPill tone={backupStatus.connected ? 'success' : backupStatus.oauthConfigured ? 'warning' : 'muted'}>
+                    Drive {backupStatus.connected ? 'Connected' : backupStatus.oauthConfigured ? 'Ready' : 'Not Set'}
+                  </StatusPill>
+                  <StatusPill tone={settings.autoStart ? 'success' : 'muted'}>
+                    Auto Start {settings.autoStart ? 'On' : 'Off'}
+                  </StatusPill>
+                </div>
+              </div>
             </div>
+
+            <div className="space-y-5">
+          
+              <SectionCard
+                id="system-stats"
+                icon={MdMemory}
+                title="System Stats"
+                description="Choose which live system metrics appear in DeskMaster and the tray."
+              >
             <div className="space-y-2">
               <ToggleSwitch
                 enabled={settings.stats.cpu}
@@ -484,14 +573,14 @@ const Settings = () => {
                 description="Show in tray"
               />
             </div>
-          </div>
+              </SectionCard>
 
-          {/* World Clocks Card */}
-          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
-            <div className="flex items-center gap-2 mb-3">
-              <MdAccessTime className="w-4 h-4 text-theme-muted" />
-              <h3 className="text-sm font-semibold text-theme-primary">World Clocks</h3>
-            </div>
+              <SectionCard
+                id="world-clocks"
+                icon={MdAccessTime}
+                title="World Clocks"
+                description="Set display formats and manage the timezones shown in the app and tray."
+              >
             <div className="space-y-3">
               <SelectOption
                 value={settings.datetimeFormat}
@@ -543,14 +632,14 @@ const Settings = () => {
                 </div>
               </div>
             </div>
-          </div>
+              </SectionCard>
 
-          {/* System Card */}
-          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
-            <div className="flex items-center gap-2 mb-3">
-              <MdPowerSettingsNew className="w-4 h-4 text-theme-muted" />
-              <h3 className="text-sm font-semibold text-theme-primary">System</h3>
-            </div>
+              <SectionCard
+                id="system-behavior"
+                icon={MdPowerSettingsNew}
+                title="System"
+                description="Control startup behavior, browser access, and macOS dock visibility."
+              >
             <div className="space-y-2">
               <ToggleSwitch
                 enabled={settings.autoStart}
@@ -591,14 +680,14 @@ const Settings = () => {
                 />
               )}
             </div>
-          </div>
+              </SectionCard>
 
-          {/* Appearance Card */}
-          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
-            <div className="flex items-center gap-2 mb-3">
-              <MdPalette className="w-4 h-4 text-theme-muted" />
-              <h3 className="text-sm font-semibold text-theme-primary">Appearance</h3>
-            </div>
+              <SectionCard
+                id="appearance"
+                icon={MdPalette}
+                title="Appearance"
+                description="Choose the app theme used across DeskMaster."
+              >
             <div className="space-y-2">
               <SelectOption
                 value={settings.theme}
@@ -612,14 +701,14 @@ const Settings = () => {
                 description="Color scheme"
               />
             </div>
-          </div>
+              </SectionCard>
 
-          {/* API Keys Card */}
-          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
-            <div className="flex items-center gap-2 mb-3">
-              <MdSettings className="w-4 h-4 text-theme-muted" />
-              <h3 className="text-sm font-semibold text-theme-primary">API Keys</h3>
-            </div>
+              <SectionCard
+                id="api-keys"
+                icon={MdSettings}
+                title="API Keys"
+                description="Store service keys used by built-in productivity tools."
+              >
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-theme-primary mb-1">
@@ -694,14 +783,14 @@ const Settings = () => {
                 <div className="text-theme-muted text-xs mt-1">For IP location lookup tool</div>
               </div>
             </div>
-          </div>
+              </SectionCard>
 
-          {/* Uptime Kuma Card */}
-          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
-            <div className="flex items-center gap-2 mb-3">
-              <MdSettings className="w-4 h-4 text-theme-muted" />
-              <h3 className="text-sm font-semibold text-theme-primary">Uptime Kuma</h3>
-            </div>
+              <SectionCard
+                id="uptime-kuma"
+                icon={MdNetworkCheck}
+                title="Uptime Kuma"
+                description="Connect DeskMaster to your Uptime Kuma instance using URL, username, and password."
+              >
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-theme-primary mb-1">
@@ -756,14 +845,14 @@ const Settings = () => {
                 <div className="text-theme-muted text-xs mt-1">Token authentication is intentionally not used</div>
               </div>
             </div>
-          </div>
+              </SectionCard>
 
-          {/* Data Management Card */}
-          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
-            <div className="flex items-center gap-2 mb-3">
-              <MdSettings className="w-4 h-4 text-theme-muted" />
-              <h3 className="text-sm font-semibold text-theme-primary">Data Management</h3>
-            </div>
+              <SectionCard
+                id="data-management"
+                icon={MdStorage}
+                title="Data Management"
+                description="Export, import, or reset DeskMaster data with authentication prompts."
+              >
             <div className="space-y-2">
               <button
                 onClick={handleExport}
@@ -795,14 +884,14 @@ const Settings = () => {
                 <p>Reset: Permanently delete all data and restore defaults.</p>
               </div>
             </div>
-          </div>
+              </SectionCard>
 
-          {/* Cloud Backup Card */}
-          <div className="bg-theme-card border border-theme rounded-lg p-4 hover:bg-theme-card-hover transition-colors duration-200">
-            <div className="flex items-center gap-2 mb-3">
-              <MdSettings className="w-4 h-4 text-theme-muted" />
-              <h3 className="text-sm font-semibold text-theme-primary">Cloud Backup (Google Drive)</h3>
-            </div>
+              <SectionCard
+                id="cloud-backup"
+                icon={MdFileUpload}
+                title="Cloud Backup"
+                description="Back up DeskMaster data to Google Drive and keep the latest backup history."
+              >
 
             <div className="space-y-2">
                 <div className="text-theme-muted text-xs">
@@ -951,9 +1040,11 @@ const Settings = () => {
                   ) : null}
                 </div>
               </div>
-          </div>
+              </SectionCard>
 
-        </div>
+            </div>
+          </div>
+        </main>
       </div>
 
       {/* Timezone Modal */}
