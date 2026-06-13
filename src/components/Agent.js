@@ -14,12 +14,15 @@ import {
   MdNoteAdd,
   MdEdit,
   MdSearch,
-  MdImage
+  MdAttachFile,
+  MdDownload,
+  MdCheck,
+  MdArrowDropDown
 } from 'react-icons/md';
 import { getIpcRenderer, isElectron } from '../utils/electron';
 import { getEnabledProviders, getProviderModel, PROVIDER_META, isProviderEnabled } from '../utils/agentProvidersClient';
 import { getRoute, navigate, subscribe } from '../utils/appRoute';
-import { readImageFiles, MAX_CHAT_IMAGES } from '../utils/agentImageUpload';
+import { readAttachmentFiles, MAX_CHAT_ATTACHMENTS } from '../utils/agentFileUpload';
 import AgentMarkdown from './agent/AgentMarkdown';
 import SaveToNotesDialog from './agent/SaveToNotesDialog';
 
@@ -39,7 +42,7 @@ const THINKING_MESSAGES = [
   'Almost there…'
 ];
 
-function InputToolbarToggle({ id, enabled, onToggle, disabled }) {
+function CapabilityMenuItem({ id, enabled, onToggle, disabled }) {
   const meta = CAPABILITY_META[id];
   const Icon = meta.icon;
   return (
@@ -47,15 +50,11 @@ function InputToolbarToggle({ id, enabled, onToggle, disabled }) {
       type="button"
       disabled={disabled}
       onClick={() => onToggle(id, !enabled)}
-      title={meta.description}
-      className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
-        enabled
-          ? 'bg-red-500/15 text-red-500'
-          : 'text-theme-muted hover:bg-theme-secondary hover:text-theme-primary'
-      } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-theme-primary transition-colors hover:bg-theme-secondary disabled:opacity-50"
     >
-      <Icon className="h-3.5 w-3.5" />
-      {meta.label}
+      <Icon className="h-4 w-4 shrink-0 text-theme-muted" />
+      <span className="flex-1">{meta.label}</span>
+      {enabled && <MdCheck className="h-4 w-4 shrink-0 text-red-500" />}
     </button>
   );
 }
@@ -78,8 +77,11 @@ const Agent = () => {
   const [provider, setProvider] = useState('openai');
   const [model, setModel] = useState('');
   const [kbStatus, setKbStatus] = useState(null);
+  const [isReindexingKb, setIsReindexingKb] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState(null);
-  const [citations, setCitations] = useState([]);
+  const [streamingCitations, setStreamingCitations] = useState([]);
+  const [showInputMenu, setShowInputMenu] = useState(false);
+  const [showModelMenu, setShowModelMenu] = useState(false);
   const [showIntegrations, setShowIntegrations] = useState(false);
   const [composioToolkits, setComposioToolkits] = useState([]);
   const [connectingComposioSlug, setConnectingComposioSlug] = useState(null);
@@ -87,12 +89,13 @@ const Agent = () => {
   const [copyFeedbackId, setCopyFeedbackId] = useState(null);
   const [editingMessageIndex, setEditingMessageIndex] = useState(null);
   const [editDraft, setEditDraft] = useState('');
-  const [pendingImages, setPendingImages] = useState([]);
+  const [pendingAttachments, setPendingAttachments] = useState([]);
+  const [streamingAttachments, setStreamingAttachments] = useState([]);
+  const [generatedFiles, setGeneratedFiles] = useState([]);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [chatSearchResults, setChatSearchResults] = useState(null);
   const messagesEndRef = useRef(null);
   const streamBufferRef = useRef('');
-  const integrationsRef = useRef(null);
   const activeChatIdRef = useRef(null);
   const streamingSessionIdRef = useRef(null);
   const chatSearchQueryRef = useRef('');
@@ -101,7 +104,9 @@ const Agent = () => {
   const loadChatsRef = useRef(null);
   const resetDraftChatRef = useRef(null);
   const runChatSearchRef = useRef(null);
-  const imageInputRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const inputMenuRef = useRef(null);
+  const modelMenuRef = useRef(null);
 
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
@@ -129,6 +134,30 @@ const Agent = () => {
     [messages]
   );
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (inputMenuRef.current && !inputMenuRef.current.contains(event.target)) {
+        setShowInputMenu(false);
+        setShowIntegrations(false);
+      }
+      if (modelMenuRef.current && !modelMenuRef.current.contains(event.target)) {
+        setShowModelMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const enabledCapabilityCount = useMemo(
+    () => Object.values(capabilities).filter(Boolean).length,
+    [capabilities]
+  );
+
+  const modelLabel = useMemo(() => {
+    const modelName = model || getProviderModel(settings, provider) || 'default';
+    return modelName;
+  }, [model, provider, settings]);
+
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
@@ -144,17 +173,6 @@ const Agent = () => {
     }, 2200);
     return () => clearInterval(interval);
   }, [isStreaming, streamingText]);
-
-  useEffect(() => {
-    if (!showIntegrations) return undefined;
-    const onDocClick = (e) => {
-      if (integrationsRef.current && !integrationsRef.current.contains(e.target)) {
-        setShowIntegrations(false);
-      }
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [showIntegrations]);
 
   const loadChats = async () => {
     try {
@@ -202,10 +220,10 @@ const Agent = () => {
     setMessages([]);
     setEditingMessageIndex(null);
     setEditDraft('');
-    setCitations([]);
+    setStreamingCitations([]);
     setPendingConfirmation(null);
     setInput('');
-    setPendingImages([]);
+    setPendingAttachments([]);
     setIsStreaming(false);
     setStreamingText('');
     setStatusMessage('');
@@ -340,8 +358,23 @@ const Agent = () => {
         setStatusMessage('');
       }
 
+      if (payload.type === 'media' && payload.attachment) {
+        setStreamingAttachments((prev) => {
+          const key = payload.attachment.dataUrl || payload.attachment.url;
+          if (!key || prev.some((item) => (item.dataUrl || item.url) === key)) return prev;
+          return [...prev, payload.attachment];
+        });
+      }
+
+      if (payload.type === 'generated_file' && payload.file?.name) {
+        setGeneratedFiles((prev) => {
+          if (prev.some((item) => item.name === payload.file.name)) return prev;
+          return [...prev, payload.file];
+        });
+      }
+
       if (payload.type === 'kb_citations') {
-        setCitations(payload.citations || []);
+        setStreamingCitations(payload.citations || []);
       }
 
       if (payload.type === 'tool_start') {
@@ -359,6 +392,7 @@ const Agent = () => {
         setStatusMessage('');
         streamBufferRef.current = '';
         setStreamingText('');
+        setStreamingAttachments([]);
         streamingSessionIdRef.current = null;
         if (payload.sessionId) {
           activeChatIdRef.current = payload.sessionId;
@@ -382,6 +416,7 @@ const Agent = () => {
         setStatusMessage('');
         streamBufferRef.current = '';
         setStreamingText('');
+        setStreamingCitations([]);
         streamingSessionIdRef.current = null;
       }
     };
@@ -495,50 +530,79 @@ const Agent = () => {
     persistProviderModel(nextProvider, nextModel);
   };
 
-  const handleImageSelect = async (event) => {
+  const splitAttachmentsForSend = (attachments) => {
+    const images = []
+    const files = []
+    for (const item of attachments || []) {
+      if (item?.dataUrl) {
+        images.push({ name: item.name, mediaType: item.mediaType, dataUrl: item.dataUrl })
+      } else if (item?.extractedText) {
+        files.push({
+          kind: 'document',
+          name: item.name,
+          mediaType: item.mediaType,
+          extractedText: item.extractedText,
+          size: item.size
+        })
+      }
+    }
+    return { images, files }
+  }
+
+  const handleFileSelect = async (event) => {
     const { files } = event.target;
     if (!files?.length || isStreaming) return;
 
     try {
-      const attachments = await readImageFiles(files, pendingImages.length);
+      const attachments = await readAttachmentFiles(files, pendingAttachments.length, ipcRenderer);
       if (attachments.length) {
-        setPendingImages((prev) => [...prev, ...attachments].slice(0, MAX_CHAT_IMAGES));
+        setPendingAttachments((prev) => [...prev, ...attachments].slice(0, MAX_CHAT_ATTACHMENTS));
       }
     } catch (error) {
-      alert(error.message || 'Failed to attach image');
+      alert(error.message || 'Failed to attach file');
     } finally {
       event.target.value = '';
     }
   };
 
-  const handleAttachImages = async () => {
-    if (isStreaming || pendingImages.length >= MAX_CHAT_IMAGES) return;
+  const handleAttachFiles = async () => {
+    if (isStreaming || pendingAttachments.length >= MAX_CHAT_ATTACHMENTS) return;
 
     if (isElectron()) {
       try {
         const attachments = await ipcRenderer.invoke('agent:pick-images', {
-          existingCount: pendingImages.length
+          existingCount: pendingAttachments.length
         });
         if (attachments?.length) {
-          setPendingImages((prev) => [...prev, ...attachments].slice(0, MAX_CHAT_IMAGES));
+          setPendingAttachments((prev) => [...prev, ...attachments].slice(0, MAX_CHAT_ATTACHMENTS));
         }
       } catch (error) {
-        alert(error.message || 'Failed to attach image');
+        alert(error.message || 'Failed to attach file');
       }
       return;
     }
 
-    imageInputRef.current?.click();
+    fileInputRef.current?.click();
   };
 
-  const removePendingImage = (index) => {
-    setPendingImages((prev) => prev.filter((_, i) => i !== index));
+  const removePendingAttachment = (index) => {
+    setPendingAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const sendMessage = async (text, confirmedToolIds = [], imagesOverride = null) => {
-    const imagesToSend = imagesOverride ?? pendingImages.map(({ name, mediaType, dataUrl }) => ({ name, mediaType, dataUrl }));
+  const openGeneratedFile = async (fileName) => {
+    if (!fileName) return;
+    try {
+      await ipcRenderer.invoke('agent:open-generated-file', fileName);
+    } catch (error) {
+      alert(error.message || 'Could not open file');
+    }
+  };
+
+  const sendMessage = async (text, confirmedToolIds = [], attachmentsOverride = null) => {
+    const attachmentsToSend = attachmentsOverride ?? pendingAttachments;
+    const { images: imagesToSend, files: filesToSend } = splitAttachmentsForSend(attachmentsToSend);
     const userMessage = text.trim();
-    if ((!userMessage && !imagesToSend.length) || isStreaming) return;
+    if ((!userMessage && !imagesToSend.length && !filesToSend.length) || isStreaming) return;
     if (enabledProviders.length === 0) {
       alert('Enable and configure at least one LLM provider in Settings > AI Agent.');
       return;
@@ -546,13 +610,16 @@ const Agent = () => {
 
     const capsForTurn = { ...capabilities };
     setInput('');
-    setPendingImages([]);
+    setPendingAttachments([]);
+    setGeneratedFiles([]);
+    setStreamingAttachments([]);
+    setStreamingCitations([]);
     setIsStreaming(true);
     setStreamingText('');
     setStatusMessage('Thinking…');
     setThinkingIndex(0);
     streamBufferRef.current = '';
-    setCitations([]);
+    setStreamingCitations([]);
     setPendingConfirmation(null);
 
     setMessages((prev) => [
@@ -561,6 +628,7 @@ const Agent = () => {
         role: 'user',
         content: userMessage,
         ...(imagesToSend.length ? { images: imagesToSend } : {}),
+        ...(filesToSend.length ? { files: filesToSend } : {}),
         timestamp: new Date().toISOString()
       }
     ]);
@@ -587,6 +655,7 @@ const Agent = () => {
         sessionId,
         message: userMessage,
         ...(imagesToSend.length ? { images: imagesToSend } : {}),
+        ...(filesToSend.length ? { files: filesToSend } : {}),
         capabilities: capsForTurn,
         provider,
         model: model || undefined,
@@ -649,11 +718,16 @@ const Agent = () => {
   };
 
   const handleReindexKb = async () => {
+    if (isReindexingKb) return;
+    setIsReindexingKb(true);
+    setShowInputMenu(true);
     try {
       await ipcRenderer.invoke('agent:kb-reindex');
       await loadKbStatus();
     } catch (error) {
       alert(`Reindex failed: ${error.message}`);
+    } finally {
+      setIsReindexingKb(false);
     }
   };
 
@@ -747,7 +821,7 @@ const Agent = () => {
     setEditingMessageIndex(null);
     setEditDraft('');
     setPendingConfirmation(null);
-    setCitations([]);
+    setStreamingCitations([]);
 
     try {
       await ipcRenderer.invoke('agent:replace-messages', {
@@ -759,6 +833,91 @@ const Agent = () => {
     } catch (error) {
       alert(`Failed to edit message: ${error.message}`);
     }
+  };
+
+  const renderMessageFiles = (files) => {
+    if (!Array.isArray(files) || !files.length) return null;
+    return (
+      <div className="mb-2 flex flex-wrap gap-2">
+        {files.map((file, idx) => (
+          <div
+            key={`${file.name || 'file'}-${idx}`}
+            className="inline-flex items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-2 py-1 text-[11px]"
+            title={file.extractedText ? file.extractedText.slice(0, 500) : file.name}
+          >
+            <MdAttachFile className="h-3.5 w-3.5" />
+            <span className="max-w-[10rem] truncate">{file.name || `Document ${idx + 1}`}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderAssistantMedia = (attachments) => {
+    if (!Array.isArray(attachments) || !attachments.length) return null;
+    return (
+      <div className="mb-2 flex flex-wrap gap-2">
+        {attachments.map((item, idx) => {
+          if (item.kind === 'video' && (item.url || item.dataUrl)) {
+            const src = item.url || item.dataUrl;
+            return (
+              <video
+                key={`${item.name || 'video'}-${idx}`}
+                src={src}
+                controls
+                className="max-h-56 max-w-full rounded-lg border border-theme"
+              />
+            );
+          }
+          if (item.path && item.name) {
+            return (
+              <button
+                key={`${item.name}-${idx}`}
+                type="button"
+                onClick={() => openGeneratedFile(item.name)}
+                className="inline-flex items-center gap-1 rounded-lg border border-theme bg-theme-secondary px-2 py-1 text-[11px] text-theme-primary hover:bg-theme-card"
+              >
+                <MdDownload className="h-3.5 w-3.5" />
+                {item.name}
+              </button>
+            );
+          }
+          const src = item.dataUrl || item.url;
+          if (!src) return null;
+          return (
+            <a
+              key={`${item.name || 'media'}-${idx}`}
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block overflow-hidden rounded-lg border border-theme"
+            >
+              <img src={src} alt={item.name || `Media ${idx + 1}`} className="max-h-56 max-w-full object-contain" />
+            </a>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderMessageSources = (sources) => {
+    if (!Array.isArray(sources) || !sources.length) return null;
+    return (
+      <div className="mt-3 border-t border-theme pt-2">
+        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-theme-muted">Sources</div>
+        <div className="flex flex-wrap gap-1.5">
+          {sources.map((c, i) => (
+            <span
+              key={`${c.title}-${i}`}
+              className="rounded-full border border-theme bg-theme-secondary/60 px-2.5 py-0.5 text-[10px] text-theme-muted"
+              title={c.sourceType ? `${c.title} (${c.sourceType})` : c.title}
+            >
+              {c.title}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   const renderMessageImages = (images) => {
@@ -790,10 +949,13 @@ const Agent = () => {
     const isError = msg.isError;
     const content = String(msg.content || '').trim();
     const messageImages = Array.isArray(msg.images) ? msg.images : [];
+    const messageFiles = Array.isArray(msg.files) ? msg.files : [];
+    const assistantMedia = Array.isArray(msg.attachments) ? msg.attachments : [];
+    const messageCitations = Array.isArray(msg.citations) ? msg.citations : [];
     const messageKey = `${originalIndex}-${msg.timestamp || originalIndex}`;
     const isEditing = isUser && editingMessageIndex === originalIndex;
     const showAssistantActions = !isUser && content.length > 0;
-    const hasVisibleContent = Boolean(content) || messageImages.length > 0;
+    const hasVisibleContent = Boolean(content) || messageImages.length > 0 || messageFiles.length > 0 || assistantMedia.length > 0;
 
     if (isUser && !hasVisibleContent) return null;
 
@@ -854,10 +1016,15 @@ const Agent = () => {
           {isUser ? (
             <>
               {renderMessageImages(messageImages)}
+              {renderMessageFiles(messageFiles)}
               {content ? <div className="whitespace-pre-wrap">{content}</div> : null}
             </>
           ) : (
-            <AgentMarkdown content={content} className={isError ? 'text-red-400' : ''} />
+            <>
+              {renderAssistantMedia(assistantMedia)}
+              <AgentMarkdown content={content} className={isError ? 'text-red-400' : ''} />
+              {renderMessageSources(messageCitations)}
+            </>
           )}
           {isUser && content && !isStreaming && (
             <div className="mt-2 flex items-center gap-1 border-t border-white/20 pt-2">
@@ -901,7 +1068,7 @@ const Agent = () => {
 
   const thinkingLabel = statusMessage || THINKING_MESSAGES[thinkingIndex];
   const noProviders = enabledProviders.length === 0;
-  const canSend = Boolean(input.trim()) || pendingImages.length > 0;
+  const canSend = Boolean(input.trim()) || pendingAttachments.length > 0;
 
   return (
     <div className="flex h-full bg-theme-primary">
@@ -961,26 +1128,13 @@ const Agent = () => {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {citations.length > 0 && (
-          <div className="border-b border-theme bg-theme-secondary/40 px-4 py-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-theme-muted mb-1">Sources</div>
-            <div className="flex flex-wrap gap-1">
-              {citations.map((c, i) => (
-                <span key={i} className="rounded-full border border-theme bg-theme-card px-2 py-0.5 text-[10px] text-theme-muted">
-                  {c.title}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="flex-1 overflow-y-auto px-4 py-4">
           {!messages.length && !isStreaming && (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <MdSmartToy className="mb-3 h-12 w-12 text-theme-muted" />
               <h2 className="text-lg font-semibold text-theme-primary">DeskMaster Agent</h2>
               <p className="mt-2 max-w-md text-sm text-theme-muted">
-                Simple AI chat by default. Use the toolbar below to enable Knowledge Base, tools, integrations, or change model.
+                Ask anything, attach files, or use the + menu to enable Knowledge Base, tools, and integrations.
               </p>
               {noProviders && (
                 <p className="mt-3 text-sm text-red-400">
@@ -1012,9 +1166,27 @@ const Agent = () => {
                 <div className="mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-theme-muted">
                   <MdSmartToy className="h-3 w-3" /> Agent
                 </div>
+                {renderAssistantMedia(streamingAttachments)}
                 <AgentMarkdown content={streamingText} />
+                {renderMessageSources(streamingCitations)}
                 <span className="ml-0.5 inline-block h-4 w-1 animate-pulse bg-red-500" />
               </div>
+            </div>
+          )}
+
+          {generatedFiles.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2 px-1">
+              {generatedFiles.map((file) => (
+                <button
+                  key={file.name}
+                  type="button"
+                  onClick={() => openGeneratedFile(file.name)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-theme bg-theme-card px-3 py-2 text-xs text-theme-primary hover:bg-theme-secondary"
+                >
+                  <MdDownload className="h-3.5 w-3.5" />
+                  Download {file.name}
+                </button>
+              ))}
             </div>
           )}
 
@@ -1033,21 +1205,28 @@ const Agent = () => {
         <div className="border-t border-theme bg-theme-card/50 p-4">
           <form onSubmit={handleSubmit}>
             <div className="rounded-xl border border-theme bg-theme-secondary focus-within:ring-2 focus-within:ring-red-500/40">
-              {pendingImages.length > 0 && (
+              {pendingAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-2 border-b border-theme px-3 py-2">
-                  {pendingImages.map((img, idx) => (
-                    <div key={`pending-${img.name}-${idx}`} className="relative">
-                      <img
-                        src={img.dataUrl}
-                        alt={img.name || `Attachment ${idx + 1}`}
-                        className="h-16 w-16 rounded-lg border border-theme object-cover"
-                      />
+                  {pendingAttachments.map((item, idx) => (
+                    <div key={`pending-${item.name}-${idx}`} className="relative">
+                      {item.dataUrl ? (
+                        <img
+                          src={item.dataUrl}
+                          alt={item.name || `Attachment ${idx + 1}`}
+                          className="h-16 w-16 rounded-lg border border-theme object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-16 min-w-[8rem] max-w-[12rem] items-center gap-1 rounded-lg border border-theme bg-theme-card px-2 text-[11px] text-theme-primary">
+                          <MdAttachFile className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{item.name || `Document ${idx + 1}`}</span>
+                        </div>
+                      )}
                       <button
                         type="button"
-                        onClick={() => removePendingImage(idx)}
+                        onClick={() => removePendingAttachment(idx)}
                         disabled={isStreaming}
                         className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-theme-primary text-theme-muted shadow hover:text-red-500 disabled:opacity-50"
-                        title="Remove image"
+                        title="Remove attachment"
                       >
                         <MdClose className="h-3 w-3" />
                       </button>
@@ -1056,15 +1235,15 @@ const Agent = () => {
                 </div>
               )}
               <input
-                ref={imageInputRef}
+                ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif"
+                accept="image/*,.pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.md,.json,.html,.htm,.csv,.xml,.yaml,.yml"
                 multiple
                 tabIndex={-1}
                 aria-hidden="true"
                 className="pointer-events-none absolute h-px w-px opacity-0"
                 style={{ left: '-9999px' }}
-                onChange={handleImageSelect}
+                onChange={handleFileSelect}
               />
               <textarea
                 value={input}
@@ -1076,139 +1255,193 @@ const Agent = () => {
                   }
                 }}
                 placeholder={noProviders ? 'Enable a provider in Settings to chat…' : 'Message DeskMaster Agent…'}
-                rows={2}
+                rows={1}
                 disabled={isStreaming || noProviders}
-                className="w-full resize-none bg-transparent px-4 py-3 text-sm text-theme-primary placeholder:text-theme-muted focus:outline-none"
+                className="w-full resize-none bg-transparent px-3 py-3 text-sm text-theme-primary placeholder:text-theme-muted focus:outline-none"
               />
-              <div className="flex flex-wrap items-center gap-1 border-t border-theme px-2 py-1.5">
-                {Object.keys(CAPABILITY_META).map((key) => (
-                  <InputToolbarToggle
-                    key={key}
-                    id={key}
-                    enabled={capabilities[key]}
-                    onToggle={toggleCapability}
-                    disabled={isStreaming}
-                  />
-                ))}
-
-                {capabilities.knowledgeBase && (
+              <div className="flex items-center gap-1 px-2 pb-2">
+                <div className="relative" ref={inputMenuRef}>
                   <button
                     type="button"
-                    onClick={handleReindexKb}
-                    title={`KB: ${kbStatus?.documents || 0} docs, ${kbStatus?.chunks || 0} chunks`}
+                    onClick={() => {
+                      setShowInputMenu((v) => !v);
+                      setShowModelMenu(false);
+                    }}
                     disabled={isStreaming}
-                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-theme-muted hover:bg-theme-card hover:text-theme-primary disabled:opacity-50"
+                    title="Add tools & attachments"
+                    className={`relative inline-flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
+                      showInputMenu || enabledCapabilityCount > 0 || isReindexingKb
+                        ? 'border-theme bg-theme-card text-theme-primary'
+                        : 'border-transparent text-theme-muted hover:bg-theme-card hover:text-theme-primary'
+                    } disabled:opacity-50`}
                   >
-                    <MdRefresh className="h-3.5 w-3.5" />
+                    {isReindexingKb ? (
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-theme-muted border-t-red-500" />
+                    ) : (
+                      <MdAdd className="h-5 w-5" />
+                    )}
                   </button>
-                )}
-
-                <div className="relative ml-1" ref={integrationsRef}>
-                  <button
-                    type="button"
-                    disabled={isStreaming}
-                    onClick={() => setShowIntegrations((v) => !v)}
-                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium ${
-                      showIntegrations ? 'bg-theme-card text-theme-primary' : 'text-theme-muted hover:bg-theme-card hover:text-theme-primary'
-                    }`}
-                  >
-                    <MdTune className="h-3.5 w-3.5" />
-                    Connect apps
-                  </button>
-                  {showIntegrations && (
-                    <div className="absolute bottom-full left-0 z-20 mb-2 w-72 rounded-xl border border-theme bg-theme-primary p-3 shadow-xl">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-xs font-semibold text-theme-primary">Composio integrations</span>
-                        <button type="button" onClick={() => setShowIntegrations(false)} className="text-theme-muted hover:text-theme-primary">
-                          <MdClose className="h-4 w-4" />
-                        </button>
+                  {showInputMenu && (
+                    <div className="absolute bottom-full left-0 z-30 mb-2 w-72 overflow-hidden rounded-xl border border-theme bg-theme-primary shadow-xl">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleAttachFiles();
+                          setShowInputMenu(false);
+                        }}
+                        disabled={isStreaming || pendingAttachments.length >= MAX_CHAT_ATTACHMENTS}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-theme-primary hover:bg-theme-secondary disabled:opacity-50"
+                      >
+                        <MdAttachFile className="h-4 w-4 text-theme-muted" />
+                        Add photos & files
+                      </button>
+                      <div className="border-t border-theme" />
+                      <div className="p-1">
+                        {Object.keys(CAPABILITY_META).map((key) => (
+                          <CapabilityMenuItem
+                            key={key}
+                            id={key}
+                            enabled={capabilities[key]}
+                            onToggle={toggleCapability}
+                            disabled={isStreaming}
+                          />
+                        ))}
                       </div>
-                      <p className="mb-2 text-[10px] text-theme-muted">Connect OAuth apps for the agent. Complete authorization in the popup window. You can connect multiple accounts per app.</p>
-                      <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
-                        {composioToolkits.map((t) => (
-                          <div key={t.slug} className="rounded-lg border border-theme/60 bg-theme-secondary/30 p-2">
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <span className="text-[10px] font-semibold uppercase tracking-wide text-theme-primary">{t.name}</span>
-                              {connectingComposioSlug === t.slug ? (
-                                <button
-                                  type="button"
-                                  onClick={() => cancelComposioConnection(t.slug)}
-                                  className="text-[10px] text-theme-muted hover:text-theme-primary inline-flex items-center gap-1"
-                                >
-                                  <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                  Cancel
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => connectComposioToolkit(t.slug)}
-                                  className="text-[10px] text-red-500 hover:text-red-400"
-                                >
-                                  {t.accounts?.length ? '+ Add' : 'Connect'}
-                                </button>
-                              )}
-                            </div>
-                            {t.accounts?.length > 0 ? (
-                              <div className="space-y-1">
-                                {t.accounts.map((account) => (
+                      {capabilities.knowledgeBase && (
+                        <>
+                          <div className="border-t border-theme" />
+                          <button
+                            type="button"
+                            onClick={handleReindexKb}
+                            disabled={isStreaming || isReindexingKb}
+                            title={`KB: ${kbStatus?.documents || 0} docs, ${kbStatus?.chunks || 0} chunks`}
+                            className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-theme-primary hover:bg-theme-secondary disabled:opacity-50"
+                          >
+                            {isReindexingKb ? (
+                              <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-theme-muted border-t-red-500" />
+                            ) : (
+                              <MdRefresh className="h-4 w-4 shrink-0 text-theme-muted" />
+                            )}
+                            <span className="flex-1">{isReindexingKb ? 'Reindexing knowledge base…' : 'Reindex knowledge base'}</span>
+                          </button>
+                        </>
+                      )}
+                      <div className="border-t border-theme" />
+                      <button
+                        type="button"
+                        disabled={isStreaming}
+                        onClick={() => setShowIntegrations((v) => !v)}
+                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm text-theme-primary hover:bg-theme-secondary disabled:opacity-50"
+                      >
+                        <MdTune className="h-4 w-4 text-theme-muted" />
+                        <span className="flex-1">Connect apps</span>
+                        <MdArrowDropDown className={`h-4 w-4 text-theme-muted transition-transform ${showIntegrations ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showIntegrations && (
+                        <div className="max-h-56 overflow-y-auto border-t border-theme bg-theme-secondary/20 p-2">
+                          <p className="mb-2 px-1 text-[10px] text-theme-muted">Connect OAuth apps for the agent.</p>
+                          {composioToolkits.map((t) => (
+                            <div key={t.slug} className="mb-2 rounded-lg border border-theme/60 bg-theme-primary p-2">
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-theme-primary">{t.name}</span>
+                                {connectingComposioSlug === t.slug ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => cancelComposioConnection(t.slug)}
+                                    className="text-[10px] text-theme-muted hover:text-theme-primary"
+                                  >
+                                    Cancel
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => connectComposioToolkit(t.slug)}
+                                    className="text-[10px] text-red-500 hover:text-red-400"
+                                  >
+                                    {t.accounts?.length ? '+ Add' : 'Connect'}
+                                  </button>
+                                )}
+                              </div>
+                              {t.accounts?.length > 0 ? (
+                                t.accounts.map((account) => (
                                   <div key={account.id} className="truncate text-[10px] text-green-500" title={account.label}>
                                     {account.label}
                                   </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-[10px] text-theme-muted">Not connected</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                                ))
+                              ) : (
+                                <p className="text-[10px] text-theme-muted">Not connected</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
 
-                <div className="ml-auto flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleAttachImages}
-                    disabled={isStreaming || pendingImages.length >= MAX_CHAT_IMAGES}
-                    title={`Attach image (${pendingImages.length}/${MAX_CHAT_IMAGES})`}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-theme-muted transition-colors hover:bg-theme-card hover:text-theme-primary disabled:opacity-50"
-                  >
-                    <MdImage className="h-4 w-4" />
-                  </button>
+                <div className="flex-1" />
+
+                <div className="relative" ref={modelMenuRef}>
                   {enabledProviders.length > 0 && (
-                    <select
-                      value={provider}
-                      onChange={(e) => handleProviderChange(e.target.value)}
-                      disabled={isStreaming}
-                      className="rounded-lg border border-theme bg-theme-card px-2 py-1.5 text-xs text-theme-primary"
-                      title="Model provider"
-                    >
-                      {enabledProviders.map((id) => (
-                        <option key={id} value={id}>{PROVIDER_META[id]?.label || id}</option>
-                      ))}
-                    </select>
+                    <>
+                      <button
+                        type="button"
+                        disabled={isStreaming}
+                        onClick={() => {
+                          setShowModelMenu((v) => !v);
+                          setShowInputMenu(false);
+                        }}
+                        className="inline-flex items-center gap-0.5 rounded-full px-2.5 py-1.5 text-xs font-medium text-theme-muted transition-colors hover:bg-theme-card hover:text-theme-primary disabled:opacity-50"
+                      >
+                        <span className="max-w-[9rem] truncate">{modelLabel}</span>
+                        <MdArrowDropDown className="h-4 w-4 shrink-0" />
+                      </button>
+                      {showModelMenu && (
+                        <div className="absolute bottom-full right-0 z-30 mb-2 w-64 rounded-xl border border-theme bg-theme-primary p-3 shadow-xl">
+                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-theme-muted">Provider</div>
+                          <div className="mb-3 space-y-1">
+                            {enabledProviders.map((id) => (
+                              <button
+                                key={id}
+                                type="button"
+                                onClick={() => handleProviderChange(id)}
+                                className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                                  provider === id
+                                    ? 'bg-red-500/10 text-red-500'
+                                    : 'text-theme-primary hover:bg-theme-secondary'
+                                }`}
+                              >
+                                <span>{PROVIDER_META[id]?.label || id}</span>
+                                {provider === id && <MdCheck className="h-4 w-4" />}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-theme-muted">Model</div>
+                          <input
+                            type="text"
+                            value={model}
+                            onChange={(e) => {
+                              setModel(e.target.value);
+                              persistProviderModel(provider, e.target.value);
+                            }}
+                            disabled={isStreaming}
+                            placeholder="Model name"
+                            className="w-full rounded-lg border border-theme bg-theme-secondary px-3 py-2 text-xs font-mono text-theme-primary focus:outline-none focus:ring-2 focus:ring-red-500/30"
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
-                  <input
-                    type="text"
-                    value={model}
-                    onChange={(e) => {
-                      setModel(e.target.value);
-                      persistProviderModel(provider, e.target.value);
-                    }}
-                    disabled={isStreaming || !enabledProviders.length}
-                    placeholder="Model"
-                    className="w-28 rounded-lg border border-theme bg-theme-card px-2 py-1.5 text-xs text-theme-primary font-mono"
-                    title="Model name"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isStreaming || !canSend || noProviders}
-                    className="btn btn-primary flex h-9 w-9 items-center justify-center p-0"
-                  >
-                    <MdSend className="h-4 w-4" />
-                  </button>
                 </div>
+
+                <button
+                  type="submit"
+                  disabled={isStreaming || !canSend || noProviders}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white transition-opacity hover:bg-red-600 disabled:opacity-40"
+                  title="Send message"
+                >
+                  <MdSend className="h-4 w-4" />
+                </button>
               </div>
             </div>
           </form>

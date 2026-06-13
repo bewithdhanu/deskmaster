@@ -1,6 +1,18 @@
 const agentChatStore = require('./agentChatStore')
 const agentKnowledge = require('./agentKnowledge')
 const composioBridge = require('./composioBridge')
+const path = require('path')
+const fs = require('fs')
+const { extractTextFromBuffer, inferMediaType } = require('./agentDocumentExtract')
+const { getGeneratedDir } = require('./agentDocumentGenerator')
+
+function getRequestPath(req) {
+  try {
+    return new URL(req.url, 'http://localhost').pathname
+  } catch {
+    return String(req.url || '').split('?')[0]
+  }
+}
 
 function handleAgentGet(req, res, appSettings, deps = {}) {
   const url = new URL(req.url, 'http://localhost')
@@ -78,11 +90,38 @@ function handleAgentGet(req, res, appSettings, deps = {}) {
     return true
   }
 
+  if (url.pathname === '/api/agent/generated') {
+    try {
+      const name = path.basename(url.searchParams.get('name') || '')
+      if (!name) throw new Error('name required')
+      const generatedDir = path.resolve(getGeneratedDir())
+      const filePath = path.resolve(generatedDir, name)
+      if (!filePath.startsWith(`${generatedDir}${path.sep}`)) throw new Error('Invalid file path')
+      if (!fs.existsSync(filePath)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'File not found' }))
+        return true
+      }
+      const data = fs.readFileSync(filePath)
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': `attachment; filename="${name}"`
+      })
+      res.end(data)
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: error.message }))
+    }
+    return true
+  }
+
   return false
 }
 
 async function handleAgentPost(req, res, body, appSettings, deps = {}) {
-  if (req.url === '/api/agent/chats') {
+  const pathname = getRequestPath(req)
+
+  if (pathname === '/api/agent/chats') {
     try {
       const payload = JSON.parse(body || '{}')
       const chat = agentChatStore.createChat({
@@ -104,7 +143,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/chat/delete') {
+  if (pathname === '/api/agent/chat/delete') {
     try {
       const payload = JSON.parse(body || '{}')
       agentChatStore.deleteChat(payload.sessionId)
@@ -117,7 +156,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/chat/update') {
+  if (pathname === '/api/agent/chat/update') {
     try {
       const payload = JSON.parse(body || '{}')
       if (!payload.sessionId) throw new Error('sessionId required')
@@ -135,7 +174,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/chat/replace-messages') {
+  if (pathname === '/api/agent/chat/replace-messages') {
     try {
       const payload = JSON.parse(body || '{}')
       if (!payload.sessionId) throw new Error('sessionId required')
@@ -150,7 +189,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/kb-reindex') {
+  if (pathname === '/api/agent/kb-reindex') {
     try {
       const result = await agentKnowledge.reindexAll(appSettings, appSettings?.agent?.knowledgeBase)
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -162,7 +201,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/chat') {
+  if (pathname === '/api/agent/chat') {
     try {
       const payload = JSON.parse(body || '{}')
       const agentOrchestrator = require('./agentOrchestrator')
@@ -171,6 +210,8 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
         sessionId: payload.sessionId,
         message: payload.message,
         images: payload.images,
+        files: payload.files,
+        attachments: payload.attachments,
         capabilities: payload.capabilities,
         provider: payload.provider,
         model: payload.model,
@@ -186,7 +227,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/test-provider') {
+  if (pathname === '/api/agent/test-provider') {
     try {
       const payload = JSON.parse(body || '{}')
       const agentProviders = require('./agentProviders')
@@ -203,7 +244,28 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/composio/connect') {
+  if (pathname === '/api/agent/extract-document') {
+    try {
+      const payload = JSON.parse(body || '{}')
+      if (!payload?.name || !payload?.base64) throw new Error('name and base64 required')
+      const buffer = Buffer.from(payload.base64, 'base64')
+      const extractedText = await extractTextFromBuffer(buffer, payload.name, payload.mediaType)
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({
+        kind: 'document',
+        name: payload.name,
+        mediaType: inferMediaType(payload.name, payload.mediaType),
+        extractedText,
+        size: buffer.length
+      }))
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: error.message }))
+    }
+    return true
+  }
+
+  if (pathname === '/api/agent/composio/connect') {
     try {
       const payload = JSON.parse(body || '{}')
       const toolkitSlug = payload.toolkitSlug
@@ -222,7 +284,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/composio/wait') {
+  if (pathname === '/api/agent/composio/wait') {
     try {
       const payload = JSON.parse(body || '{}')
       const toolkitSlug = payload.toolkitSlug
@@ -240,7 +302,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/composio/cancel-wait') {
+  if (pathname === '/api/agent/composio/cancel-wait') {
     try {
       const payload = JSON.parse(body || '{}')
       const toolkitSlug = payload.toolkitSlug
@@ -255,7 +317,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/composio/disconnect') {
+  if (pathname === '/api/agent/composio/disconnect') {
     try {
       const payload = JSON.parse(body || '{}')
       const result = await composioBridge.disconnectToolkit(appSettings?.agent, payload.accountId)
@@ -268,7 +330,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/set-notes-save-parent') {
+  if (pathname === '/api/agent/set-notes-save-parent') {
     try {
       const payload = JSON.parse(body || '{}')
       if (!deps.setAgentNotesSaveParent) throw new Error('Notes save not available')
@@ -282,7 +344,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
     return true
   }
 
-  if (req.url === '/api/agent/save-to-notes') {
+  if (pathname === '/api/agent/save-to-notes') {
     try {
       const payload = JSON.parse(body || '{}')
       if (!deps.saveAgentResponseToNotes) throw new Error('Notes save not available')

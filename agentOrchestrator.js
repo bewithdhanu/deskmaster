@@ -8,6 +8,11 @@ const {
   toPersistedToolCall,
   getMessageTextContent
 } = require('./agentMessageFormat')
+const {
+  extractMediaFromAssistantText,
+  mergeAssistantAttachments
+} = require('./agentResponseMedia')
+const { splitAttachments, MAX_CHAT_ATTACHMENTS } = require('./agentFileAttach')
 
 const MAX_TOOL_ITERATIONS = 12
 
@@ -52,6 +57,9 @@ async function buildSystemPrompt({ capabilities, kbContext, toolsEnabled }) {
       '\nYou have access to DeskMaster tools. Use them when they help answer the user.',
       'For current system metrics use get_system_stats. For historical performance (CPU/RAM/disk trends, counts above a CPU threshold, last 7 days, etc.) use query_system_stats_history — same data as the Performance screen (up to ~30 days).',
       'For IP questions: use get_public_ip for the address; use get_ip_location for city, country, region, ISP, or coordinates (omit IP to look up the current public IP).',
+      'When the user asks for downloadable documents, use generate_pdf, generate_docx, generate_xlsx, or generate_pptx and share the returned file details.',
+      'When users attach documents (PDF, Word, Excel, PowerPoint, text, JSON, HTML), their extracted text is included in the message — analyze it carefully.',
+      'Vision-capable models can analyze attached images. When you generate images or share media URLs, use markdown image syntax so the UI can display them.',
       'Never attempt to access clipboard or authenticator data.'
     )
   }
@@ -182,13 +190,13 @@ function scheduleChatTitleGeneration(ctx) {
   void maybeGenerateChatTitle(ctx)
 }
 
-const MAX_CHAT_IMAGES = 5
+const MAX_CHAT_IMAGES = MAX_CHAT_ATTACHMENTS
 
 function normalizeChatImages(images) {
   if (!Array.isArray(images)) return []
   return images
     .filter((img) => img && typeof img.dataUrl === 'string' && img.dataUrl.startsWith('data:image/'))
-    .slice(0, MAX_CHAT_IMAGES)
+    .slice(0, MAX_CHAT_ATTACHMENTS)
     .map((img) => ({
       name: String(img.name || 'image'),
       mediaType: String(img.mediaType || 'image/png'),
@@ -196,11 +204,51 @@ function normalizeChatImages(images) {
     }))
 }
 
+function normalizeChatFiles(files) {
+  if (!Array.isArray(files)) return []
+  return files
+    .filter((file) => file && String(file.extractedText || '').trim())
+    .slice(0, MAX_CHAT_ATTACHMENTS)
+    .map((file) => ({
+      kind: 'document',
+      name: String(file.name || 'document'),
+      mediaType: String(file.mediaType || 'text/plain'),
+      extractedText: String(file.extractedText || ''),
+      size: file.size || null
+    }))
+}
+
+function normalizeIncomingAttachments({ images, files, attachments }) {
+  if (Array.isArray(attachments) && attachments.length) {
+    return splitAttachments(attachments)
+  }
+  return {
+    images: normalizeChatImages(images),
+    files: normalizeChatFiles(files)
+  }
+}
+
+function buildAssistantMessage(content, streamAttachments = [], citations = []) {
+  const attachments = mergeAssistantAttachments(
+    streamAttachments,
+    extractMediaFromAssistantText(content)
+  )
+  return {
+    role: 'assistant',
+    content,
+    ...(attachments.length ? { attachments } : {}),
+    ...(citations.length ? { citations } : {}),
+    timestamp: new Date().toISOString()
+  }
+}
+
 async function runChatTurn({
   appSettings,
   sessionId,
   message,
   images,
+  files,
+  attachments,
   capabilities,
   provider,
   model,
@@ -209,9 +257,9 @@ async function runChatTurn({
 }) {
   const agentSettings = appSettings?.agent || {}
   const textMessage = typeof message === 'string' ? message.trim() : ''
-  const imageAttachments = normalizeChatImages(images)
-  if (!textMessage && !imageAttachments.length) {
-    throw new Error('Message or image attachment required')
+  const { images: imageAttachments, files: fileAttachments } = normalizeIncomingAttachments({ images, files, attachments })
+  if (!textMessage && !imageAttachments.length && !fileAttachments.length) {
+    throw new Error('Message or attachment required')
   }
   let chat = agentChatStore.readChat(sessionId)
   if (!chat) {
@@ -231,6 +279,7 @@ async function runChatTurn({
     role: 'user',
     content: textMessage,
     ...(imageAttachments.length ? { images: imageAttachments } : {}),
+    ...(fileAttachments.length ? { files: fileAttachments } : {}),
     timestamp: new Date().toISOString()
   })
 
@@ -245,7 +294,7 @@ async function runChatTurn({
   if (effectiveCapabilities.knowledgeBase) {
     emit(webContents, { type: 'status', message: 'Searching knowledge base...' })
     kbContext = await retrieveKbContext(
-      textMessage || 'User sent image attachment(s)',
+      textMessage || (fileAttachments.length ? 'User sent document attachment(s)' : 'User sent image attachment(s)'),
       appSettings,
       kbSettings.maxContextChunks || 8
     )
@@ -253,6 +302,10 @@ async function runChatTurn({
       emit(webContents, { type: 'kb_citations', citations: kbContext.map((c) => ({ title: c.title, sourceType: c.sourceType })) })
     }
   }
+
+  const turnCitations = kbContext.length
+    ? kbContext.map((c) => ({ title: c.title, sourceType: c.sourceType }))
+    : []
 
   const tools = await collectTools(effectiveCapabilities, agentSettings)
   const toolsEnabled = tools.length > 0
@@ -270,6 +323,7 @@ async function runChatTurn({
       role: m.role,
       content: m.content,
       images: m.images,
+      files: m.files,
       tool_calls: m.tool_calls,
       tool_call_id: m.tool_call_id
     }))
@@ -291,6 +345,7 @@ async function runChatTurn({
     iteration += 1
     let assistantText = ''
     let toolCalls = []
+    let streamAttachments = []
 
     await agentProviders.streamChat({
       agentSettings: buildAgentSettings(appSettings),
@@ -303,18 +358,21 @@ async function runChatTurn({
           assistantText += ev.content
           emit(webContents, { type: 'token', content: ev.content, sessionId })
         }
+        if (ev.type === 'media' && ev.attachment) {
+          streamAttachments = mergeAssistantAttachments(streamAttachments, [ev.attachment])
+          emit(webContents, { type: 'media', attachment: ev.attachment, sessionId })
+        }
         if (ev.type === 'tool_calls') {
           toolCalls = ev.toolCalls || []
+        }
+        if (ev.type === 'done' && ev.attachments?.length) {
+          streamAttachments = mergeAssistantAttachments(streamAttachments, ev.attachments)
         }
       }
     })
 
     if (!toolCalls.length) {
-      const assistantMsg = {
-        role: 'assistant',
-        content: assistantText,
-        timestamp: new Date().toISOString()
-      }
+      const assistantMsg = buildAssistantMessage(assistantText, streamAttachments, turnCitations)
       agentChatStore.appendMessage(sessionId, assistantMsg)
       emit(webContents, { type: 'done', sessionId, message: assistantMsg })
       scheduleChatTitleGeneration({
@@ -353,6 +411,9 @@ async function runChatTurn({
         composioEnabled: Boolean(effectiveCapabilities.composioIntegrations)
       })
       emit(webContents, { type: 'tool_result', ...result, sessionId })
+      if (result?.result?.path && result?.result?.name) {
+        emit(webContents, { type: 'generated_file', file: result.result, sessionId })
+      }
 
       if (result.requiresConfirmation) {
         const confirmMsg = {

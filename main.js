@@ -4637,7 +4637,12 @@ function setupAgentModule() {
       const doc = agentKnowledge.updateCustomDocument(id, args)
       await agentKnowledge.reindexAll({ agent: agentSettings, apiKeys: appSettings.apiKeys }, appSettings.agent?.knowledgeBase)
       return doc
-    }
+    },
+    generatePdf: (args) => require('./agentDocumentGenerator').generatePdf(args),
+    generateDocx: (args) => require('./agentDocumentGenerator').generateDocx(args),
+    generateXlsx: (args) => require('./agentDocumentGenerator').generateXlsx(args),
+    generatePptx: (args) => require('./agentDocumentGenerator').generatePptx(args),
+    openGeneratedFile: (filePath) => shell.openPath(filePath)
   })
 }
 

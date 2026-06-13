@@ -1,6 +1,7 @@
 export const PROVIDER_META = {
   openai: { label: 'OpenAI' },
   anthropic: { label: 'Anthropic' },
+  gemini: { label: 'Google Gemini' },
   openrouter: { label: 'OpenRouter' },
   bedrock: { label: 'AWS Bedrock' },
   local: { label: 'Local Server' }
@@ -12,6 +13,8 @@ function providerHasCredentials(providerId, p) {
     case 'openai':
     case 'anthropic':
     case 'openrouter':
+      return Boolean(p.apiKey)
+    case 'gemini':
       return Boolean(p.apiKey)
     case 'bedrock':
       return Boolean(p.accessKeyId && p.secretAccessKey)

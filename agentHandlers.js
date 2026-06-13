@@ -1,4 +1,5 @@
 const { ipcMain, dialog, BrowserWindow } = require('electron')
+const path = require('path')
 const agentChatStore = require('./agentChatStore')
 const agentOrchestrator = require('./agentOrchestrator')
 const agentProviders = require('./agentProviders')
@@ -6,9 +7,10 @@ const agentTools = require('./agentTools')
 const agentKnowledge = require('./agentKnowledge')
 const composioBridge = require('./composioBridge')
 const {
-  MAX_CHAT_IMAGES,
-  readImageAttachmentsFromPaths
-} = require('./agentImageAttach')
+  MAX_CHAT_ATTACHMENTS,
+  readAttachmentsFromPaths
+} = require('./agentFileAttach')
+const { extractTextFromBuffer, inferMediaType } = require('./agentDocumentExtract')
 
 let agentHandlersRegistered = false
 
@@ -72,6 +74,8 @@ function registerAgentHandlers(deps) {
       sessionId: payload?.sessionId,
       message: payload?.message,
       images: payload?.images,
+      files: payload?.files,
+      attachments: payload?.attachments,
       capabilities: payload?.capabilities,
       provider: payload?.provider,
       model: payload?.model,
@@ -82,23 +86,49 @@ function registerAgentHandlers(deps) {
 
   ipcMain.handle('agent:pick-images', async (event, payload) => {
     const existingCount = Number(payload?.existingCount) || 0
-    const remaining = Math.max(0, MAX_CHAT_IMAGES - existingCount)
+    const remaining = Math.max(0, MAX_CHAT_ATTACHMENTS - existingCount)
     if (!remaining) {
-      throw new Error(`Maximum ${MAX_CHAT_IMAGES} images per message`)
+      throw new Error(`Maximum ${MAX_CHAT_ATTACHMENTS} attachments per message`)
     }
 
     const browserWindow = BrowserWindow.fromWebContents(event.sender)
     const result = await dialog.showOpenDialog(browserWindow || undefined, {
-      title: 'Attach images',
+      title: 'Attach files',
       properties: ['openFile', 'multiSelections'],
       filters: [{
-        name: 'Images',
-        extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif']
+        name: 'Images & documents',
+        extensions: [
+          'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif',
+          'pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt',
+          'txt', 'md', 'json', 'html', 'htm', 'csv', 'xml', 'yaml', 'yml'
+        ]
       }]
     })
 
     if (result.canceled || !result.filePaths?.length) return []
-    return readImageAttachmentsFromPaths(result.filePaths, existingCount)
+    return readAttachmentsFromPaths(result.filePaths, existingCount)
+  })
+
+  ipcMain.handle('agent:extract-document', async (event, payload) => {
+    if (!payload?.name || !payload?.base64) throw new Error('name and base64 required')
+    const buffer = Buffer.from(payload.base64, 'base64')
+    const extractedText = await extractTextFromBuffer(buffer, payload.name, payload.mediaType)
+    return {
+      kind: 'document',
+      name: payload.name,
+      mediaType: inferMediaType(payload.name, payload.mediaType),
+      extractedText,
+      size: buffer.length
+    }
+  })
+
+  ipcMain.handle('agent:open-generated-file', async (event, fileName) => {
+    const { shell } = require('electron')
+    const { getGeneratedDir } = require('./agentDocumentGenerator')
+    const generatedDir = path.resolve(getGeneratedDir())
+    const filePath = path.resolve(generatedDir, path.basename(String(fileName || '')))
+    if (!filePath.startsWith(`${generatedDir}${path.sep}`)) throw new Error('Invalid file path')
+    return shell.openPath(filePath)
   })
 
   ipcMain.handle('agent:test-provider', async (event, providerId) => {

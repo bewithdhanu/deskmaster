@@ -7,8 +7,13 @@ const {
   getToolCallName,
   getToolCallArgumentsString,
   normalizeUserMessageContentForAnthropic,
-  normalizeUserMessageContentForBedrock
+  normalizeUserMessageContentForBedrock,
+  normalizeUserMessageContentForGemini,
+  getEffectiveUserText,
+  getMessageImages,
+  parseDataUrl
 } = require('./agentMessageFormat')
+const { attachmentFromInlineData } = require('./agentResponseMedia')
 
 function resolveAgentProviderConfig(agentSettings, providerId) {
   const provider = providerId || agentSettings?.defaultProvider || 'openai'
@@ -371,6 +376,175 @@ async function bedrockStream({ accessKeyId, secretAccessKey, region, model, mess
   return { content: assistantText, toolCalls: [] }
 }
 
+function convertToGeminiContents(messages) {
+  const contents = []
+
+  for (const m of messages) {
+    if (m.role === 'system') continue
+
+    if (m.role === 'tool') {
+      contents.push({
+        role: 'user',
+        parts: [{
+          functionResponse: {
+            name: m.name || 'tool',
+            response: {
+              result: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')
+            }
+          }
+        }]
+      })
+      continue
+    }
+
+    if (m.role === 'assistant' && m.tool_calls?.length) {
+      const parts = []
+      if (m.content) parts.push({ text: String(m.content) })
+      for (const tc of m.tool_calls) {
+        const name = getToolCallName(tc)
+        if (!name) continue
+        let args = {}
+        try {
+          args = JSON.parse(getToolCallArgumentsString(tc) || '{}')
+        } catch {}
+        parts.push({ functionCall: { name, args } })
+      }
+      contents.push({ role: 'model', parts })
+      continue
+    }
+
+    if (m.role === 'user') {
+      contents.push({
+        role: 'user',
+        parts: normalizeUserMessageContentForGemini(m)
+      })
+      continue
+    }
+
+    contents.push({
+      role: 'model',
+      parts: [{ text: String(m.content || '') }]
+    })
+  }
+
+  return contents
+}
+
+function geminiStream({ apiKey, model, messages, tools, onEvent }) {
+  const systemText = messages.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n')
+  const contents = convertToGeminiContents(messages)
+  const modelId = model || 'gemini-2.0-flash'
+  const body = { contents, generationConfig: { temperature: 0.7 } }
+  if (systemText) body.systemInstruction = { parts: [{ text: systemText }] }
+  if (tools?.length) {
+    body.tools = [{
+      functionDeclarations: tools.map((t) => ({
+        name: t.name,
+        description: t.description,
+        parameters: t.parameters
+      }))
+    }]
+  }
+
+  const payload = JSON.stringify(body)
+
+  return new Promise((resolve, reject) => {
+    let assistantText = ''
+    const toolCalls = []
+    const assistantAttachments = []
+
+    const req = https.request(
+      {
+        hostname: 'generativelanguage.googleapis.com',
+        port: 443,
+        path: `/v1beta/models/${encodeURIComponent(modelId)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload)
+        },
+        timeout: 120000
+      },
+      (res) => {
+        if (res.statusCode >= 400) {
+          let errBody = ''
+          res.on('data', (c) => { errBody += c })
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(errBody)
+              reject(new Error(parsed.error?.message || `Gemini error ${res.statusCode}`))
+            } catch {
+              reject(new Error(`Gemini error ${res.statusCode}`))
+            }
+          })
+          return
+        }
+
+        let buffer = ''
+        res.on('data', (chunk) => {
+          buffer += chunk.toString()
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed.startsWith('data:')) continue
+            const dataStr = trimmed.slice(5).trim()
+            if (!dataStr) continue
+            try {
+              const event = JSON.parse(dataStr)
+              const parts = event.candidates?.[0]?.content?.parts || []
+              for (const part of parts) {
+                if (part.text) {
+                  assistantText += part.text
+                  onEvent({ type: 'token', content: part.text })
+                }
+                if (part.inlineData?.data) {
+                  const attachment = attachmentFromInlineData(
+                    part.inlineData.mimeType,
+                    part.inlineData.data,
+                    part.inlineData.mimeType?.startsWith('video/') ? 'Generated video' : 'Generated image'
+                  )
+                  if (attachment) {
+                    assistantAttachments.push(attachment)
+                    onEvent({ type: 'media', attachment })
+                  }
+                }
+                if (part.functionCall?.name) {
+                  toolCalls.push({
+                    id: `call_${toolCalls.length}_${part.functionCall.name}`,
+                    name: part.functionCall.name,
+                    arguments: JSON.stringify(part.functionCall.args || {})
+                  })
+                }
+              }
+            } catch {}
+          }
+        })
+
+        res.on('end', () => {
+          if (toolCalls.length) {
+            onEvent({ type: 'tool_calls', toolCalls })
+          }
+          onEvent({
+            type: 'done',
+            content: assistantText,
+            attachments: assistantAttachments
+          })
+          resolve({ content: assistantText, toolCalls, attachments: assistantAttachments })
+        })
+      }
+    )
+
+    req.on('error', reject)
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('Request timeout'))
+    })
+    req.write(payload)
+    req.end()
+  })
+}
+
 async function streamChat({ agentSettings, providerId, model, messages, tools, onEvent }) {
   const resolved = resolveAgentProviderConfig(agentSettings, providerId)
   const provider = resolved.provider
@@ -384,6 +558,17 @@ async function streamChat({ agentSettings, providerId, model, messages, tools, o
     return anthropicStream({
       apiKey: resolved.apiKey,
       model: model || resolved.model,
+      messages,
+      tools,
+      onEvent
+    })
+  }
+
+  if (provider === 'gemini') {
+    if (!resolved.apiKey) throw new Error('Gemini API key not configured in Settings > Agent')
+    return geminiStream({
+      apiKey: resolved.apiKey,
+      model: model || resolved.model || 'gemini-2.0-flash',
       messages,
       tools,
       onEvent

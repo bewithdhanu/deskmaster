@@ -862,6 +862,30 @@ const createBrowserIpcRenderer = () => {
             throw new Error(error.error || 'Failed to create chat');
           }
           return await response.json();
+        } else if (channel === 'agent:extract-document') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/extract-document`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload || {})
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Failed to extract document');
+          return result;
+        } else if (channel === 'agent:open-generated-file') {
+          const [fileName] = args;
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/agent/generated?name=${encodeURIComponent(fileName || '')}`, { headers });
+          if (!response.ok) throw new Error('Failed to download file');
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName || 'download';
+          link.click();
+          URL.revokeObjectURL(url);
+          return { success: true };
         } else if (channel === 'agent:delete-chat') {
           const [sessionId] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
@@ -870,8 +894,9 @@ const createBrowserIpcRenderer = () => {
             headers,
             body: JSON.stringify({ sessionId })
           });
-          if (!response.ok) throw new Error('Failed to delete chat');
-          return await response.json();
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Failed to delete chat');
+          return result;
         } else if (channel === 'agent:update-chat') {
           const [payload] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });

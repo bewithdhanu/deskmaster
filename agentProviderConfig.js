@@ -1,4 +1,5 @@
 const PROVIDER_META = {
+  gemini: { label: 'Google Gemini' },
   openai: { label: 'OpenAI' },
   anthropic: { label: 'Anthropic' },
   openrouter: { label: 'OpenRouter' },
@@ -17,6 +18,8 @@ function isProviderConfigured(agentSettings, providerId) {
     case 'anthropic':
       return Boolean(p.apiKey)
     case 'openrouter':
+      return Boolean(p.apiKey)
+    case 'gemini':
       return Boolean(p.apiKey)
     case 'bedrock':
       return Boolean(p.accessKeyId && p.secretAccessKey)

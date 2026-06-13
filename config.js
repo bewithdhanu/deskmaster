@@ -79,6 +79,7 @@ let appSettings = {
       openai: { enabled: false, apiKey: '', baseUrl: '', model: 'gpt-4o-mini' },
       anthropic: { enabled: false, apiKey: '', model: 'claude-sonnet-4-20250514' },
       openrouter: { enabled: false, apiKey: '', model: 'openai/gpt-4o-mini' },
+      gemini: { enabled: false, apiKey: '', model: 'gemini-2.0-flash' },
       bedrock: { enabled: false, accessKeyId: '', secretAccessKey: '', region: 'us-east-1', model: 'anthropic.claude-3-haiku-20240307-v1:0' },
       local: { enabled: false, baseUrl: 'http://127.0.0.1:11434/v1', model: 'llama3.2', apiKey: 'ollama' }
     }
@@ -111,6 +112,7 @@ function getDefaultAgentSettings() {
       openai: { enabled: false, apiKey: '', baseUrl: '', model: 'gpt-4o-mini' },
       anthropic: { enabled: false, apiKey: '', model: 'claude-sonnet-4-20250514' },
       openrouter: { enabled: false, apiKey: '', model: 'openai/gpt-4o-mini' },
+      gemini: { enabled: false, apiKey: '', model: 'gemini-2.0-flash' },
       bedrock: { enabled: false, accessKeyId: '', secretAccessKey: '', region: 'us-east-1', model: 'anthropic.claude-3-haiku-20240307-v1:0' },
       local: { enabled: false, baseUrl: 'http://127.0.0.1:11434/v1', model: 'llama3.2', apiKey: 'ollama' }
     }
@@ -123,6 +125,8 @@ function providerHasCredentials(providerId, p) {
     case 'openai':
     case 'anthropic':
     case 'openrouter':
+      return Boolean(p.apiKey)
+    case 'gemini':
       return Boolean(p.apiKey)
     case 'bedrock':
       return Boolean(p.accessKeyId && p.secretAccessKey)
@@ -149,6 +153,7 @@ function migrateAgentSettings(settings) {
     openai: { ...defaults.providers.openai, ...(settings.agent?.providers?.openai || {}) },
     anthropic: { ...defaults.providers.anthropic, ...(settings.agent?.providers?.anthropic || {}) },
     openrouter: { ...defaults.providers.openrouter, ...(settings.agent?.providers?.openrouter || {}) },
+    gemini: { ...defaults.providers.gemini, ...(settings.agent?.providers?.gemini || {}) },
     bedrock: { ...defaults.providers.bedrock, ...(settings.agent?.providers?.bedrock || {}) },
     local: { ...defaults.providers.local, ...(settings.agent?.providers?.local || {}) }
   }

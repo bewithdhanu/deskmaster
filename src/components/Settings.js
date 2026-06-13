@@ -1026,6 +1026,23 @@ const Settings = () => {
                     />
                   </ProviderBlock>
 
+                  <ProviderBlock title="Google Gemini">
+                    <SecretInput
+                      value={settings.agent?.providers?.gemini?.apiKey || ''}
+                      onChange={(e) => updateAgentProvider('gemini', 'apiKey', e.target.value)}
+                      placeholder="API key"
+                      show={showAgentKeys.gemini}
+                      onToggleShow={() => toggleAgentKeyVisibility('gemini')}
+                    />
+                    <input
+                      type="text"
+                      value={settings.agent?.providers?.gemini?.model || 'gemini-2.0-flash'}
+                      onChange={(e) => updateAgentProvider('gemini', 'model', e.target.value)}
+                      placeholder="Model (e.g. gemini-2.0-flash)"
+                      className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                    />
+                  </ProviderBlock>
+
                   <ProviderBlock title="AWS Bedrock">
                     <input
                       type="text"

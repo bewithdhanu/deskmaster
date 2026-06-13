@@ -20,10 +20,27 @@ function getMessageImages(message) {
   return Array.isArray(message?.images) ? message.images.filter((img) => img?.dataUrl) : []
 }
 
+function getMessageFiles(message) {
+  return Array.isArray(message?.files) ? message.files.filter((f) => f?.extractedText) : []
+}
+
+function getEffectiveUserText(message) {
+  const userText = getMessageTextContent(message)
+  const files = getMessageFiles(message)
+  if (!files.length) return userText
+
+  const fileBlocks = files
+    .map((f) => `[Attached file: ${f.name}]\n${String(f.extractedText).trim()}`)
+    .join('\n\n')
+
+  if (!userText.trim()) return fileBlocks
+  return `${fileBlocks}\n\nUser message:\n${userText.trim()}`
+}
+
 function normalizeUserMessageContentForOpenAi(message) {
   if (Array.isArray(message?.content)) return message.content
 
-  const text = getMessageTextContent(message)
+  const text = getEffectiveUserText(message)
   const images = getMessageImages(message)
   if (!images.length) return text
 
@@ -40,7 +57,7 @@ function normalizeUserMessageContentForOpenAi(message) {
 function normalizeUserMessageContentForAnthropic(message) {
   if (Array.isArray(message?.content)) return message.content
 
-  const text = getMessageTextContent(message)
+  const text = getEffectiveUserText(message)
   const images = getMessageImages(message)
   if (!images.length) return text
 
@@ -64,7 +81,7 @@ function normalizeUserMessageContentForAnthropic(message) {
 function normalizeUserMessageContentForBedrock(message) {
   if (Array.isArray(message?.content)) return message.content
 
-  const text = getMessageTextContent(message)
+  const text = getEffectiveUserText(message)
   const images = getMessageImages(message)
   const formatMap = {
     'image/jpeg': 'jpeg',
@@ -90,6 +107,29 @@ function normalizeUserMessageContentForBedrock(message) {
 
   if (!content.length) return [{ text: text || '' }]
   return content
+}
+
+function normalizeUserMessageContentForGemini(message) {
+  if (Array.isArray(message?.content)) return message.content
+
+  const text = getEffectiveUserText(message)
+  const images = getMessageImages(message)
+  const parts = []
+
+  if (text.trim()) parts.push({ text: text.trim() })
+  for (const img of images) {
+    const parsed = parseDataUrl(img.dataUrl)
+    if (!parsed) continue
+    parts.push({
+      inline_data: {
+        mime_type: parsed.mediaType,
+        data: parsed.base64
+      }
+    })
+  }
+
+  if (!parts.length) return [{ text: text || '' }]
+  return parts
 }
 
 function normalizeToolCallForOpenAi(tc) {
@@ -206,8 +246,11 @@ module.exports = {
   normalizeMessagesForOpenAi,
   getMessageTextContent,
   getMessageImages,
+  getMessageFiles,
+  getEffectiveUserText,
   parseDataUrl,
   normalizeUserMessageContentForOpenAi,
   normalizeUserMessageContentForAnthropic,
-  normalizeUserMessageContentForBedrock
+  normalizeUserMessageContentForBedrock,
+  normalizeUserMessageContentForGemini
 }
