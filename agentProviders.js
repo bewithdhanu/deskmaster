@@ -5,7 +5,9 @@ const { isProviderConfigured } = require('./agentProviderConfig')
 const {
   normalizeMessagesForOpenAi,
   getToolCallName,
-  getToolCallArgumentsString
+  getToolCallArgumentsString,
+  normalizeUserMessageContentForAnthropic,
+  normalizeUserMessageContentForBedrock
 } = require('./agentMessageFormat')
 
 function resolveAgentProviderConfig(agentSettings, providerId) {
@@ -212,6 +214,9 @@ function anthropicStream({ apiKey, model, messages, tools, onEvent }) {
         }
         return { role: 'assistant', content }
       }
+      if (m.role === 'user') {
+        return { role: 'user', content: normalizeUserMessageContentForAnthropic(m) }
+      }
       return { role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }
     })
 
@@ -334,11 +339,16 @@ async function bedrockStream({ accessKeyId, secretAccessKey, region, model, mess
 
   const systemParts = messages.filter((m) => m.role === 'system').map((m) => ({ text: m.content }))
   const convMessages = messages
-    .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.content))
-    .map((m) => ({
-      role: m.role,
-      content: [{ text: String(m.content || '') }]
-    }))
+    .filter((m) => m.role === 'user' || (m.role === 'assistant' && (m.content || m.tool_calls?.length)))
+    .map((m) => {
+      if (m.role === 'user') {
+        return { role: 'user', content: normalizeUserMessageContentForBedrock(m) }
+      }
+      return {
+        role: 'assistant',
+        content: [{ text: String(m.content || '') }]
+      }
+    })
 
   const command = new ConverseStreamCommand({
     modelId: model || 'anthropic.claude-3-haiku-20240307-v1:0',
