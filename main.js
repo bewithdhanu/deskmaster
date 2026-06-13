@@ -4603,6 +4603,7 @@ function setupAgentModule() {
     },
     translateText: (text, targetLanguage) => textLlmService.translateText(appSettings, text, targetLanguage),
     reformatText: (text, tones) => textLlmService.reformatText(appSettings, text, tones),
+    aiEditText: (text, action, extra) => textLlmService.aiEditText(appSettings, text, action, extra),
     uptimeListMonitors: async () => {
       if (appSettings.uptimeKuma?.enabled === false) return { enabled: false, monitors: [] }
       return uptimeMonitor.getMonitorResponse({ force: false })

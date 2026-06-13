@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { MdClose, MdRefresh, MdArrowDropDown, MdContentCopy, MdCheck } from 'react-icons/md';
-import { getIpcRenderer } from '../../utils/electron';
-
-const ipcRenderer = getIpcRenderer();
+import { reformatText, translateText } from '../../utils/textLlmClient';
 
 const REFORMAT_TONES = [
   { value: 'casual', label: 'Casual' },
@@ -54,9 +52,9 @@ const TextReformatTool = ({ onClose }) => {
       let result;
       if (mode === 'reformat') {
         const tonesToUse = reformatTones.length > 0 ? reformatTones : ['professional'];
-        result = await ipcRenderer.invoke('reformat-text', inputText, tonesToUse);
+        result = await reformatText(inputText, tonesToUse);
       } else {
-        result = await ipcRenderer.invoke('translate-text', inputText, targetLanguage);
+        result = await translateText(inputText, targetLanguage);
       }
       setOutputText(result);
       setError(null);

@@ -8,9 +8,7 @@ import {
 } from '@blocknote/react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import { ChevronRight, Languages, Sparkles, SpellCheck, Type } from 'lucide-react';
-import { getIpcRenderer } from '../../utils/electron';
-
-const ipcRenderer = getIpcRenderer();
+import { aiEditText } from '../../utils/textLlmClient';
 
 /** Replace current ProseMirror selection with plain text (uses BlockNote transaction). */
 function replaceSelectionWithText(editor, newText) {
@@ -103,7 +101,7 @@ function MarkdownAiToolbarButtonsInner() {
       if (!selected.trim()) return;
       setBusy(true);
       try {
-        const result = await ipcRenderer.invoke('ai-edit-text', selected, actionKey, extra);
+        const result = await aiEditText(selected, actionKey, extra);
         if (typeof result === 'string' && result.length > 0) {
           replaceSelectionWithText(editor, result);
           setMenuOpen(false);

@@ -13,7 +13,7 @@ function isProviderConfigured(agentSettings, providerId) {
 
   switch (providerId) {
     case 'openai':
-      return Boolean(p.apiKey)
+      return Boolean(p.apiKey || agent._legacyChatGptKey)
     case 'anthropic':
       return Boolean(p.apiKey)
     case 'openrouter':
