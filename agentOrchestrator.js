@@ -5,7 +5,8 @@ const agentKnowledge = require('./agentKnowledge')
 const composioBridge = require('./composioBridge')
 const {
   normalizeMessagesForOpenAi,
-  toPersistedToolCall
+  toPersistedToolCall,
+  getMessageTextContent
 } = require('./agentMessageFormat')
 
 const MAX_TOOL_ITERATIONS = 12
@@ -181,10 +182,25 @@ function scheduleChatTitleGeneration(ctx) {
   void maybeGenerateChatTitle(ctx)
 }
 
+const MAX_CHAT_IMAGES = 5
+
+function normalizeChatImages(images) {
+  if (!Array.isArray(images)) return []
+  return images
+    .filter((img) => img && typeof img.dataUrl === 'string' && img.dataUrl.startsWith('data:image/'))
+    .slice(0, MAX_CHAT_IMAGES)
+    .map((img) => ({
+      name: String(img.name || 'image'),
+      mediaType: String(img.mediaType || 'image/png'),
+      dataUrl: img.dataUrl
+    }))
+}
+
 async function runChatTurn({
   appSettings,
   sessionId,
   message,
+  images,
   capabilities,
   provider,
   model,
@@ -192,6 +208,11 @@ async function runChatTurn({
   webContents
 }) {
   const agentSettings = appSettings?.agent || {}
+  const textMessage = typeof message === 'string' ? message.trim() : ''
+  const imageAttachments = normalizeChatImages(images)
+  if (!textMessage && !imageAttachments.length) {
+    throw new Error('Message or image attachment required')
+  }
   let chat = agentChatStore.readChat(sessionId)
   if (!chat) {
     chat = agentChatStore.createChat({ capabilities, provider, model })
@@ -206,7 +227,12 @@ async function runChatTurn({
     }
   }
 
-  chat = agentChatStore.appendMessage(sessionId, { role: 'user', content: message, timestamp: new Date().toISOString() })
+  chat = agentChatStore.appendMessage(sessionId, {
+    role: 'user',
+    content: textMessage,
+    ...(imageAttachments.length ? { images: imageAttachments } : {}),
+    timestamp: new Date().toISOString()
+  })
 
   const effectiveCapabilities = chat.capabilities || {
     knowledgeBase: false,
@@ -218,7 +244,11 @@ async function runChatTurn({
   let kbContext = []
   if (effectiveCapabilities.knowledgeBase) {
     emit(webContents, { type: 'status', message: 'Searching knowledge base...' })
-    kbContext = await retrieveKbContext(message, appSettings, kbSettings.maxContextChunks || 8)
+    kbContext = await retrieveKbContext(
+      textMessage || 'User sent image attachment(s)',
+      appSettings,
+      kbSettings.maxContextChunks || 8
+    )
     if (kbContext.length) {
       emit(webContents, { type: 'kb_citations', citations: kbContext.map((c) => ({ title: c.title, sourceType: c.sourceType })) })
     }
@@ -239,6 +269,7 @@ async function runChatTurn({
     (chat.messages || []).map((m) => ({
       role: m.role,
       content: m.content,
+      images: m.images,
       tool_calls: m.tool_calls,
       tool_call_id: m.tool_call_id
     }))
@@ -291,7 +322,7 @@ async function runChatTurn({
         appSettings,
         providerId,
         modelId,
-        userMessage: message,
+        userMessage: textMessage,
         assistantContent: assistantText,
         webContents
       })
@@ -338,7 +369,7 @@ async function runChatTurn({
           appSettings,
           providerId,
           modelId,
-          userMessage: message,
+          userMessage: textMessage,
           assistantContent: confirmMsg.content,
           webContents
         })
@@ -389,7 +420,7 @@ async function runChatTurn({
     appSettings,
     providerId,
     modelId,
-    userMessage: message,
+    userMessage: textMessage,
     assistantContent: fallback.content,
     webContents
   })

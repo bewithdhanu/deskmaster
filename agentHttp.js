@@ -170,6 +170,7 @@ async function handleAgentPost(req, res, body, appSettings, deps = {}) {
         appSettings,
         sessionId: payload.sessionId,
         message: payload.message,
+        images: payload.images,
         capabilities: payload.capabilities,
         provider: payload.provider,
         model: payload.model,

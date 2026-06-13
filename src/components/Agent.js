@@ -13,11 +13,13 @@ import {
   MdContentCopy,
   MdNoteAdd,
   MdEdit,
-  MdSearch
+  MdSearch,
+  MdImage
 } from 'react-icons/md';
-import { getIpcRenderer } from '../utils/electron';
+import { getIpcRenderer, isElectron } from '../utils/electron';
 import { getEnabledProviders, getProviderModel, PROVIDER_META, isProviderEnabled } from '../utils/agentProvidersClient';
 import { getRoute, navigate, subscribe } from '../utils/appRoute';
+import { readImageFiles, MAX_CHAT_IMAGES } from '../utils/agentImageUpload';
 import AgentMarkdown from './agent/AgentMarkdown';
 import SaveToNotesDialog from './agent/SaveToNotesDialog';
 
@@ -85,6 +87,7 @@ const Agent = () => {
   const [copyFeedbackId, setCopyFeedbackId] = useState(null);
   const [editingMessageIndex, setEditingMessageIndex] = useState(null);
   const [editDraft, setEditDraft] = useState('');
+  const [pendingImages, setPendingImages] = useState([]);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [chatSearchResults, setChatSearchResults] = useState(null);
   const messagesEndRef = useRef(null);
@@ -98,6 +101,7 @@ const Agent = () => {
   const loadChatsRef = useRef(null);
   const resetDraftChatRef = useRef(null);
   const runChatSearchRef = useRef(null);
+  const imageInputRef = useRef(null);
 
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
@@ -201,6 +205,7 @@ const Agent = () => {
     setCitations([]);
     setPendingConfirmation(null);
     setInput('');
+    setPendingImages([]);
     setIsStreaming(false);
     setStreamingText('');
     setStatusMessage('');
@@ -490,16 +495,58 @@ const Agent = () => {
     persistProviderModel(nextProvider, nextModel);
   };
 
-  const sendMessage = async (text, confirmedToolIds = []) => {
-    if (!text.trim() || isStreaming) return;
+  const handleImageSelect = async (event) => {
+    const { files } = event.target;
+    if (!files?.length || isStreaming) return;
+
+    try {
+      const attachments = await readImageFiles(files, pendingImages.length);
+      if (attachments.length) {
+        setPendingImages((prev) => [...prev, ...attachments].slice(0, MAX_CHAT_IMAGES));
+      }
+    } catch (error) {
+      alert(error.message || 'Failed to attach image');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleAttachImages = async () => {
+    if (isStreaming || pendingImages.length >= MAX_CHAT_IMAGES) return;
+
+    if (isElectron()) {
+      try {
+        const attachments = await ipcRenderer.invoke('agent:pick-images', {
+          existingCount: pendingImages.length
+        });
+        if (attachments?.length) {
+          setPendingImages((prev) => [...prev, ...attachments].slice(0, MAX_CHAT_IMAGES));
+        }
+      } catch (error) {
+        alert(error.message || 'Failed to attach image');
+      }
+      return;
+    }
+
+    imageInputRef.current?.click();
+  };
+
+  const removePendingImage = (index) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const sendMessage = async (text, confirmedToolIds = [], imagesOverride = null) => {
+    const imagesToSend = imagesOverride ?? pendingImages.map(({ name, mediaType, dataUrl }) => ({ name, mediaType, dataUrl }));
+    const userMessage = text.trim();
+    if ((!userMessage && !imagesToSend.length) || isStreaming) return;
     if (enabledProviders.length === 0) {
       alert('Enable and configure at least one LLM provider in Settings > AI Agent.');
       return;
     }
 
     const capsForTurn = { ...capabilities };
-    const userMessage = text.trim();
     setInput('');
+    setPendingImages([]);
     setIsStreaming(true);
     setStreamingText('');
     setStatusMessage('Thinking…');
@@ -508,7 +555,15 @@ const Agent = () => {
     setCitations([]);
     setPendingConfirmation(null);
 
-    setMessages((prev) => [...prev, { role: 'user', content: userMessage, timestamp: new Date().toISOString() }]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'user',
+        content: userMessage,
+        ...(imagesToSend.length ? { images: imagesToSend } : {}),
+        timestamp: new Date().toISOString()
+      }
+    ]);
 
     try {
       let sessionId = activeChatId;
@@ -531,6 +586,7 @@ const Agent = () => {
       const result = await ipcRenderer.invoke('agent:chat', {
         sessionId,
         message: userMessage,
+        ...(imagesToSend.length ? { images: imagesToSend } : {}),
         capabilities: capsForTurn,
         provider,
         model: model || undefined,
@@ -705,13 +761,41 @@ const Agent = () => {
     }
   };
 
+  const renderMessageImages = (images) => {
+    if (!Array.isArray(images) || !images.length) return null;
+    return (
+      <div className={`flex flex-wrap gap-2 ${images.length ? 'mb-2' : ''}`}>
+        {images.map((img, idx) => (
+          <a
+            key={`${img.name || 'image'}-${idx}`}
+            href={img.dataUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block overflow-hidden rounded-lg border border-white/20"
+            title={img.name || 'Attached image'}
+          >
+            <img
+              src={img.dataUrl}
+              alt={img.name || `Attachment ${idx + 1}`}
+              className="max-h-40 max-w-[12rem] object-cover"
+            />
+          </a>
+        ))}
+      </div>
+    );
+  };
+
   const renderMessage = ({ msg, originalIndex }) => {
     const isUser = msg.role === 'user';
     const isError = msg.isError;
     const content = String(msg.content || '').trim();
+    const messageImages = Array.isArray(msg.images) ? msg.images : [];
     const messageKey = `${originalIndex}-${msg.timestamp || originalIndex}`;
     const isEditing = isUser && editingMessageIndex === originalIndex;
     const showAssistantActions = !isUser && content.length > 0;
+    const hasVisibleContent = Boolean(content) || messageImages.length > 0;
+
+    if (isUser && !hasVisibleContent) return null;
 
     if (isUser && isEditing) {
       return (
@@ -768,7 +852,10 @@ const Agent = () => {
             </div>
           )}
           {isUser ? (
-            <div className="whitespace-pre-wrap">{content}</div>
+            <>
+              {renderMessageImages(messageImages)}
+              {content ? <div className="whitespace-pre-wrap">{content}</div> : null}
+            </>
           ) : (
             <AgentMarkdown content={content} className={isError ? 'text-red-400' : ''} />
           )}
@@ -814,6 +901,7 @@ const Agent = () => {
 
   const thinkingLabel = statusMessage || THINKING_MESSAGES[thinkingIndex];
   const noProviders = enabledProviders.length === 0;
+  const canSend = Boolean(input.trim()) || pendingImages.length > 0;
 
   return (
     <div className="flex h-full bg-theme-primary">
@@ -945,6 +1033,39 @@ const Agent = () => {
         <div className="border-t border-theme bg-theme-card/50 p-4">
           <form onSubmit={handleSubmit}>
             <div className="rounded-xl border border-theme bg-theme-secondary focus-within:ring-2 focus-within:ring-red-500/40">
+              {pendingImages.length > 0 && (
+                <div className="flex flex-wrap gap-2 border-b border-theme px-3 py-2">
+                  {pendingImages.map((img, idx) => (
+                    <div key={`pending-${img.name}-${idx}`} className="relative">
+                      <img
+                        src={img.dataUrl}
+                        alt={img.name || `Attachment ${idx + 1}`}
+                        className="h-16 w-16 rounded-lg border border-theme object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePendingImage(idx)}
+                        disabled={isStreaming}
+                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-theme-primary text-theme-muted shadow hover:text-red-500 disabled:opacity-50"
+                        title="Remove image"
+                      >
+                        <MdClose className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif"
+                multiple
+                tabIndex={-1}
+                aria-hidden="true"
+                className="pointer-events-none absolute h-px w-px opacity-0"
+                style={{ left: '-9999px' }}
+                onChange={handleImageSelect}
+              />
               <textarea
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -1046,6 +1167,15 @@ const Agent = () => {
                 </div>
 
                 <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAttachImages}
+                    disabled={isStreaming || pendingImages.length >= MAX_CHAT_IMAGES}
+                    title={`Attach image (${pendingImages.length}/${MAX_CHAT_IMAGES})`}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-theme-muted transition-colors hover:bg-theme-card hover:text-theme-primary disabled:opacity-50"
+                  >
+                    <MdImage className="h-4 w-4" />
+                  </button>
                   {enabledProviders.length > 0 && (
                     <select
                       value={provider}
@@ -1073,7 +1203,7 @@ const Agent = () => {
                   />
                   <button
                     type="submit"
-                    disabled={isStreaming || !input.trim() || noProviders}
+                    disabled={isStreaming || !canSend || noProviders}
                     className="btn btn-primary flex h-9 w-9 items-center justify-center p-0"
                   >
                     <MdSend className="h-4 w-4" />

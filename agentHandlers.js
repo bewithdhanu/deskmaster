@@ -1,10 +1,14 @@
-const { ipcMain } = require('electron')
+const { ipcMain, dialog, BrowserWindow } = require('electron')
 const agentChatStore = require('./agentChatStore')
 const agentOrchestrator = require('./agentOrchestrator')
 const agentProviders = require('./agentProviders')
 const agentTools = require('./agentTools')
 const agentKnowledge = require('./agentKnowledge')
 const composioBridge = require('./composioBridge')
+const {
+  MAX_CHAT_IMAGES,
+  readImageAttachmentsFromPaths
+} = require('./agentImageAttach')
 
 let agentHandlersRegistered = false
 
@@ -67,12 +71,34 @@ function registerAgentHandlers(deps) {
       appSettings,
       sessionId: payload?.sessionId,
       message: payload?.message,
+      images: payload?.images,
       capabilities: payload?.capabilities,
       provider: payload?.provider,
       model: payload?.model,
       confirmedToolIds: payload?.confirmedToolIds || [],
       webContents
     })
+  })
+
+  ipcMain.handle('agent:pick-images', async (event, payload) => {
+    const existingCount = Number(payload?.existingCount) || 0
+    const remaining = Math.max(0, MAX_CHAT_IMAGES - existingCount)
+    if (!remaining) {
+      throw new Error(`Maximum ${MAX_CHAT_IMAGES} images per message`)
+    }
+
+    const browserWindow = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(browserWindow || undefined, {
+      title: 'Attach images',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{
+        name: 'Images',
+        extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif']
+      }]
+    })
+
+    if (result.canceled || !result.filePaths?.length) return []
+    return readImageAttachmentsFromPaths(result.filePaths, existingCount)
   })
 
   ipcMain.handle('agent:test-provider', async (event, providerId) => {

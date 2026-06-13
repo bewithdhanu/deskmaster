@@ -61,8 +61,37 @@ function testRepairPersistedMessages() {
   assert(repaired[1].content === '{"ip":"1.2.3.4"}', 'repair stringifies tool content')
 }
 
+function testUserMessageWithImagesForOpenAi() {
+  const dataUrl = 'data:image/png;base64,iVBORw0KGgo='
+  const normalized = normalizeMessagesForOpenAi([{
+    role: 'user',
+    content: 'What is this?',
+    images: [{ name: 'test.png', mediaType: 'image/png', dataUrl }]
+  }])[0]
+
+  assert(Array.isArray(normalized.content), 'multimodal content is array')
+  assert(normalized.content[0].type === 'text', 'text part first')
+  assert(normalized.content[1].type === 'image_url', 'image part second')
+  assert(normalized.content[1].image_url.url === dataUrl, 'data url preserved')
+}
+
+function testImagesOnlyUserMessageForOpenAi() {
+  const dataUrl = 'data:image/jpeg;base64,abc123'
+  const normalized = normalizeMessagesForOpenAi([{
+    role: 'user',
+    content: '',
+    images: [{ name: 'photo.jpg', mediaType: 'image/jpeg', dataUrl }]
+  }])[0]
+
+  assert(Array.isArray(normalized.content), 'images-only content is array')
+  assert(normalized.content.length === 1, 'single image part')
+  assert(normalized.content[0].type === 'image_url', 'image_url part')
+}
+
 testLegacyToolCallsNormalizeForOpenAi()
 testPersistedRoundTrip()
 testRepairPersistedMessages()
+testUserMessageWithImagesForOpenAi()
+testImagesOnlyUserMessageForOpenAi()
 
 console.log('agentMessageFormat unit tests passed')

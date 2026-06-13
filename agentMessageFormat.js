@@ -3,6 +3,95 @@
  * OpenAI-compatible APIs require tool_calls[].type === 'function' and function.name/arguments.
  */
 
+function getMessageTextContent(message) {
+  if (!message) return ''
+  if (typeof message.content === 'string') return message.content
+  return ''
+}
+
+function parseDataUrl(dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return null
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
+  if (!match) return null
+  return { mediaType: match[1], base64: match[2] }
+}
+
+function getMessageImages(message) {
+  return Array.isArray(message?.images) ? message.images.filter((img) => img?.dataUrl) : []
+}
+
+function normalizeUserMessageContentForOpenAi(message) {
+  if (Array.isArray(message?.content)) return message.content
+
+  const text = getMessageTextContent(message)
+  const images = getMessageImages(message)
+  if (!images.length) return text
+
+  const parts = []
+  if (text.trim()) parts.push({ type: 'text', text: text.trim() })
+  for (const img of images) {
+    parts.push({ type: 'image_url', image_url: { url: img.dataUrl } })
+  }
+  if (!parts.length) return text
+  if (parts.length === 1 && parts[0].type === 'text') return parts[0].text
+  return parts
+}
+
+function normalizeUserMessageContentForAnthropic(message) {
+  if (Array.isArray(message?.content)) return message.content
+
+  const text = getMessageTextContent(message)
+  const images = getMessageImages(message)
+  if (!images.length) return text
+
+  const content = []
+  if (text.trim()) content.push({ type: 'text', text: text.trim() })
+  for (const img of images) {
+    const parsed = parseDataUrl(img.dataUrl)
+    if (!parsed) continue
+    content.push({
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: parsed.mediaType,
+        data: parsed.base64
+      }
+    })
+  }
+  return content.length ? content : text
+}
+
+function normalizeUserMessageContentForBedrock(message) {
+  if (Array.isArray(message?.content)) return message.content
+
+  const text = getMessageTextContent(message)
+  const images = getMessageImages(message)
+  const formatMap = {
+    'image/jpeg': 'jpeg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp'
+  }
+
+  const content = []
+  if (text.trim()) content.push({ text: text.trim() })
+  for (const img of images) {
+    const parsed = parseDataUrl(img.dataUrl)
+    if (!parsed) continue
+    const format = formatMap[parsed.mediaType]
+    if (!format) continue
+    content.push({
+      image: {
+        format,
+        source: { bytes: Buffer.from(parsed.base64, 'base64') }
+      }
+    })
+  }
+
+  if (!content.length) return [{ text: text || '' }]
+  return content
+}
+
 function normalizeToolCallForOpenAi(tc) {
   if (!tc || !tc.id) return null
 
@@ -98,6 +187,9 @@ function normalizeMessagesForOpenAi(messages) {
     }
 
     if (m.role === 'system' || m.role === 'user' || m.role === 'assistant') {
+      if (m.role === 'user') {
+        return { role: 'user', content: normalizeUserMessageContentForOpenAi(m) }
+      }
       return { role: m.role, content: m.content ?? '' }
     }
 
@@ -111,5 +203,11 @@ module.exports = {
   getToolCallName,
   getToolCallArgumentsString,
   repairPersistedMessages,
-  normalizeMessagesForOpenAi
+  normalizeMessagesForOpenAi,
+  getMessageTextContent,
+  getMessageImages,
+  parseDataUrl,
+  normalizeUserMessageContentForOpenAi,
+  normalizeUserMessageContentForAnthropic,
+  normalizeUserMessageContentForBedrock
 }
