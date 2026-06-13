@@ -186,6 +186,43 @@ function searchChats(query) {
   return results
 }
 
+function exportAllChats() {
+  const dir = getChatsDir()
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'))
+  const chats = []
+  for (const f of files) {
+    try {
+      const chat = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))
+      if (!chat?.id || !Array.isArray(chat.messages) || chat.messages.length === 0) continue
+      chats.push(chat)
+    } catch {}
+  }
+  chats.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+  return chats
+}
+
+function clearAllChats() {
+  const dir = getChatsDir()
+  if (!fs.existsSync(dir)) return
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith('.json')) continue
+    try {
+      fs.unlinkSync(path.join(dir, f))
+    } catch {}
+  }
+}
+
+function importChats(chats) {
+  clearAllChats()
+  if (!Array.isArray(chats)) return
+  for (const chat of chats) {
+    if (!chat?.id || !Array.isArray(chat.messages)) continue
+    try {
+      writeChat(chat)
+    } catch {}
+  }
+}
+
 module.exports = {
   createChat,
   listChats,
@@ -194,5 +231,8 @@ module.exports = {
   appendMessage,
   updateChatMeta,
   replaceMessages,
-  searchChats
+  searchChats,
+  exportAllChats,
+  clearAllChats,
+  importChats
 }

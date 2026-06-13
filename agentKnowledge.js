@@ -376,6 +376,84 @@ async function getIndexStatus() {
   }
 }
 
+function clearKnowledgeDir() {
+  const dir = getKnowledgeDir()
+  if (!fs.existsSync(dir)) return
+  for (const name of fs.readdirSync(dir)) {
+    try {
+      fs.unlinkSync(path.join(dir, name))
+    } catch {}
+  }
+}
+
+function exportKnowledgePayload() {
+  const dir = getKnowledgeDir()
+  const files = []
+  if (!fs.existsSync(dir)) return { version: 1, files }
+
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name)
+    if (!fs.statSync(full).isFile()) continue
+    files.push({
+      path: name,
+      data: fs.readFileSync(full).toString('base64')
+    })
+  }
+
+  return { version: 1, files }
+}
+
+function importKnowledgePayload(payload) {
+  if (!payload || !Array.isArray(payload.files)) return
+  clearKnowledgeDir()
+  const dir = getKnowledgeDir()
+
+  for (const f of payload.files) {
+    const name = String(f.path || '')
+    if (!name || name.includes('..') || path.isAbsolute(name)) continue
+    const dest = path.join(dir, name)
+    if (!dest.startsWith(dir)) continue
+    fs.writeFileSync(dest, Buffer.from(String(f.data || ''), 'base64'))
+  }
+}
+
+async function closeDatabase() {
+  if (!db) return
+  await new Promise((resolve, reject) => {
+    db.close((err) => {
+      if (err) reject(err)
+      else resolve()
+    })
+  })
+  db = null
+  initPromise = null
+}
+
+async function exportKnowledgeDb() {
+  const dbPath = getDbPath()
+  if (!fs.existsSync(dbPath)) return null
+  return fs.readFileSync(dbPath).toString('base64')
+}
+
+async function importKnowledgeDb(base64Data) {
+  if (!base64Data) return
+  await closeDatabase()
+  const dbPath = getDbPath()
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true })
+  fs.writeFileSync(dbPath, Buffer.from(String(base64Data), 'base64'))
+  await initDatabase()
+}
+
+async function clearKnowledgeDb() {
+  await closeDatabase()
+  const dbPath = getDbPath()
+  if (fs.existsSync(dbPath)) {
+    try {
+      fs.unlinkSync(dbPath)
+    } catch {}
+  }
+}
+
 module.exports = {
   initDatabase,
   reindexAll,
@@ -385,5 +463,11 @@ module.exports = {
   updateCustomDocument,
   getCustomDocument,
   getIndexStatus,
-  getKnowledgeDir
+  getKnowledgeDir,
+  exportKnowledgePayload,
+  importKnowledgePayload,
+  exportKnowledgeDb,
+  importKnowledgeDb,
+  clearKnowledgeDb,
+  closeDatabase
 }
