@@ -288,6 +288,95 @@ function getAllToolDefinitions() {
         additionalProperties: false
       },
       requiresConfirm: true
+    },
+    {
+      name: 'generate_pdf',
+      description: 'Generate a PDF document from title and text/markdown content. Returns a downloadable file path.',
+      category: 'documents',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          content: { type: 'string', description: 'Body text or markdown-style content' },
+          fileName: { type: 'string', description: 'Optional output file name' }
+        },
+        required: ['content'],
+        additionalProperties: false
+      },
+      requiresConfirm: true
+    },
+    {
+      name: 'generate_docx',
+      description: 'Generate a Word (.docx) document from title and text content.',
+      category: 'documents',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          content: { type: 'string' },
+          fileName: { type: 'string' }
+        },
+        required: ['content'],
+        additionalProperties: false
+      },
+      requiresConfirm: true
+    },
+    {
+      name: 'generate_xlsx',
+      description: 'Generate an Excel (.xlsx) spreadsheet. Provide sheets with rows (2D arrays).',
+      category: 'documents',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          fileName: { type: 'string' },
+          sheets: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                rows: {
+                  type: 'array',
+                  items: {
+                    type: 'array',
+                    items: { type: 'string' }
+                  }
+                }
+              }
+            }
+          }
+        },
+        required: ['sheets'],
+        additionalProperties: false
+      },
+      requiresConfirm: true
+    },
+    {
+      name: 'generate_pptx',
+      description: 'Generate a PowerPoint (.pptx) presentation with slides (title + bullet points).',
+      category: 'documents',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          fileName: { type: 'string' },
+          slides: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                bullets: { type: 'array', items: { type: 'string' } },
+                content: { type: 'string' }
+              }
+            }
+          }
+        },
+        required: ['slides'],
+        additionalProperties: false
+      },
+      requiresConfirm: true
     }
   ]
 }
@@ -363,6 +452,14 @@ async function executeTool(name, args, { confirmed = false, agentSettings } = {}
       return deps.kbCreateDocument(args.title, args.content, agentSettings)
     case 'kb_update_document':
       return deps.kbUpdateDocument(args.id, args, agentSettings)
+    case 'generate_pdf':
+      return deps.generatePdf(args)
+    case 'generate_docx':
+      return deps.generateDocx(args)
+    case 'generate_xlsx':
+      return deps.generateXlsx(args)
+    case 'generate_pptx':
+      return deps.generatePptx(args)
     default:
       throw new Error(`Tool handler not implemented: ${name}`)
   }
