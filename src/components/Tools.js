@@ -10,6 +10,7 @@ import PasswordGenerator from './tools/PasswordGenerator';
 import OneTimeSecretTool from './tools/OneTimeSecretTool';
 import { MdAdd, MdClose } from 'react-icons/md';
 import { getIpcRenderer } from '../utils/electron';
+import { isUptimeKumaEnabled } from '../utils/uptimeKuma';
 
 const ipcRenderer = getIpcRenderer();
 
@@ -27,6 +28,7 @@ const Tools = () => {
   const [toolOrder, setToolOrder] = useState([]);
   const [showAddToolModal, setShowAddToolModal] = useState(false);
   const [insertAfterByTool, setInsertAfterByTool] = useState({});
+  const [uptimeKumaEnabled, setUptimeKumaEnabled] = useState(true);
 
   const availableTools = [
     { id: 'bcrypt-generate', name: 'Generate Hash', description: 'Generate bcrypt hash from text' },
@@ -65,12 +67,25 @@ const Tools = () => {
           });
           setActiveTools(merged);
         }
+        setUptimeKumaEnabled(isUptimeKumaEnabled(settings));
       } catch (error) {
         console.error('Error loading tools state:', error);
         setToolOrder(defaultToolOrder);
       }
     };
+
+    const handleSettingsUpdate = (event, newSettings) => {
+      if (newSettings?.uptimeKuma !== undefined) {
+        setUptimeKumaEnabled(isUptimeKumaEnabled(newSettings));
+      }
+    };
+
     loadToolsState();
+    ipcRenderer.on('settings-updated', handleSettingsUpdate);
+
+    return () => {
+      ipcRenderer.removeListener('settings-updated', handleSettingsUpdate);
+    };
   }, []);
 
   // Persist tool order and active tools (remembers arrangement and installed tools until uninstall)
@@ -273,7 +288,7 @@ const Tools = () => {
   return (
     <div className="h-full flex flex-col overflow-y-auto p-4 gap-4">
       <StatsManager />
-      <UptimeStatsSummary />
+      {uptimeKumaEnabled ? <UptimeStatsSummary /> : null}
       {/* <div className="mb-4 mt-2">
         <h1 className="text-2xl font-bold text-theme-primary">Tools</h1>
         <p className="text-theme-muted text-sm mt-1">Utility tools for your productivity</p>

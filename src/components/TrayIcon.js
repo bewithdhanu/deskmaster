@@ -141,7 +141,8 @@ const TrayIcon = () => {
   });
 
   const uptime = stats.uptime || {};
-  const hasUptimeNotification = (uptime.down || 0) > 0 || (uptime.sslAttention || 0) > 0 || (uptime.domainAttention || 0) > 0;
+  const uptimeEnabled = stats.settings?.uptimeKuma?.enabled !== false;
+  const hasUptimeNotification = uptimeEnabled && ((uptime.down || 0) > 0 || (uptime.sslAttention || 0) > 0 || (uptime.domainAttention || 0) > 0);
   if (hasUptimeNotification) {
     enabledLabelCells.push(
       <td key="uptime-label" className="stat-cell uptime-cell">

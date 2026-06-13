@@ -205,6 +205,18 @@ const createBrowserIpcRenderer = () => {
             throw new Error(error.error || 'Failed to load notes tree');
           }
           return await response.json();
+        } else if (channel === 'notes:search') {
+          const [query] = args;
+          const headers = await addApiTokenToHeaders();
+          const url = new URL(`${API_BASE}/notes/search`);
+          url.searchParams.set('q', query || '');
+          const response = await fetch(url.toString(), { headers });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to search notes');
+          }
+          const payload = await response.json();
+          return Array.isArray(payload?.results) ? payload.results : [];
         } else if (channel === 'notes:get-page-state') {
           const [id] = args;
           const headers = await addApiTokenToHeaders();

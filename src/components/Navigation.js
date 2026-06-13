@@ -1,7 +1,7 @@
 import React from 'react';
 import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity, MdNotes, MdComputer } from 'react-icons/md';
 
-const Navigation = ({ activeTab, onTabChange }) => {
+const Navigation = ({ activeTab, onTabChange, uptimeKumaEnabled = true }) => {
   const menuItems = [
     {
       id: 'home',
@@ -43,7 +43,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
       label: 'Settings',
       icon: <MdSettings className="w-5 h-5" />
     },
-  ];
+  ].filter((item) => item.id !== 'uptime' || uptimeKumaEnabled);
 
   return (
     <div className="bg-theme-secondary border-b border-theme flex-shrink-0">

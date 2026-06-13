@@ -68,20 +68,11 @@ const ClipboardHistory = () => {
     if (!text) return;
 
     try {
-      await navigator.clipboard.writeText(text);
+      await ipcRenderer.invoke('copy-to-clipboard', text, { skipHistory: true });
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     } catch (error) {
       console.error('Error copying to clipboard:', error);
-      // Fallback: select text
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setCopiedId(id);
-      setTimeout(() => setCopiedId(null), 2000);
     }
   };
 
@@ -217,10 +208,6 @@ const ClipboardHistory = () => {
                     {formatTimestamp(entry.timestamp)}
                   </span>
                   <span className="text-xs text-theme-muted">•</span>
-                  <span className="text-xs font-medium text-red-500 whitespace-nowrap">
-                    {entry.source || 'System'}
-                  </span>
-                  <span className="text-xs text-theme-muted">•</span>
                   <span className="text-sm text-theme-primary truncate flex-1">
                     {truncateText(entry.content, 150)}
                   </span>
@@ -285,10 +272,6 @@ const ClipboardHistory = () => {
                 <h2 className="text-lg font-semibold text-theme-primary">Clipboard Content</h2>
                 <span className="text-xs text-theme-muted">
                   {formatTimestamp(viewingEntry.timestamp)}
-                </span>
-                <span className="text-xs text-theme-muted">•</span>
-                <span className="text-xs font-medium text-red-500">
-                  {viewingEntry.source || 'System'}
                 </span>
               </div>
               <div className="flex items-center gap-2">

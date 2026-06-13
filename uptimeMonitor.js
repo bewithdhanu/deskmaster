@@ -8,10 +8,15 @@ const cacheTtlMs = () => Number(process.env.UPTIME_CACHE_TTL_MS || process.env.C
 function getUptimeSettings() {
   const settings = config.getAppSettings()?.uptimeKuma || {}
   return {
+    enabled: settings.enabled !== false,
     url: String(settings.url || '').trim().replace(/\/$/, ''),
     username: String(settings.username || '').trim(),
     password: String(settings.password || '')
   }
+}
+
+function isUptimeKumaEnabled() {
+  return getUptimeSettings().enabled
 }
 
 const kumaUrl = () => getUptimeSettings().url
@@ -64,6 +69,9 @@ function getCachedPayload() {
 }
 
 function getTraySummary() {
+  if (!isUptimeKumaEnabled()) {
+    return { down: 0, sslAttention: 0, domainAttention: 0 }
+  }
   const payload = getCachedPayload()
   const summary = payload?.summary || {}
   const monitors = Array.isArray(payload?.monitors) ? payload.monitors : []
@@ -91,11 +99,17 @@ function persistPayload(payload) {
 }
 
 function hasSocketCredentials() {
+  if (!isUptimeKumaEnabled()) return false
   const settings = getUptimeSettings()
   return Boolean(settings.url && settings.username && settings.password)
 }
 
 function ensureCredentials() {
+  if (!isUptimeKumaEnabled()) {
+    const error = new Error('Uptime Kuma is disabled in Settings.')
+    error.status = 503
+    throw error
+  }
   if (!hasSocketCredentials()) {
     const error = new Error('Set Uptime Kuma URL, username, and password in Settings.')
     error.status = 500
@@ -131,6 +145,35 @@ function normalizeDate(value) {
   if (!value) return null
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10)
+}
+
+function formatSslProvider(issuer) {
+  if (!issuer || typeof issuer !== 'object') return null
+
+  const org = String(issuer.O || issuer.o || '').trim()
+  const cn = String(issuer.CN || issuer.cn || '').trim()
+  const raw = org || cn
+  if (!raw) return null
+
+  const normalized = raw.toLowerCase()
+  if (normalized.includes('godaddy') || normalized.includes('go daddy')) return 'GoDaddy'
+  if (normalized.includes('amazon')) return 'Amazon'
+  if (normalized.includes('google')) return 'Google'
+  if (normalized.includes("let's encrypt") || normalized.includes('lets encrypt')) return "Let's Encrypt"
+  if (normalized.includes('cloudflare')) return 'Cloudflare'
+  if (normalized.includes('digicert')) return 'DigiCert'
+  if (normalized.includes('sectigo') || normalized.includes('comodo')) return 'Sectigo'
+  if (normalized.includes('zerossl')) return 'ZeroSSL'
+  if (normalized.includes('globalsign')) return 'GlobalSign'
+  if (normalized.includes('entrust')) return 'Entrust'
+  if (normalized.includes('thawte')) return 'Thawte'
+  if (normalized.includes('geotrust')) return 'GeoTrust'
+  if (normalized.includes('rapidssl')) return 'RapidSSL'
+
+  return raw
+    .replace(/,?\s*https?:\/\/\S+/gi, '')
+    .replace(/\s+(LLC|Inc\.?|Ltd\.?|Limited|L\.?P\.?)\.?$/i, '')
+    .trim() || null
 }
 
 function statusFromValue(value) {
@@ -240,6 +283,7 @@ function toClientMonitor(monitor, context) {
     active: Boolean(monitor.active),
     sslDaysRemaining,
     sslExpiryDate: normalizeDate(tlsInfo?.certInfo?.validTo),
+    sslProvider: formatSslProvider(tlsInfo?.certInfo?.issuer),
     sslValid: typeof tlsInfo?.valid === 'boolean' ? tlsInfo.valid : null,
     responseTimeMs: safeNumber(heartbeat?.ping, safeNumber(context.avgPingList.get(Number(monitor.id)))),
     domainExpiryDate: normalizeDate(domainInfo?.expiresOn),
@@ -491,6 +535,17 @@ async function refreshMonitorCache() {
 }
 
 async function getMonitorResponse({ force = false } = {}) {
+  if (!isUptimeKumaEnabled()) {
+    const emptyPayload = normalizePayload({
+      source: '',
+      generatedAt: new Date().toISOString(),
+      authSource: 'local',
+      monitors: [],
+      disabled: true
+    })
+    return withCacheMetadata(emptyPayload, false)
+  }
+
   if (force) {
     await processPendingActions()
     const payload = await refreshMonitorCache()
@@ -543,6 +598,7 @@ function invalidateMonitorCache() {
 }
 
 function startBackgroundSync() {
+  if (!isUptimeKumaEnabled()) return
   if (monitorCache.refreshTimer) return
   // Warm the local cache after startup, then keep it fresh hourly.
   setTimeout(() => {
@@ -551,6 +607,11 @@ function startBackgroundSync() {
   monitorCache.refreshTimer = setInterval(() => {
     refreshMonitorCacheInBackground()
   }, HOURLY_REFRESH_MS)
+}
+
+function restartBackgroundSync() {
+  stopBackgroundSync()
+  startBackgroundSync()
 }
 
 function stopBackgroundSync() {
@@ -733,6 +794,7 @@ function makeClientMonitorFromPayload(payload, id) {
     active: monitor.active,
     sslDaysRemaining: null,
     sslExpiryDate: null,
+    sslProvider: null,
     sslValid: null,
     responseTimeMs: null,
     domainExpiryDate: null,
@@ -910,6 +972,7 @@ async function updateMonitor(monitorId, input) {
     ...makeClientMonitorFromPayload(payload, Number(monitorId)),
     sslDaysRemaining: currentMonitor.sslDaysRemaining,
     sslExpiryDate: currentMonitor.sslExpiryDate,
+    sslProvider: currentMonitor.sslProvider,
     sslValid: currentMonitor.sslValid,
     responseTimeMs: currentMonitor.responseTimeMs,
     domainExpiryDate: currentMonitor.domainExpiryDate,
@@ -976,7 +1039,9 @@ module.exports = {
   getMonitorResponse,
   getTraySummary,
   invalidateMonitorCache,
+  isUptimeKumaEnabled,
   pauseMonitor,
+  restartBackgroundSync,
   startBackgroundSync,
   stopBackgroundSync,
   updateMonitor

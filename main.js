@@ -12,10 +12,11 @@ const history = require("./history")
 const clipboardTracker = require("./clipboard")
 const authenticator = require("./authenticator")
 const uptimeMonitor = require("./uptimeMonitor")
+const notesSearch = require("./notesSearch")
 const bcrypt = require("bcryptjs")
 const { spawn } = require("child_process")
 const { randomUUID } = require("crypto")
-const { google } = require('googleapis')
+const gdriveBackup = require('./gdriveBackup')
 const archiver = require('archiver')
 
 // Only load auto-launch in production
@@ -55,12 +56,51 @@ let gdriveBackupTimer = null
 let gdriveBackupRunning = false
 let gdriveStartupBackupTimer = null
 
+const GDRIVE_OAUTH_PORT = 8765
+
 function getGdriveAuthConfig() {
   return config.getConfigSection('gdriveAuth') || null
 }
 
 function setGdriveAuthConfig(next) {
   return config.setConfigSection('gdriveAuth', next || null)
+}
+
+function clearGdriveConnection() {
+  setGdriveAuthConfig(null)
+  restartGdriveBackupScheduler()
+}
+
+function isGdriveAuthError(message = '') {
+  const text = String(message).toLowerCase()
+  return (
+    text.includes('session expired') ||
+    text.includes('invalid_grant') ||
+    text.includes('invalid_client') ||
+    text.includes('reconnect google drive') ||
+    text.includes('missing google drive refresh token')
+  )
+}
+
+function syncGdriveAuthWithSettings(cloudBackup = {}) {
+  const auth = getGdriveAuthConfig()
+  if (!auth?.refresh_token) return
+
+  const nextClientId = String(cloudBackup.clientId || '').trim()
+  const nextClientSecret = String(cloudBackup.clientSecret || '').trim()
+  const storedClientId = String(auth.client_id || '').trim()
+
+  if (nextClientId && storedClientId && nextClientId !== storedClientId) {
+    clearGdriveConnection()
+    return
+  }
+
+  if (nextClientSecret && storedClientId) {
+    setGdriveAuthConfig({
+      ...auth,
+      client_secret: nextClientSecret
+    })
+  }
 }
 
 function getCloudBackupSettings() {
@@ -82,20 +122,50 @@ function getGdriveOAuthCredentials() {
   const cloudBackup = getCloudBackupSettings()
   const authCfg = getGdriveAuthConfig()
   const clientId = (
+    cloudBackup?.clientId ||
     process.env.GDRIVE_CLIENT_ID ||
     process.env.GOOGLE_CLIENT_ID ||
-    cloudBackup?.clientId ||
     authCfg?.client_id ||
     ''
   ).trim()
   const clientSecret = (
+    cloudBackup?.clientSecret ||
     process.env.GDRIVE_CLIENT_SECRET ||
     process.env.GOOGLE_CLIENT_SECRET ||
-    cloudBackup?.clientSecret ||
     authCfg?.client_secret ||
     ''
   ).trim()
   return { clientId, clientSecret }
+}
+
+function getGdriveOAuthCredentialsForRefresh() {
+  const authCfg = getGdriveAuthConfig()
+  const settings = getGdriveOAuthCredentials()
+
+  if (authCfg?.client_id) {
+    const clientId = String(authCfg.client_id).trim()
+    let clientSecret = String(authCfg.client_secret || '').trim()
+
+    if (!clientSecret && settings.clientId === clientId && settings.clientSecret) {
+      clientSecret = settings.clientSecret
+    }
+
+    if (clientId && clientSecret) {
+      return { clientId, clientSecret }
+    }
+
+    throw new Error(
+      'Saved Google Drive connection is missing OAuth credentials. Disconnect, re-enter Client ID and Client Secret in Settings, then connect again.'
+    )
+  }
+
+  if (!settings.clientId || !settings.clientSecret) {
+    throw new Error(
+      'Missing Google OAuth credentials. Add the Google Drive Client ID and Client Secret in Settings > Cloud Backup, then connect Google Drive.'
+    )
+  }
+
+  return settings
 }
 
 function hasGdriveOAuthCredentials() {
@@ -108,31 +178,42 @@ function getGdriveOAuthClient(redirectUri) {
   if (!clientId || !clientSecret) {
     throw new Error('Missing Google OAuth credentials. Add the Google Drive Client ID and Client Secret in Settings > Cloud Backup, or set GDRIVE_CLIENT_ID and GDRIVE_CLIENT_SECRET in the environment.')
   }
-  return new google.auth.OAuth2(clientId, clientSecret, redirectUri)
+  return { clientId, clientSecret, redirectUri }
 }
 
-function getDriveClient() {
-  const authCfg = getGdriveAuthConfig()
-  const refreshToken = authCfg?.refresh_token
-  if (!refreshToken) throw new Error('Google Drive not connected')
-  const oauth2 = getGdriveOAuthClient('urn:ietf:wg:oauth:2.0:oob')
-  oauth2.setCredentials({ refresh_token: refreshToken })
-  return google.drive({ version: 'v3', auth: oauth2 })
-}
+async function uploadBackupToDrive() {
+  if (gdriveBackupRunning) return { success: false, running: true }
+  gdriveBackupRunning = true
+  try {
+    const authCfg = getGdriveAuthConfig()
+    const refreshToken = authCfg?.refresh_token
+    if (!refreshToken) throw new Error('Google Drive not connected')
 
-async function ensureDriveBackupFolder(drive) {
-  const folderName = 'DeskMaster Backups'
-  const q = `mimeType='application/vnd.google-apps.folder' and name='${folderName.replace(/'/g, "\\'")}' and trashed=false`
-  const list = await drive.files.list({ q, fields: 'files(id,name,createdTime)', spaces: 'drive', pageSize: 10 })
-  const existing = Array.isArray(list.data?.files) ? list.data.files[0] : null
-  if (existing?.id) return existing.id
-  const created = await drive.files.create({
-    requestBody: { name: folderName, mimeType: 'application/vnd.google-apps.folder' },
-    fields: 'id'
-  })
-  return created.data?.id || null
-}
+    const { clientId, clientSecret } = getGdriveOAuthCredentialsForRefresh()
+    const { zipPath, baseName } = await createBackupZipToTemp()
+    const { keepLast = 10 } = getCloudBackupSettings()
 
+    const file = await gdriveBackup.uploadBackup({
+      clientId,
+      clientSecret,
+      refreshToken,
+      zipPath,
+      fileName: baseName,
+      keepLast
+    })
+
+    setCloudBackupSettings({ lastBackupAt: new Date().toISOString(), lastBackupStatus: 'success', lastBackupError: null })
+    return { success: true, file }
+  } catch (e) {
+    if (isGdriveAuthError(e?.message)) {
+      clearGdriveConnection()
+    }
+    setCloudBackupSettings({ lastBackupAt: new Date().toISOString(), lastBackupStatus: 'error', lastBackupError: e?.message || String(e) })
+    return { success: false, error: e?.message || String(e), needsReconnect: isGdriveAuthError(e?.message) }
+  } finally {
+    gdriveBackupRunning = false
+  }
+}
 async function createBackupZipToTemp() {
   const backupData = {
     version: '1.0',
@@ -162,48 +243,6 @@ async function createBackupZipToTemp() {
   })
 
   return { zipPath, baseName }
-}
-
-async function uploadBackupToDrive() {
-  if (gdriveBackupRunning) return { success: false, running: true }
-  gdriveBackupRunning = true
-  try {
-    const drive = getDriveClient()
-    const folderId = await ensureDriveBackupFolder(drive)
-    if (!folderId) throw new Error('Failed to create/find Drive backup folder')
-
-    const { zipPath, baseName } = await createBackupZipToTemp()
-
-    const file = await drive.files.create({
-      requestBody: { name: baseName, parents: [folderId] },
-      media: { mimeType: 'application/zip', body: fs.createReadStream(zipPath) },
-      fields: 'id,name,createdTime'
-    })
-
-    // Prune older backups (keep last N).
-    const { keepLast = 10 } = getCloudBackupSettings()
-    const list = await drive.files.list({
-      q: `'${folderId}' in parents and trashed=false and name contains 'deskmaster-backup-'`,
-      fields: 'files(id,name,createdTime)',
-      orderBy: 'createdTime desc',
-      pageSize: 50
-    })
-    const files = Array.isArray(list.data?.files) ? list.data.files : []
-    const toDelete = files.slice(Number(keepLast) || 10)
-    for (const f of toDelete) {
-      try {
-        await drive.files.delete({ fileId: f.id })
-      } catch {}
-    }
-
-    setCloudBackupSettings({ lastBackupAt: new Date().toISOString(), lastBackupStatus: 'success', lastBackupError: null })
-    return { success: true, file: file.data }
-  } catch (e) {
-    setCloudBackupSettings({ lastBackupAt: new Date().toISOString(), lastBackupStatus: 'error', lastBackupError: e?.message || String(e) })
-    return { success: false, error: e?.message || String(e) }
-  } finally {
-    gdriveBackupRunning = false
-  }
 }
 
 function restartGdriveBackupScheduler() {
@@ -538,7 +577,8 @@ async function updateTrayIcon() {
 
     // Get effective theme based on user preference
     const effectiveTheme = getEffectiveTheme();
-    const uptimeTraySummary = uptimeMonitor.getTraySummary();
+    const uptimeEnabled = appSettings?.uptimeKuma?.enabled !== false
+    const uptimeTraySummary = uptimeEnabled ? uptimeMonitor.getTraySummary() : { down: 0, sslAttention: 0, domainAttention: 0 };
     
     // Send current stats to tray icon window
     trayIconWindow.webContents.send('update-tray-stats', {
@@ -563,7 +603,7 @@ async function updateTrayIcon() {
     const baseWidth = 20; // Base padding
     const statWidth = enabledStatsCount * 18; // Each stat takes ~18px
     const timezoneWidth = timezones.length * 72; // Each timezone takes ~72px (only those shown in tray)
-    const hasUptimeNotification = uptimeTraySummary.down > 0 || uptimeTraySummary.sslAttention > 0 || uptimeTraySummary.domainAttention > 0;
+    const hasUptimeNotification = uptimeEnabled && (uptimeTraySummary.down > 0 || uptimeTraySummary.sslAttention > 0 || uptimeTraySummary.domainAttention > 0);
     const uptimeWidth = hasUptimeNotification ? 50 : 0;
     const padding = (enabledStatsCount + timezones.length + (hasUptimeNotification ? 1 : 0)) * 4; // 4px padding between items
     
@@ -1068,6 +1108,17 @@ function startBrowserServers() {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message }));
         }
+      } else if (req.url.startsWith('/api/notes/search')) {
+        try {
+          const url = new URL(req.url, `http://localhost:${HTTP_PORT}`)
+          const query = url.searchParams.get('q') || url.searchParams.get('query') || ''
+          const results = notesSearch.searchNotesPages(query)
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ results }))
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: error.message || 'Unable to search notes' }))
+        }
       } else if (req.url.startsWith('/api/notes/page')) {
         try {
           const url = new URL(req.url, `http://localhost:${HTTP_PORT}`);
@@ -1217,7 +1268,7 @@ function startBrowserServers() {
         appSettings = config.getAppSettings();
 
         if (newSettings.uptimeKuma !== undefined) {
-          uptimeMonitor.invalidateMonitorCache()
+          uptimeMonitor.restartBackgroundSync()
         }
         
         // Broadcast settings update to WebSocket clients
@@ -2585,7 +2636,9 @@ app.whenReady().then(async () => {
   }
 
   restartGdriveBackupScheduler()
-  uptimeMonitor.startBackgroundSync()
+  if (uptimeMonitor.isUptimeKumaEnabled()) {
+    uptimeMonitor.startBackgroundSync()
+  }
 
   createWindow()
   createTrayIconWindow()
@@ -2744,28 +2797,32 @@ async function gdriveConnectFlow() {
     })
   })
 
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-  const port = server.address().port
-  const redirectUri = `http://127.0.0.1:${port}/oauth2callback`
-  const oauth2 = getGdriveOAuthClient(redirectUri)
-  const authUrl = oauth2.generateAuthUrl({
-    access_type: 'offline',
-    prompt: 'consent',
-    scope: ['https://www.googleapis.com/auth/drive.file']
+  await new Promise((resolve, reject) => {
+    server.once('error', (err) => {
+      if (err?.code === 'EADDRINUSE') {
+        reject(new Error(`OAuth port ${GDRIVE_OAUTH_PORT} is already in use. Close other DeskMaster instances and try again.`))
+        return
+      }
+      reject(err)
+    })
+    server.listen(GDRIVE_OAUTH_PORT, '127.0.0.1', () => resolve())
   })
+  const redirectUri = `http://127.0.0.1:${GDRIVE_OAUTH_PORT}/oauth2callback`
+  const { clientId, clientSecret } = getGdriveOAuthClient(redirectUri)
+  const authUrl = gdriveBackup.buildAuthUrl({ clientId, redirectUri })
 
   await shell.openExternal(authUrl)
   const code = await codePromise
-  const tokenRes = await oauth2.getToken(code)
-  const refresh = tokenRes?.tokens?.refresh_token
+  const tokenRes = await gdriveBackup.exchangeAuthCode({ clientId, clientSecret, redirectUri, code })
+  const refresh = tokenRes?.refresh_token
   if (!refresh) throw new Error('Google did not return a refresh token. Try connecting again.')
-  const { clientId, clientSecret } = getGdriveOAuthCredentials()
   setGdriveAuthConfig({
     refresh_token: refresh,
     client_id: clientId,
     client_secret: clientSecret,
     connectedAt: new Date().toISOString()
   })
+  await gdriveBackup.verifyCredentials({ clientId, clientSecret, refreshToken: refresh })
   restartGdriveBackupScheduler()
   return { success: true }
 }
@@ -2865,11 +2922,12 @@ ipcMain.handle('update-settings', (event, newSettings) => {
 
   // Restart cloud backup scheduler when backup settings change.
   if (newSettings.cloudBackup !== undefined) {
+    syncGdriveAuthWithSettings(newSettings.cloudBackup)
     restartGdriveBackupScheduler()
   }
 
   if (newSettings.uptimeKuma !== undefined) {
-    uptimeMonitor.invalidateMonitorCache()
+    uptimeMonitor.restartBackgroundSync()
   }
   
   // Broadcast settings update to WebSocket clients
@@ -3444,6 +3502,10 @@ function importNotesFromLegacy(tree, pageStatesById) {
     archiveNode.children.forEach((n) => writeNode(n, getNotesArchivedDir()));
   }
 }
+
+ipcMain.handle('notes:search', async (event, query) => {
+  return notesSearch.searchNotesPages(query)
+})
 
 ipcMain.handle('notes:has-pages', async () => {
   try {
@@ -4393,10 +4455,14 @@ ipcMain.handle('permanently-delete-from-trash', async (event, trashId) => {
   }
 });
 
-ipcMain.handle('copy-to-clipboard', async (event, text) => {
+ipcMain.handle('copy-to-clipboard', async (event, text, options) => {
   try {
     const { clipboard } = require('electron');
-    clipboard.writeText(text);
+    const value = String(text ?? '');
+    clipboard.writeText(value);
+    if (options?.skipHistory) {
+      clipboardTracker.skipClipboardCapture(value);
+    }
     return { success: true };
   } catch (error) {
     console.error('Error copying to clipboard:', error);

@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "3.0.0",
+  "version": "3.1.3",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -71,7 +71,6 @@
     "chart.js": "^4.4.0",
     "class-variance-authority": "^0.7.1",
     "dotenv": "^16.6.1",
-    "googleapis": "^171.4.0",
     "html2canvas": "^1.4.1",
     "moment": "^2.30.1",
     "moment-timezone": "^0.6.0",
@@ -119,6 +118,8 @@
       "clipboard.js",
       "authenticator.js",
       "uptimeMonitor.js",
+      "gdriveBackup.js",
+      "notesSearch.js",
       "package.json",
       "assets/**/*"
     ],

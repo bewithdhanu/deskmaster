@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { MdAdd, MdArchive, MdChevronRight, MdExpandMore, MdNotes } from 'react-icons/md';
+import { MdAdd, MdArchive, MdChevronRight, MdClose, MdExpandMore, MdNotes, MdSearch } from 'react-icons/md';
 import MonacoEditor, { loader as monacoLoader } from '@monaco-editor/react';
 import { FormattingToolbarController, useCreateBlockNote, useEditorChange } from '@blocknote/react';
 import { BlockNoteView, ShadCNDefaultComponents } from '@blocknote/shadcn';
@@ -350,6 +350,132 @@ function normalizePageType(type) {
   if (type === PAGE_TYPE_TEXT) return PAGE_TYPE_TEXT;
   if (type === PAGE_TYPE_MARKDOWN) return PAGE_TYPE_MARKDOWN;
   return PAGE_TYPE_CANVAS;
+}
+
+function getPathIds(nodes, targetId, path = []) {
+  for (const node of nodes || []) {
+    if (node.id === targetId) return [...path, node.id];
+    if (node.children?.length) {
+      const found = getPathIds(node.children, targetId, [...path, node.id]);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function stripHtmlForSearch(value) {
+  return String(value || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function scrollElementIntoViewWithin(element, container) {
+  if (!element) return;
+  if (!container) {
+    element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+  const elRect = element.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const nextTop = elRect.top - containerRect.top + container.scrollTop - container.clientHeight / 2 + elRect.height / 2;
+  container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
+}
+
+function highlightQueryInContentEditable(contentEl, query) {
+  const q = String(query || '').trim();
+  if (!contentEl || !q) return false;
+
+  const plain = (contentEl.innerText || contentEl.textContent || '').replace(/\s+/g, ' ');
+  const lower = plain.toLowerCase();
+  const qLower = q.toLowerCase();
+  const matchIndex = lower.indexOf(qLower);
+  if (matchIndex < 0) return false;
+
+  const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT);
+  let charCount = 0;
+  let startNode = null;
+  let startOffset = 0;
+  let endNode = null;
+  let endOffset = 0;
+  const matchEnd = matchIndex + q.length;
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const nodeLen = node.textContent.length;
+    if (!startNode && charCount + nodeLen > matchIndex) {
+      startNode = node;
+      startOffset = matchIndex - charCount;
+    }
+    if (!endNode && charCount + nodeLen >= matchEnd) {
+      endNode = node;
+      endOffset = matchEnd - charCount;
+      break;
+    }
+    charCount += nodeLen;
+  }
+
+  if (!startNode || !endNode) return false;
+
+  const range = document.createRange();
+  range.setStart(startNode, startOffset);
+  range.setEnd(endNode, endOffset);
+
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  contentEl.focus();
+
+  const scrollContainer = contentEl.closest('.one-canvas') || contentEl.closest('.overflow-y-auto');
+  scrollElementIntoViewWithin(contentEl, scrollContainer);
+
+  return true;
+}
+
+function applyMonacoSearchHighlight(editor, query) {
+  const q = String(query || '').trim();
+  if (!editor || !q) return false;
+  const model = editor.getModel?.();
+  if (!model) return false;
+  const matches = model.findMatches(q, false, false, false, null, false);
+  if (!matches.length) return false;
+  editor.setSelection(matches[0].range);
+  editor.revealRangeInCenter(matches[0].range, 1);
+  editor.focus();
+  return true;
+}
+
+function applyCanvasSearchHighlight(editor, query) {
+  const q = String(query || '').trim();
+  if (!editor || !q) return false;
+  const blocks = editor.getBlocks?.() || [];
+  for (const block of blocks) {
+    const plain = stripHtmlForSearch(block._contentEl?.innerHTML || '');
+    if (!plain.toLowerCase().includes(q.toLowerCase())) continue;
+    if (block.canvasEl) {
+      block.canvasEl.scrollTop = Math.max(0, block.y - 80);
+      block.canvasEl.scrollLeft = Math.max(0, block.x - 40);
+    }
+    block.focus?.();
+    return highlightQueryInContentEditable(block._contentEl, q);
+  }
+  return false;
+}
+
+function applyMarkdownSearchHighlight(query) {
+  const q = String(query || '').trim();
+  if (!q) return false;
+  const scrollRoot = document.querySelector('.notes-markdown-root .overflow-y-auto');
+  const editableBlocks = scrollRoot?.querySelectorAll('[contenteditable="true"]') || [];
+  for (const contentEl of editableBlocks) {
+    const plain = (contentEl.innerText || '').replace(/\s+/g, ' ').trim();
+    if (!plain.toLowerCase().includes(q.toLowerCase())) continue;
+    scrollElementIntoViewWithin(contentEl, scrollRoot);
+    contentEl.focus();
+    return highlightQueryInContentEditable(contentEl, q);
+  }
+  return false;
 }
 
 function BlockNoteMarkdownEditor({ initialBlocks, legacyMarkdown, pageTitle, dark, onEditorReady, onBlocksChange }) {
@@ -755,6 +881,9 @@ const Notes = () => {
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, targetId: null });
   const [newPageType, setNewPageType] = useState(PAGE_TYPE_CANVAS);
   const [newPageMenu, setNewPageMenu] = useState({ open: false, x: 0, y: 0, parentId: null });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [textValue, setTextValue] = useState('');
@@ -851,6 +980,8 @@ const Notes = () => {
   const treeRef = useRef(tree);
   const selectedIdRef = useRef(selectedId);
   const markdownTitleRenameTimerRef = useRef(null);
+  const pendingSearchHighlightRef = useRef(null);
+  const tryApplyPendingSearchHighlightRef = useRef(() => {});
 
   const selectedNode = useMemo(() => (selectedId ? findNodeById(tree, selectedId) : null), [tree, selectedId]);
   const selectedType = useMemo(() => normalizePageType(selectedNode?.type), [selectedNode]);
@@ -866,6 +997,28 @@ const Notes = () => {
   useLayoutEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+
+  tryApplyPendingSearchHighlightRef.current = () => {
+    const pending = pendingSearchHighlightRef.current;
+    if (!pending?.query || pending.pageId !== selectedIdRef.current) return false;
+
+    const node = findNodeById(treeRef.current, pending.pageId);
+    const pageType = normalizePageType(node?.type);
+    let applied = false;
+
+    if (pageType === PAGE_TYPE_TEXT && textEditorRef.current) {
+      applied = applyMonacoSearchHighlight(textEditorRef.current, pending.query);
+    } else if (pageType === PAGE_TYPE_CANVAS && editorRef.current) {
+      applied = applyCanvasSearchHighlight(editorRef.current, pending.query);
+    } else if (pageType === PAGE_TYPE_MARKDOWN) {
+      applied = applyMarkdownSearchHighlight(pending.query);
+    }
+
+    if (applied) {
+      pendingSearchHighlightRef.current = null;
+    }
+    return applied;
+  };
 
   useEffect(() => {
     return () => {
@@ -966,6 +1119,29 @@ const Notes = () => {
   }, [tree, mode, expanded.size]);
 
   useEffect(() => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return undefined;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await ipcRenderer.invoke('notes:search', query);
+        setSearchResults(Array.isArray(results) ? results : []);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
     if (!uiHydratedRef.current) return;
     if (persistUiTimerRef.current) clearTimeout(persistUiTimerRef.current);
     persistUiTimerRef.current = setTimeout(() => {
@@ -1012,6 +1188,9 @@ const Notes = () => {
         const savedState = await ipcRenderer.invoke('notes:get-page-state', selectedId);
         if (disposed) return;
         if (savedState && Array.isArray(savedState.blocks)) editor.loadState(savedState);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => tryApplyPendingSearchHighlightRef.current());
+        });
       } catch {}
     })();
 
@@ -1062,6 +1241,18 @@ const Notes = () => {
       editorRef.current = null;
     };
   }, [selectedId, selectedType]);
+
+  useEffect(() => {
+    if (selectedType !== PAGE_TYPE_TEXT || !selectedId) return undefined;
+    const timer = setTimeout(() => tryApplyPendingSearchHighlightRef.current(), 120);
+    return () => clearTimeout(timer);
+  }, [selectedId, selectedType, textValue]);
+
+  useEffect(() => {
+    if (selectedType !== PAGE_TYPE_MARKDOWN || !selectedId) return undefined;
+    const timer = setTimeout(() => tryApplyPendingSearchHighlightRef.current(), 350);
+    return () => clearTimeout(timer);
+  }, [selectedId, selectedType, markdownHydrationKey]);
 
   const toggleExpanded = (id) => {
     setExpanded((prev) => {
@@ -1204,6 +1395,31 @@ const Notes = () => {
       setTree([]);
       return [];
     }
+  };
+
+  const openSearchResult = (result) => {
+    if (!result?.id) return;
+    const query = searchQuery.trim();
+    if (query) {
+      pendingSearchHighlightRef.current = { pageId: result.id, query };
+    }
+    const nextMode = result.archived ? 'archive' : 'notes';
+    setMode(nextMode);
+    const isSamePage = result.id === selectedId;
+    if (!isSamePage) {
+      setSelectedId(result.id);
+    }
+    void refreshTree().then(() => {
+      const currentTree = treeRef.current;
+      const roots = nextMode === 'archive'
+        ? getArchivedChildren(currentTree)
+        : currentTree.filter((n) => n.id !== ARCHIVE_ROOT_ID);
+      const path = getPathIds(roots, result.id) || [];
+      if (path.length) {
+        setExpanded((prev) => new Set([...prev, ...path]));
+      }
+      setTimeout(() => tryApplyPendingSearchHighlightRef.current(), isSamePage ? 50 : 400);
+    });
   };
 
   const getVisiblePageIdsInOrder = useCallback(
@@ -1632,6 +1848,9 @@ const Notes = () => {
     return getArchivedChildren(tree);
   }, [tree, mode]);
 
+  const trimmedSearch = searchQuery.trim();
+  const hasSearch = Boolean(trimmedSearch);
+
   const archiveTargetTitle = useMemo(() => {
     const id = archiveConfirm.targetId;
     if (!id) return '';
@@ -1685,13 +1904,44 @@ const Notes = () => {
           )}
         </div>
 
+        <div className="px-3 py-2 border-b border-theme">
+          <div className="relative">
+            <MdSearch className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-theme-muted" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search notes…"
+              className="w-full rounded-md border border-theme bg-theme-card py-1.5 pl-8 pr-8 text-sm text-theme-primary placeholder:text-theme-muted focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+            />
+            {searchQuery ? (
+              <button
+                type="button"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary"
+                onClick={() => {
+                  pendingSearchHighlightRef.current = null;
+                  setSearchQuery('');
+                }}
+                title="Clear search"
+              >
+                <MdClose className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
+          {hasSearch ? (
+            <div className="mt-1 px-1 text-[11px] text-theme-muted">
+              {isSearching ? 'Searching…' : `${searchResults.length} result${searchResults.length === 1 ? '' : 's'}`}
+            </div>
+          ) : null}
+        </div>
+
         <div
           className="p-2 overflow-auto flex-1"
-          onDragOver={(e) => {
+          onDragOver={hasSearch ? undefined : (e) => {
             e.preventDefault();
             setDragOver({ id: null, position: null });
           }}
-          onDrop={(e) => {
+          onDrop={hasSearch ? undefined : (e) => {
             e.preventDefault();
             setDragOver({ id: null, position: null });
             const sourceId = e.dataTransfer.getData('text/plain');
@@ -1708,7 +1958,36 @@ const Notes = () => {
             })();
           }}
         >
-          {visibleTree.map((node) => (
+          {hasSearch ? (
+            <div className="space-y-1">
+              {!isSearching && searchResults.length === 0 ? (
+                <div className="px-2 py-4 text-sm text-theme-muted">No pages match your search.</div>
+              ) : null}
+              {searchResults.map((result) => (
+                <button
+                  key={result.id}
+                  type="button"
+                  className={`w-full rounded-md border border-transparent px-2 py-2 text-left transition-colors hover:border-theme hover:bg-theme-card-hover ${
+                    selectedId === result.id ? 'border-theme bg-theme-card-hover' : ''
+                  }`}
+                  onClick={() => openSearchResult(result)}
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-theme-primary">
+                      {result.title || 'Untitled'}
+                      {result.archived ? (
+                        <span className="ml-1.5 text-[11px] font-normal text-theme-muted">(Archived)</span>
+                      ) : null}
+                    </div>
+                    {result.snippet ? (
+                      <div className="mt-1 line-clamp-2 text-xs leading-5 text-theme-muted">{result.snippet}</div>
+                    ) : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            visibleTree.map((node) => (
             <TreeRow
               key={node.id}
               node={node}
@@ -1736,7 +2015,7 @@ const Notes = () => {
               dragOverPosition={dragOver.position}
               mode={mode}
             />
-          ))}
+          )))}
         </div>
 
         <div className="h-12 border-t border-theme px-2 flex items-center justify-between">
@@ -1874,6 +2153,7 @@ const Notes = () => {
                 }}
                 onMount={(editor) => {
                   textEditorRef.current = editor;
+                  setTimeout(() => tryApplyPendingSearchHighlightRef.current(), 120);
                 }}
                 onChange={(value) => setTextValue(typeof value === 'string' ? value : '')}
               />
@@ -1890,6 +2170,7 @@ const Notes = () => {
                 dark={isDark}
                 onEditorReady={(ed) => {
                   blockNoteEditorRef.current = ed;
+                  setTimeout(() => tryApplyPendingSearchHighlightRef.current(), 200);
                 }}
                 onBlocksChange={(blocks) => {
                   if (!selectedId) return;

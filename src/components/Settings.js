@@ -5,6 +5,84 @@ import { getIpcRenderer, isElectron } from '../utils/electron';
 
 const ipcRenderer = getIpcRenderer();
 
+const scrollToSection = (sectionId) => {
+  document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+const ToggleSwitch = ({ enabled, onChange, label, description }) => (
+  <div className="flex items-center justify-between gap-4 rounded-lg border border-theme bg-theme-secondary/60 px-4 py-3">
+    <div className="min-w-0 flex-1">
+      <div className="text-theme-primary font-medium text-sm">{label}</div>
+      {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
+    </div>
+    <button
+      type="button"
+      onClick={onChange}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ${
+        enabled ? 'bg-red-500' : 'bg-theme-secondary border border-theme'
+      }`}
+      aria-pressed={enabled}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+          enabled ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  </div>
+);
+
+const SelectOption = ({ value, onChange, options, label, description }) => (
+  <div className="rounded-lg border border-theme bg-theme-secondary/60 px-4 py-3">
+    <div className="mb-2">
+      <div className="text-theme-primary font-medium text-sm">{label}</div>
+      {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
+    </div>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-3 py-2 bg-theme-card border border-theme rounded-md text-theme-primary text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  </div>
+);
+
+const SectionCard = ({ id, icon: Icon, title, description, children }) => (
+  <section id={id} className="scroll-mt-6 rounded-xl border border-theme bg-theme-card shadow-sm">
+    <div className="flex items-start gap-3 border-b border-theme px-5 py-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-secondary text-theme-muted">
+        <Icon className="h-5 w-5" />
+      </div>
+      <div>
+        <h3 className="text-base font-semibold text-theme-primary">{title}</h3>
+        {description && <p className="mt-1 text-xs leading-5 text-theme-muted">{description}</p>}
+      </div>
+    </div>
+    <div className="space-y-3 p-5">{children}</div>
+  </section>
+);
+
+const StatusPill = ({ tone = 'muted', children }) => {
+  const toneClass = tone === 'success'
+    ? 'border-green-500/30 bg-green-500/10 text-green-500'
+    : tone === 'warning'
+      ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-500'
+      : tone === 'danger'
+        ? 'border-red-500/30 bg-red-500/10 text-red-500'
+        : 'border-theme bg-theme-secondary text-theme-muted';
+
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClass}`}>
+      {children}
+    </span>
+  );
+};
+
 const Settings = () => {
   const [settings, setSettings] = useState({
     stats: {
@@ -25,6 +103,7 @@ const Settings = () => {
       ipLocation: ''
     },
     uptimeKuma: {
+      enabled: true,
       url: '',
       username: '',
       password: ''
@@ -399,79 +478,6 @@ const Settings = () => {
     }
   };
 
-  const ToggleSwitch = ({ enabled, onChange, label, description }) => (
-    <div className="flex items-center justify-between gap-4 rounded-lg border border-theme bg-theme-secondary/60 px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <div className="text-theme-primary font-medium text-sm">{label}</div>
-        {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
-      </div>
-      <button
-        onClick={onChange}
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ${
-          enabled ? 'bg-red-500' : 'bg-theme-secondary border border-theme'
-        }`}
-        aria-pressed={enabled}
-      >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-            enabled ? 'translate-x-6' : 'translate-x-1'
-          }`}
-        />
-      </button>
-    </div>
-  );
-
-  const SelectOption = ({ value, onChange, options, label, description }) => (
-    <div className="rounded-lg border border-theme bg-theme-secondary/60 px-4 py-3">
-      <div className="mb-2">
-        <div className="text-theme-primary font-medium text-sm">{label}</div>
-        {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
-      </div>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 bg-theme-card border border-theme rounded-md text-theme-primary text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-
-  const SectionCard = ({ id, icon: Icon, title, description, children }) => (
-    <section id={id} className="scroll-mt-6 rounded-xl border border-theme bg-theme-card shadow-sm">
-      <div className="flex items-start gap-3 border-b border-theme px-5 py-4">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-secondary text-theme-muted">
-          <Icon className="h-5 w-5" />
-        </div>
-        <div>
-          <h3 className="text-base font-semibold text-theme-primary">{title}</h3>
-          {description && <p className="mt-1 text-xs leading-5 text-theme-muted">{description}</p>}
-        </div>
-      </div>
-      <div className="space-y-3 p-5">{children}</div>
-    </section>
-  );
-
-  const StatusPill = ({ tone = 'muted', children }) => {
-    const toneClass = tone === 'success'
-      ? 'border-green-500/30 bg-green-500/10 text-green-500'
-      : tone === 'warning'
-        ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-500'
-        : tone === 'danger'
-          ? 'border-red-500/30 bg-red-500/10 text-red-500'
-          : 'border-theme bg-theme-secondary text-theme-muted';
-
-    return (
-      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClass}`}>
-        {children}
-      </span>
-    );
-  };
-
   const settingsSections = [
     { id: 'system-stats', label: 'System Stats', icon: MdMemory },
     { id: 'world-clocks', label: 'World Clocks', icon: MdAccessTime },
@@ -495,14 +501,15 @@ const Settings = () => {
             {settingsSections.map((section) => {
               const Icon = section.icon;
               return (
-                <a
+                <button
+                  type="button"
                   key={section.id}
-                  href={`#${section.id}`}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-theme-muted transition-colors hover:bg-theme-secondary hover:text-theme-primary"
+                  onClick={() => scrollToSection(section.id)}
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-theme-muted transition-colors hover:bg-theme-secondary hover:text-theme-primary"
                 >
                   <Icon className="h-4 w-4" />
                   <span>{section.label}</span>
-                </a>
+                </button>
               );
             })}
           </nav>
@@ -528,6 +535,9 @@ const Settings = () => {
                   </StatusPill>
                   <StatusPill tone={settings.autoStart ? 'success' : 'muted'}>
                     Auto Start {settings.autoStart ? 'On' : 'Off'}
+                  </StatusPill>
+                  <StatusPill tone={settings.uptimeKuma?.enabled !== false ? 'success' : 'muted'}>
+                    Uptime {settings.uptimeKuma?.enabled !== false ? 'On' : 'Off'}
                   </StatusPill>
                 </div>
               </div>
@@ -594,6 +604,7 @@ const Settings = () => {
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs text-theme-primary font-medium">Timezones</div>
                   <button
+                    type="button"
                     onClick={openAddTimezoneModal}
                     className="flex items-center justify-center w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full text-xs font-bold transition-colors duration-200"
                   >
@@ -619,6 +630,7 @@ const Settings = () => {
                         </span>
                       )}
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeTimezone(tz.id);
@@ -657,6 +669,7 @@ const Settings = () => {
                 <div className="mt-2 pt-2 border-t border-theme">
                   <div className="text-xs text-theme-muted mb-1">Web URL:</div>
                   <button
+                    type="button"
                     onClick={openWebUrl}
                     className="text-xs text-red-500 hover:text-red-400 underline break-all text-left transition-colors duration-200"
                     title="Click to open in browser"
@@ -792,6 +805,14 @@ const Settings = () => {
                 description="Connect DeskMaster to your Uptime Kuma instance using URL, username, and password."
               >
             <div className="space-y-3">
+              <ToggleSwitch
+                enabled={settings.uptimeKuma?.enabled !== false}
+                onChange={() => updateUptimeKumaSettings({ enabled: settings.uptimeKuma?.enabled === false })}
+                label="Enable Uptime Kuma"
+                description="Show the Uptime tab, home stats, and tray alerts. Your URL and credentials are kept when disabled."
+              />
+
+              <div className="space-y-3 rounded border border-theme bg-theme-secondary px-3 py-3">
               <div>
                 <label className="block text-xs font-medium text-theme-primary mb-1">
                   Uptime Kuma URL
@@ -844,6 +865,7 @@ const Settings = () => {
                 </div>
                 <div className="text-theme-muted text-xs mt-1">Token authentication is intentionally not used</div>
               </div>
+              </div>
             </div>
               </SectionCard>
 
@@ -855,6 +877,7 @@ const Settings = () => {
               >
             <div className="space-y-2">
               <button
+                type="button"
                 onClick={handleExport}
                 disabled={isExporting}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
@@ -863,6 +886,7 @@ const Settings = () => {
                 {isExporting ? 'Exporting...' : 'Export All Data'}
               </button>
               <button
+                type="button"
                 onClick={handleImport}
                 disabled={isImporting}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
@@ -871,6 +895,7 @@ const Settings = () => {
                 {isImporting ? 'Importing...' : 'Import Data'}
               </button>
               <button
+                type="button"
                 onClick={handleReset}
                 disabled={isResetting}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-500 hover:bg-red-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
@@ -939,6 +964,10 @@ const Settings = () => {
                     <div className="text-theme-muted text-xs mt-1">
                       Required in installed builds because release apps cannot read your development .env file.
                     </div>
+                    <div className="text-theme-muted text-xs mt-2">
+                      In Google Cloud Console, add this redirect URI to your OAuth Web client:
+                      <span className="block mt-1 font-mono text-theme-primary break-all">http://127.0.0.1:8765/oauth2callback</span>
+                    </div>
                   </div>
                 </div>
 
@@ -952,6 +981,7 @@ const Settings = () => {
                   <div className="flex gap-2">
                     {!backupStatus.connected ? (
                       <button
+                        type="button"
                         className="px-3 py-1.5 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-xs disabled:opacity-60"
                         disabled={isConnectingDrive || !backupStatus.oauthConfigured}
                         title={!backupStatus.oauthConfigured ? 'Add Google OAuth Client ID and Client Secret first' : ''}
@@ -971,6 +1001,7 @@ const Settings = () => {
                       </button>
                     ) : (
                       <button
+                        type="button"
                         className="px-3 py-1.5 rounded-md bg-theme-secondary hover:bg-theme-card-hover border border-theme text-theme-primary text-xs"
                         onClick={async () => {
                           try {
@@ -993,6 +1024,7 @@ const Settings = () => {
                     <div className="text-theme-muted text-xs truncate">Every {settings.cloudBackup?.intervalHours || 4} hours</div>
                   </div>
                   <button
+                    type="button"
                     className={`px-3 py-1.5 rounded-md text-xs ${settings.cloudBackup?.enabled ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-theme-secondary hover:bg-theme-card-hover border border-theme text-theme-primary'}`}
                     disabled={!backupStatus.connected}
                     onClick={() => updateBackupSettings({ enabled: !settings.cloudBackup?.enabled })}
@@ -1015,14 +1047,19 @@ const Settings = () => {
 
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     className="flex-1 px-3 py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-xs disabled:opacity-60"
                     disabled={!backupStatus.connected || isBackingUpNow}
                     onClick={async () => {
                       setIsBackingUpNow(true);
                       try {
-                        await ipcRenderer.invoke('gdrive:backup-now');
+                        const result = await ipcRenderer.invoke('gdrive:backup-now');
                         await loadBackupStatus();
+                        if (!result?.success && result?.error) {
+                          alert(result.error);
+                        }
                       } catch (e) {
+                        await loadBackupStatus();
                         alert(e?.message || 'Backup failed');
                       } finally {
                         setIsBackingUpNow(false);
@@ -1036,7 +1073,12 @@ const Settings = () => {
                 <div className="text-theme-muted text-xs pt-2 border-t border-theme">
                   <div>Last backup: {backupStatus.lastBackupAt ? new Date(backupStatus.lastBackupAt).toLocaleString() : 'Never'}</div>
                   {backupStatus.lastBackupStatus === 'error' ? (
-                    <div className="text-red-500 mt-1">Error: {backupStatus.lastBackupError || 'Unknown error'}</div>
+                    <div className="text-red-500 mt-1">
+                      Error: {backupStatus.lastBackupError || 'Unknown error'}
+                      {!backupStatus.connected && backupStatus.lastBackupError?.toLowerCase().includes('session expired') ? (
+                        <div className="text-theme-muted mt-1">Connection was cleared. Click Connect after verifying your OAuth credentials and redirect URI.</div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               </div>
@@ -1056,6 +1098,7 @@ const Settings = () => {
                 {editingTimezone ? 'Edit Timezone' : 'Add Timezone'}
               </h3>
               <button
+                type="button"
                 onClick={closeTimezoneModal}
                 className="text-theme-muted hover:text-theme-primary transition-colors duration-200"
               >
@@ -1087,6 +1130,7 @@ const Settings = () => {
                   <div className="text-theme-muted text-xs mt-0.5">Display this timezone in system tray</div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setShowInTray(!showInTray)}
                   className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 ${
                     showInTray ? 'bg-red-500' : 'bg-theme-secondary'
@@ -1101,6 +1145,7 @@ const Settings = () => {
               </div>
               <div className="flex gap-2 pt-2">
                 <button
+                  type="button"
                   onClick={saveTimezone}
                   disabled={!selectedTimezone || !timezoneLabel.trim()}
                   className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200"
@@ -1108,6 +1153,7 @@ const Settings = () => {
                   {editingTimezone ? 'Update' : 'Add'}
                 </button>
                 <button
+                  type="button"
                   onClick={closeTimezoneModal}
                   className="flex-1 px-4 py-2 bg-theme-secondary hover:bg-theme-card-hover text-theme-primary rounded-md transition-colors duration-200"
                 >

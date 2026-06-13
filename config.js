@@ -22,6 +22,7 @@ let appSettings = {
     ipLocation: ''
   },
   uptimeKuma: {
+    enabled: true,
     url: '',
     username: '',
     password: ''
