@@ -14,6 +14,7 @@ import { cva } from 'class-variance-authority';
 import { CheckIcon, ChevronRightIcon } from 'lucide-react';
 import { OneNoteEditor } from '../vendor/onenote-style-editor/index.js';
 import { getIpcRenderer, isElectron } from '../utils/electron';
+import { aiEditText } from '../utils/textLlmClient';
 import { getRoute, navigate, subscribe } from '../utils/appRoute';
 import { DeskMasterFormattingToolbar } from './blocknote/MarkdownAiToolbarButtons.js';
 import './onenote-style-editor.css';
@@ -865,6 +866,8 @@ function TreeRow({
   );
 }
 
+const TEXT_AI_INITIAL = { open: false, busy: false, selection: '', history: [], prompt: '' };
+
 const Notes = () => {
   const [tree, setTree] = useState([]);
   const allIds = useMemo(() => flattenIds(tree).filter((id) => id !== ARCHIVE_ROOT_ID), [tree]);
@@ -889,7 +892,7 @@ const Notes = () => {
   const [loadError, setLoadError] = useState(null);
   const [textValue, setTextValue] = useState('');
   const textEditorRef = useRef(null);
-  const [textAi, setTextAi] = useState({ open: false, busy: false, selection: '', history: [], prompt: '' });
+  const [textAi, setTextAi] = useState(TEXT_AI_INITIAL);
   const [markdownInitialBlocks, setMarkdownInitialBlocks] = useState(null);
   const getMonacoSelectedText = useCallback(() => {
     const ed = textEditorRef.current;
@@ -917,13 +920,21 @@ const Notes = () => {
     }
   }, []);
 
+  const closeTextAiPanel = useCallback(() => {
+    setTextAi({ ...TEXT_AI_INITIAL });
+  }, []);
+
+  const openTextAiPanel = useCallback((selection) => {
+    setTextAi({ ...TEXT_AI_INITIAL, open: true, selection: selection || '' });
+  }, []);
+
   const runTextAi = useCallback(
     async (actionKey, extra = {}) => {
       const selected = getMonacoSelectedText().trim();
       if (!selected) return;
       setTextAi((p) => ({ ...p, open: true, busy: true, selection: selected }));
       try {
-        const result = await ipcRenderer.invoke('ai-edit-text', selected, actionKey, extra);
+        const result = await aiEditText(selected, actionKey, extra);
         if (typeof result === 'string' && result.trim()) {
           setTextAi((p) => ({
             ...p,
@@ -949,7 +960,7 @@ const Notes = () => {
     const contextText = last?.a ? `${base}\n\n---\nAI_OUTPUT:\n${last.a}` : base;
     setTextAi((p) => ({ ...p, open: true, busy: true }));
     try {
-      const result = await ipcRenderer.invoke('ai-edit-text', contextText, 'custom', { instruction });
+      const result = await aiEditText(contextText, 'custom', { instruction });
       if (typeof result === 'string' && result.trim()) {
         setTextAi((p) => ({
           ...p,
@@ -2084,7 +2095,7 @@ const Notes = () => {
                   onClick={() => {
                     const sel = getMonacoSelectedText().trim();
                     if (!sel) return;
-                    setTextAi((p) => ({ ...p, open: true, selection: sel }));
+                    openTextAiPanel(sel);
                   }}
                   title="Edit selection with AI"
                 >
@@ -2098,7 +2109,7 @@ const Notes = () => {
                     <div className="text-theme-primary text-sm font-medium">AI</div>
                     <button
                       className="text-theme-muted hover:text-theme-primary text-sm"
-                      onClick={() => setTextAi((p) => ({ ...p, open: false, prompt: '' }))}
+                      onClick={closeTextAiPanel}
                     >
                       ✕
                     </button>
@@ -2114,7 +2125,17 @@ const Notes = () => {
                       <button className="px-2 py-1 rounded border border-theme text-xs hover:bg-theme-card-hover" disabled={textAi.busy} onClick={() => void runTextAi('simplify')}>
                         Simplify
                       </button>
+                      <button className="px-2 py-1 rounded border border-theme text-xs hover:bg-theme-card-hover" disabled={textAi.busy} onClick={() => void runTextAi('shorten')}>
+                        Shorten
+                      </button>
+                      <button className="px-2 py-1 rounded border border-theme text-xs hover:bg-theme-card-hover" disabled={textAi.busy} onClick={() => void runTextAi('expand')}>
+                        Expand
+                      </button>
+                      <button className="px-2 py-1 rounded border border-theme text-xs hover:bg-theme-card-hover" disabled={textAi.busy} onClick={() => void runTextAi('translate', { targetLanguage: 'Spanish' })}>
+                        → Spanish
+                      </button>
                     </div>
+                    <p className="text-[10px] text-theme-muted">Uses your AI Agent default LLM (Settings → AI Agent).</p>
 
                     {Array.isArray(textAi.history) && textAi.history.length ? (
                       <div className="space-y-2">
