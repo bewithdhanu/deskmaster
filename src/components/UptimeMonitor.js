@@ -88,6 +88,12 @@ function formatDate(value) {
   return value || 'Not loaded';
 }
 
+function formatSslDays(monitor) {
+  if (monitor.sslDaysRemaining === null) return 'Days unavailable';
+  const days = `${monitor.sslDaysRemaining} days`;
+  return monitor.sslProvider ? `${days} (${monitor.sslProvider})` : days;
+}
+
 function statusVariant(status) {
   if (status === 'UP') return 'success';
   if (status === 'DOWN' || status.includes('<= 7D')) return 'destructive';
@@ -510,7 +516,7 @@ function MonitorTable({
                   <td>
                     <div className="uptime-ssl-cell">
                       <span>{formatDate(monitor.sslExpiryDate)}</span>
-                      <small>{monitor.sslDaysRemaining === null ? 'Days unavailable' : `${monitor.sslDaysRemaining} days`}</small>
+                      <small>{formatSslDays(monitor)}</small>
                     </div>
                   </td>
                   <td>

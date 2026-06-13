@@ -9,6 +9,7 @@ import UptimeMonitor from './components/UptimeMonitor';
 import Settings from './components/Settings';
 import Navigation from './components/Navigation';
 import { getIpcRenderer } from './utils/electron';
+import { isUptimeKumaEnabled } from './utils/uptimeKuma';
 
 const ipcRenderer = getIpcRenderer();
 
@@ -18,6 +19,7 @@ function App() {
     // Get last active tab from localStorage, default to 'home'
     return localStorage.getItem('lastActiveTab') || 'home';
   });
+  const [uptimeKumaEnabled, setUptimeKumaEnabled] = useState(true);
 
   // Authentication state: tracks when user was last authenticated
   const [authState, setAuthState] = useState(() => {
@@ -82,6 +84,37 @@ function App() {
   }, []); // Only run on mount
 
   useEffect(() => {
+    const loadUptimeSetting = async () => {
+      try {
+        const settings = await ipcRenderer.invoke('get-settings');
+        setUptimeKumaEnabled(isUptimeKumaEnabled(settings));
+      } catch (error) {
+        console.error('Error loading uptime setting:', error);
+      }
+    };
+
+    const handleSettingsUpdate = (event, newSettings) => {
+      if (newSettings?.uptimeKuma !== undefined) {
+        setUptimeKumaEnabled(isUptimeKumaEnabled(newSettings));
+      }
+    };
+
+    loadUptimeSetting();
+    ipcRenderer.on('settings-updated', handleSettingsUpdate);
+
+    return () => {
+      ipcRenderer.removeListener('settings-updated', handleSettingsUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!uptimeKumaEnabled && activeTab === 'uptime') {
+      setActiveTab('home');
+      localStorage.setItem('lastActiveTab', 'home');
+    }
+  }, [uptimeKumaEnabled, activeTab]);
+
+  useEffect(() => {
     // Get initial theme from main process
     const getInitialTheme = async () => {
       try {
@@ -134,6 +167,10 @@ function App() {
   };
 
   const handleTabChange = async (tabId) => {
+    if (tabId === 'uptime' && !uptimeKumaEnabled) {
+      return;
+    }
+
     // Check if this tab requires authentication
     if (PROTECTED_TABS.includes(tabId)) {
       // Check if user is already authenticated (within timeout)
@@ -178,7 +215,7 @@ function App() {
       case 'notes':
         return <Notes />;
       case 'uptime':
-        return <UptimeMonitor />;
+        return uptimeKumaEnabled ? <UptimeMonitor /> : <Tools />;
       case 'settings':
         return <Settings />;
       default:
@@ -188,7 +225,7 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-theme-primary text-theme-primary">
-      <Navigation activeTab={activeTab} onTabChange={handleTabChange} />
+      <Navigation activeTab={activeTab} onTabChange={handleTabChange} uptimeKumaEnabled={uptimeKumaEnabled} />
       <div className="flex-1 overflow-hidden">
         {renderContent()}
       </div>
