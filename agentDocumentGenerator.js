@@ -168,6 +168,47 @@ async function generateDocument(format, args) {
   }
 }
 
+function clearGeneratedDir() {
+  const dir = getGeneratedDir()
+  if (!fs.existsSync(dir)) return
+  for (const name of fs.readdirSync(dir)) {
+    try {
+      fs.unlinkSync(path.join(dir, name))
+    } catch {}
+  }
+}
+
+function exportGeneratedPayload() {
+  const dir = getGeneratedDir()
+  const files = []
+  if (!fs.existsSync(dir)) return { version: 1, files }
+
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name)
+    if (!fs.statSync(full).isFile()) continue
+    files.push({
+      path: name,
+      data: fs.readFileSync(full).toString('base64')
+    })
+  }
+
+  return { version: 1, files }
+}
+
+function importGeneratedPayload(payload) {
+  if (!payload || !Array.isArray(payload.files)) return
+  clearGeneratedDir()
+  const dir = getGeneratedDir()
+
+  for (const f of payload.files) {
+    const name = String(f.path || '')
+    if (!name || name.includes('..') || path.isAbsolute(name)) continue
+    const dest = path.join(dir, name)
+    if (!dest.startsWith(dir)) continue
+    fs.writeFileSync(dest, Buffer.from(String(f.data || ''), 'base64'))
+  }
+}
+
 module.exports = {
   sanitizeFileName,
   getGeneratedDir,
@@ -175,5 +216,8 @@ module.exports = {
   generatePdf,
   generateDocx,
   generateXlsx,
-  generatePptx
+  generatePptx,
+  exportGeneratedPayload,
+  importGeneratedPayload,
+  clearGeneratedDir
 }

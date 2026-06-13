@@ -23,6 +23,7 @@ const { spawn } = require("child_process")
 const { randomUUID } = require("crypto")
 const gdriveBackup = require('./gdriveBackup')
 const archiver = require('archiver')
+const appDataExport = require('./appDataExport')
 
 // Only load auto-launch in production
 let AutoLaunch = null
@@ -219,16 +220,44 @@ async function uploadBackupToDrive() {
     gdriveBackupRunning = false
   }
 }
-async function createBackupZipToTemp() {
-  const backupData = {
-    version: '1.0',
-    exportDate: new Date().toISOString(),
-    settings: config.getAppSettings(),
-    authenticators: await authenticator.getAllAuthenticators(),
-    clipboardHistory: await clipboardTracker.getClipboardHistory(10000),
-    history: await history.getHistory(0, Date.now()),
-    notes: await getNotesExportPayload()
+async function getAppExportDeps() {
+  return {
+    getAppSettings: () => config.getAppSettings(),
+    getAllAuthenticators: () => authenticator.getAllAuthenticators(),
+    getClipboardHistory: (limit) => clipboardTracker.getClipboardHistory(limit),
+    getHistory: (from, to) => history.getHistory(from, to),
+    getNotesExportPayload: () => getNotesExportPayload()
   }
+}
+
+function getAppImportDeps() {
+  return {
+    setAppSettings: (settings) => config.setAppSettings(settings),
+    getAllAuthenticators: () => authenticator.getAllAuthenticators(),
+    deleteAuthenticator: (id) => authenticator.deleteAuthenticator(id),
+    createAuthenticator: (data) => authenticator.createAuthenticator(data),
+    clearClipboardHistory: () => clipboardTracker.clearClipboardHistory(),
+    storeClipboardEntry: (content, source) => clipboardTracker.storeClipboardEntry(content, source),
+    clearAllHistory: () => history.clearAllHistory(),
+    importHistoryEntries: (entries) => history.importHistoryEntries(entries),
+    importNotesFromPayload: (payload) => importNotesFromPayload(payload),
+    reindexKnowledge: async () => {
+      const settings = config.getAppSettings()
+      if (!settings?.agent?.capabilities?.knowledgeBase) return
+      try {
+        await agentKnowledge.reindexAll(
+          { agent: settings.agent, apiKeys: settings.apiKeys },
+          settings.agent?.knowledgeBase
+        )
+      } catch (err) {
+        console.warn('Agent KB reindex after import failed:', err.message)
+      }
+    }
+  }
+}
+
+async function createBackupZipToTemp() {
+  const backupData = await appDataExport.buildExportPayload(await getAppExportDeps())
 
   const ts = new Date().toISOString().replace(/[:.]/g, '-')
   const baseName = `deskmaster-backup-${ts}.zip`
@@ -1586,63 +1615,21 @@ function startBrowserServers() {
           res.end(JSON.stringify({ message: error.message || 'Unable to update monitor pause state' }))
         }
       } else if (req.url === '/api/export-all-data') {
-        const exportData = {
-          version: '1.0',
-          exportDate: new Date().toISOString(),
-          settings: config.getAppSettings(),
-          authenticators: await authenticator.getAllAuthenticators(),
-          clipboardHistory: await clipboardTracker.getClipboardHistory(10000),
-          history: await history.getHistory(0, Date.now()),
-          notes: await getNotesExportPayload()
-        }
+        const exportData = await appDataExport.buildExportPayload(await getAppExportDeps())
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ success: true, data: exportData }))
       } else if (req.url === '/api/import-all-data') {
         const payload = JSON.parse(body || '{}')
         const importData = payload?.data || payload
 
-        // Validate import data structure
-        if (!importData.settings || !importData.authenticators || !importData.clipboardHistory || !importData.history) {
+        if (!appDataExport.validateExportPayload(importData)) {
           res.writeHead(400, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ success: false, error: 'Invalid export file format' }))
           return
         }
 
-        // Import settings
-        config.setAppSettings(importData.settings)
+        await appDataExport.importExportPayload(importData, getAppImportDeps())
         appSettings = config.getAppSettings()
-
-        // Import authenticators (clear existing and import new)
-        const existingAuths = await authenticator.getAllAuthenticators()
-        for (const auth of existingAuths) {
-          await authenticator.deleteAuthenticator(auth.id)
-        }
-        for (const auth of importData.authenticators) {
-          await authenticator.createAuthenticator({
-            name: auth.name,
-            secret: auth.secret,
-            issuer: auth.issuer,
-            digits: auth.digits,
-            period: auth.period,
-            algorithm: auth.algorithm
-          })
-        }
-
-        // Import clipboard history (clear existing and import new)
-        await clipboardTracker.clearClipboardHistory()
-        for (const entry of importData.clipboardHistory) {
-          await clipboardTracker.storeClipboardEntry(entry.content, entry.source || 'imported')
-        }
-
-        // Import performance stats history (clear existing and import new)
-        await history.clearAllHistory()
-        if (importData.history && Array.isArray(importData.history) && importData.history.length > 0) {
-          await history.importHistoryEntries(importData.history)
-        }
-
-        if (importData.notes) {
-          importNotesFromPayload(importData.notes)
-        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ success: true }))
@@ -3475,15 +3462,7 @@ ipcMain.handle('export-all-data', async (event) => {
     const encryptionKey = await promptEncryptionKey('Export Encryption', 'Enter encryption key (leave empty to export without encryption):');
     
     // Collect all data
-    const exportData = {
-      version: '1.0',
-      exportDate: new Date().toISOString(),
-      settings: config.getAppSettings(),
-      authenticators: await authenticator.getAllAuthenticators(),
-      clipboardHistory: await clipboardTracker.getClipboardHistory(10000), // Export all clipboard entries
-      history: await history.getHistory(0, Date.now()), // Export all history
-      notes: await getNotesExportPayload()
-    };
+    const exportData = await appDataExport.buildExportPayload(await getAppExportDeps());
 
     // Show save dialog
     const result = await dialog.showSaveDialog(win, {
@@ -3572,45 +3551,12 @@ ipcMain.handle('import-all-data', async (event) => {
     }
 
     // Validate import data structure
-    if (!importData.settings || !importData.authenticators || !importData.clipboardHistory || !importData.history) {
+    if (!appDataExport.validateExportPayload(importData)) {
       throw new Error('Invalid export file format');
     }
 
-    // Import settings
-    config.setAppSettings(importData.settings);
+    await appDataExport.importExportPayload(importData, getAppImportDeps());
     appSettings = config.getAppSettings();
-
-    // Import authenticators (clear existing and import new)
-    const existingAuths = await authenticator.getAllAuthenticators();
-    for (const auth of existingAuths) {
-      await authenticator.deleteAuthenticator(auth.id);
-    }
-    for (const auth of importData.authenticators) {
-      await authenticator.createAuthenticator({
-        name: auth.name,
-        secret: auth.secret,
-        url: auth.url,
-        username: auth.username,
-        password: auth.password
-      });
-    }
-
-    // Import clipboard history (clear existing and import new)
-    await clipboardTracker.clearClipboardHistory();
-    for (const entry of importData.clipboardHistory) {
-      await clipboardTracker.storeClipboardEntry(entry.content, entry.source || 'imported');
-    }
-
-    // Import performance stats history (clear existing and import new)
-    await history.clearAllHistory();
-    if (importData.history && Array.isArray(importData.history) && importData.history.length > 0) {
-      // Import history entries directly (preserves original timestamps)
-      await history.importHistoryEntries(importData.history);
-    }
-
-    if (importData.notes) {
-      importNotesFromPayload(importData.notes);
-    }
 
     return { success: true };
   } catch (error) {
