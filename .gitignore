@@ -79,3 +79,210 @@ temp/
 *.sqlite
 *.sqlite3
 data/
+.playwright-user-data/.config.json
+.playwright-user-data/DevToolsActivePort
+.playwright-user-data/Network Persistent State
+.playwright-user-data/Preferences
+.playwright-user-data/Trust Tokens
+.playwright-user-data/Trust Tokens-journal
+.playwright-user-data/1781350764615/.config.json
+.playwright-user-data/1781350764615/DevToolsActivePort
+.playwright-user-data/1781350764615/Network Persistent State
+.playwright-user-data/1781350764615/Preferences
+.playwright-user-data/1781350764615/Trust Tokens
+.playwright-user-data/1781350764615/Trust Tokens-journal
+.playwright-user-data/1781350764615/Cache/Cache_Data/index
+.playwright-user-data/1781350764615/Cache/Cache_Data/index-dir/the-real-index
+.playwright-user-data/1781350764615/Code Cache/js/index
+.playwright-user-data/1781350764615/Code Cache/js/index-dir/the-real-index
+.playwright-user-data/1781350764615/Code Cache/wasm/index
+.playwright-user-data/1781350764615/Code Cache/wasm/index-dir/the-real-index
+.playwright-user-data/1781350764615/DawnCache/data_0
+.playwright-user-data/1781350764615/DawnCache/data_1
+.playwright-user-data/1781350764615/DawnCache/data_2
+.playwright-user-data/1781350764615/DawnCache/data_3
+.playwright-user-data/1781350764615/DawnCache/index
+.playwright-user-data/1781350764615/GPUCache/data_0
+.playwright-user-data/1781350764615/GPUCache/data_1
+.playwright-user-data/1781350764615/GPUCache/data_2
+.playwright-user-data/1781350764615/GPUCache/data_3
+.playwright-user-data/1781350764615/GPUCache/index
+.playwright-user-data/1781350764615/Local Storage/leveldb/CURRENT
+.playwright-user-data/1781350764615/Local Storage/leveldb/LOCK
+.playwright-user-data/1781350764615/Local Storage/leveldb/LOG
+.playwright-user-data/1781350764615/Local Storage/leveldb/MANIFEST-000001
+.playwright-user-data/1781350764615/Session Storage/CURRENT
+.playwright-user-data/1781350764615/Session Storage/LOCK
+.playwright-user-data/1781350764615/Session Storage/LOG
+.playwright-user-data/1781350764615/Session Storage/MANIFEST-000001
+.playwright-user-data/1781350783253/.config.json
+.playwright-user-data/1781350783253/DevToolsActivePort
+.playwright-user-data/1781350783253/Network Persistent State
+.playwright-user-data/1781350783253/Preferences
+.playwright-user-data/1781350783253/Trust Tokens
+.playwright-user-data/1781350783253/Trust Tokens-journal
+.playwright-user-data/1781350783253/Cache/Cache_Data/index
+.playwright-user-data/1781350783253/Cache/Cache_Data/index-dir/the-real-index
+.playwright-user-data/1781350783253/Code Cache/js/index
+.playwright-user-data/1781350783253/Code Cache/js/index-dir/the-real-index
+.playwright-user-data/1781350783253/Code Cache/wasm/index
+.playwright-user-data/1781350783253/Code Cache/wasm/index-dir/the-real-index
+.playwright-user-data/1781350783253/DawnCache/data_0
+.playwright-user-data/1781350783253/DawnCache/data_1
+.playwright-user-data/1781350783253/DawnCache/data_2
+.playwright-user-data/1781350783253/DawnCache/data_3
+.playwright-user-data/1781350783253/DawnCache/index
+.playwright-user-data/1781350783253/GPUCache/data_0
+.playwright-user-data/1781350783253/GPUCache/data_1
+.playwright-user-data/1781350783253/GPUCache/data_2
+.playwright-user-data/1781350783253/GPUCache/data_3
+.playwright-user-data/1781350783253/GPUCache/index
+.playwright-user-data/1781350783253/Local Storage/leveldb/CURRENT
+.playwright-user-data/1781350783253/Local Storage/leveldb/LOCK
+.playwright-user-data/1781350783253/Local Storage/leveldb/LOG
+.playwright-user-data/1781350783253/Local Storage/leveldb/MANIFEST-000001
+.playwright-user-data/1781350783253/Session Storage/CURRENT
+.playwright-user-data/1781350783253/Session Storage/LOCK
+.playwright-user-data/1781350783253/Session Storage/LOG
+.playwright-user-data/1781350783253/Session Storage/MANIFEST-000001
+.playwright-user-data/1781350812880/.config.json
+.playwright-user-data/1781350812880/DevToolsActivePort
+.playwright-user-data/1781350812880/Network Persistent State
+.playwright-user-data/1781350812880/Preferences
+.playwright-user-data/1781350812880/Trust Tokens
+.playwright-user-data/1781350812880/Trust Tokens-journal
+.playwright-user-data/1781350812880/Code Cache/js/index
+.playwright-user-data/1781350812880/Code Cache/js/index-dir/the-real-index
+.playwright-user-data/1781350812880/Code Cache/wasm/index
+.playwright-user-data/1781350812880/Code Cache/wasm/index-dir/the-real-index
+.playwright-user-data/1781350812880/DawnCache/data_0
+.playwright-user-data/1781350812880/DawnCache/data_1
+.playwright-user-data/1781350812880/DawnCache/data_2
+.playwright-user-data/1781350812880/DawnCache/data_3
+.playwright-user-data/1781350812880/DawnCache/index
+.playwright-user-data/1781350812880/GPUCache/data_0
+.playwright-user-data/1781350812880/GPUCache/data_1
+.playwright-user-data/1781350812880/GPUCache/data_2
+.playwright-user-data/1781350812880/GPUCache/data_3
+.playwright-user-data/1781350812880/GPUCache/index
+.playwright-user-data/1781350812880/Local Storage/leveldb/CURRENT
+.playwright-user-data/1781350812880/Local Storage/leveldb/LOCK
+.playwright-user-data/1781350812880/Local Storage/leveldb/LOG
+.playwright-user-data/1781350812880/Local Storage/leveldb/MANIFEST-000001
+.playwright-user-data/1781350812880/Session Storage/CURRENT
+.playwright-user-data/1781350812880/Session Storage/LOCK
+.playwright-user-data/1781350812880/Session Storage/LOG
+.playwright-user-data/1781350812880/Session Storage/MANIFEST-000001
+.playwright-user-data/1781350822784/.config.json
+.playwright-user-data/1781350822784/DevToolsActivePort
+.playwright-user-data/1781350822784/Network Persistent State
+.playwright-user-data/1781350822784/Preferences
+.playwright-user-data/1781350822784/Trust Tokens
+.playwright-user-data/1781350822784/Trust Tokens-journal
+.playwright-user-data/1781350822784/Code Cache/js/index
+.playwright-user-data/1781350822784/Code Cache/js/index-dir/the-real-index
+.playwright-user-data/1781350822784/Code Cache/wasm/index
+.playwright-user-data/1781350822784/Code Cache/wasm/index-dir/the-real-index
+.playwright-user-data/1781350822784/DawnCache/data_0
+.playwright-user-data/1781350822784/DawnCache/data_1
+.playwright-user-data/1781350822784/DawnCache/data_2
+.playwright-user-data/1781350822784/DawnCache/data_3
+.playwright-user-data/1781350822784/DawnCache/index
+.playwright-user-data/1781350822784/GPUCache/data_0
+.playwright-user-data/1781350822784/GPUCache/data_1
+.playwright-user-data/1781350822784/GPUCache/data_2
+.playwright-user-data/1781350822784/GPUCache/data_3
+.playwright-user-data/1781350822784/GPUCache/index
+.playwright-user-data/1781350822784/Local Storage/leveldb/CURRENT
+.playwright-user-data/1781350822784/Local Storage/leveldb/LOCK
+.playwright-user-data/1781350822784/Local Storage/leveldb/LOG
+.playwright-user-data/1781350822784/Local Storage/leveldb/MANIFEST-000001
+.playwright-user-data/1781350822784/Session Storage/CURRENT
+.playwright-user-data/1781350822784/Session Storage/LOCK
+.playwright-user-data/1781350822784/Session Storage/LOG
+.playwright-user-data/1781350822784/Session Storage/MANIFEST-000001
+.playwright-user-data/1781350834559/.config.json
+.playwright-user-data/1781350834559/DevToolsActivePort
+.playwright-user-data/1781350834559/Network Persistent State
+.playwright-user-data/1781350834559/Preferences
+.playwright-user-data/1781350834559/Trust Tokens
+.playwright-user-data/1781350834559/Trust Tokens-journal
+.playwright-user-data/1781350834559/Code Cache/js/index
+.playwright-user-data/1781350834559/Code Cache/js/index-dir/the-real-index
+.playwright-user-data/1781350834559/Code Cache/wasm/index
+.playwright-user-data/1781350834559/Code Cache/wasm/index-dir/the-real-index
+.playwright-user-data/1781350834559/DawnCache/data_0
+.playwright-user-data/1781350834559/DawnCache/data_1
+.playwright-user-data/1781350834559/DawnCache/data_2
+.playwright-user-data/1781350834559/DawnCache/data_3
+.playwright-user-data/1781350834559/DawnCache/index
+.playwright-user-data/1781350834559/GPUCache/data_0
+.playwright-user-data/1781350834559/GPUCache/data_1
+.playwright-user-data/1781350834559/GPUCache/data_2
+.playwright-user-data/1781350834559/GPUCache/data_3
+.playwright-user-data/1781350834559/GPUCache/index
+.playwright-user-data/1781350834559/Local Storage/leveldb/CURRENT
+.playwright-user-data/1781350834559/Local Storage/leveldb/LOCK
+.playwright-user-data/1781350834559/Local Storage/leveldb/LOG
+.playwright-user-data/1781350834559/Local Storage/leveldb/MANIFEST-000001
+.playwright-user-data/1781350834559/Session Storage/CURRENT
+.playwright-user-data/1781350834559/Session Storage/LOCK
+.playwright-user-data/1781350834559/Session Storage/LOG
+.playwright-user-data/1781350834559/Session Storage/MANIFEST-000001
+.playwright-user-data/1781350881278/.config.json
+.playwright-user-data/1781350881278/DevToolsActivePort
+.playwright-user-data/1781350881278/Network Persistent State
+.playwright-user-data/1781350881278/Preferences
+.playwright-user-data/1781350881278/Trust Tokens
+.playwright-user-data/1781350881278/Trust Tokens-journal
+.playwright-user-data/1781350881278/Code Cache/js/index
+.playwright-user-data/1781350881278/Code Cache/js/index-dir/the-real-index
+.playwright-user-data/1781350881278/Code Cache/wasm/index
+.playwright-user-data/1781350881278/Code Cache/wasm/index-dir/the-real-index
+.playwright-user-data/1781350881278/DawnCache/data_0
+.playwright-user-data/1781350881278/DawnCache/data_1
+.playwright-user-data/1781350881278/DawnCache/data_2
+.playwright-user-data/1781350881278/DawnCache/data_3
+.playwright-user-data/1781350881278/DawnCache/index
+.playwright-user-data/1781350881278/GPUCache/data_0
+.playwright-user-data/1781350881278/GPUCache/data_1
+.playwright-user-data/1781350881278/GPUCache/data_2
+.playwright-user-data/1781350881278/GPUCache/data_3
+.playwright-user-data/1781350881278/GPUCache/index
+.playwright-user-data/1781350881278/Local Storage/leveldb/CURRENT
+.playwright-user-data/1781350881278/Local Storage/leveldb/LOCK
+.playwright-user-data/1781350881278/Local Storage/leveldb/LOG
+.playwright-user-data/1781350881278/Local Storage/leveldb/MANIFEST-000001
+.playwright-user-data/1781350881278/Session Storage/CURRENT
+.playwright-user-data/1781350881278/Session Storage/LOCK
+.playwright-user-data/1781350881278/Session Storage/LOG
+.playwright-user-data/1781350881278/Session Storage/MANIFEST-000001
+.playwright-user-data/1781350881278/agent/chats/b0aa0f8b-20e6-448a-8c1b-132926efbb2e.json
+.playwright-user-data/Cache/Cache_Data/index
+.playwright-user-data/Cache/Cache_Data/index-dir/the-real-index
+.playwright-user-data/Code Cache/js/index
+.playwright-user-data/Code Cache/js/index-dir/the-real-index
+.playwright-user-data/Code Cache/wasm/index
+.playwright-user-data/Code Cache/wasm/index-dir/the-real-index
+.playwright-user-data/DawnCache/data_0
+.playwright-user-data/DawnCache/data_1
+.playwright-user-data/DawnCache/data_2
+.playwright-user-data/DawnCache/data_3
+.playwright-user-data/DawnCache/index
+.playwright-user-data/GPUCache/data_0
+.playwright-user-data/GPUCache/data_1
+.playwright-user-data/GPUCache/data_2
+.playwright-user-data/GPUCache/data_3
+.playwright-user-data/GPUCache/index
+.playwright-user-data/Local Storage/leveldb/CURRENT
+.playwright-user-data/Local Storage/leveldb/LOCK
+.playwright-user-data/Local Storage/leveldb/LOG
+.playwright-user-data/Local Storage/leveldb/LOG.old
+.playwright-user-data/Local Storage/leveldb/MANIFEST-000001
+.playwright-user-data/Session Storage/CURRENT
+.playwright-user-data/Session Storage/LOCK
+.playwright-user-data/Session Storage/LOG
+.playwright-user-data/Session Storage/LOG.old
+.playwright-user-data/Session Storage/MANIFEST-000001
+playwright-report/index.html
+test-results/.last-run.json

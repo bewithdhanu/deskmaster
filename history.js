@@ -228,6 +228,115 @@ function fetchTimeRange(resolve, reject) {
   );
 }
 
+function analyzeHistory(startTime, endTime, options = {}) {
+  const cpuThreshold = typeof options.cpuThreshold === 'number' ? options.cpuThreshold : null;
+
+  return new Promise((resolve, reject) => {
+    if (!isInitialized || !db) {
+      initDatabase().then(() => {
+        runAnalyzeHistory(startTime, endTime, cpuThreshold, resolve, reject);
+      }).catch(reject);
+    } else {
+      runAnalyzeHistory(startTime, endTime, cpuThreshold, resolve, reject);
+    }
+  });
+}
+
+function runAnalyzeHistory(startTime, endTime, cpuThreshold, resolve, reject) {
+  let thresholdSql = '';
+  const params = cpuThreshold !== null
+    ? [cpuThreshold, startTime, endTime]
+    : [startTime, endTime];
+
+  if (cpuThreshold !== null) {
+    thresholdSql = ', SUM(CASE WHEN cpu >= ? THEN 1 ELSE 0 END) as cpuAboveThreshold';
+  }
+
+  db.get(
+    `SELECT
+      COUNT(*) as sampleCount,
+      AVG(cpu) as avgCpu,
+      MIN(cpu) as minCpu,
+      MAX(cpu) as maxCpu,
+      AVG(ram) as avgRam,
+      MIN(ram) as minRam,
+      MAX(ram) as maxRam,
+      AVG(disk) as avgDisk,
+      MIN(disk) as minDisk,
+      MAX(disk) as maxDisk,
+      AVG(network_kbs) as avgNetwork,
+      MIN(network_kbs) as minNetwork,
+      MAX(network_kbs) as maxNetwork,
+      AVG(battery_percent) as avgBattery,
+      AVG(temperature) as avgTemperature,
+      MAX(temperature) as maxTemperature
+      ${thresholdSql}
+     FROM stats_history
+     WHERE timestamp >= ? AND timestamp <= ?`,
+    params,
+    (err, row) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+
+      const sampleCount = row?.sampleCount || 0;
+      const result = {
+        sampleCount,
+        range: {
+          startTime,
+          endTime,
+          startISO: new Date(startTime).toISOString(),
+          endISO: new Date(endTime).toISOString()
+        },
+        cpu: {
+          avg: roundStat(row?.avgCpu),
+          min: roundStat(row?.minCpu),
+          max: roundStat(row?.maxCpu)
+        },
+        ram: {
+          avg: roundStat(row?.avgRam),
+          min: roundStat(row?.minRam),
+          max: roundStat(row?.maxRam)
+        },
+        disk: {
+          avg: roundStat(row?.avgDisk),
+          min: roundStat(row?.minDisk),
+          max: roundStat(row?.maxDisk)
+        },
+        networkKbs: {
+          avg: roundStat(row?.avgNetwork),
+          min: roundStat(row?.minNetwork),
+          max: roundStat(row?.maxNetwork)
+        },
+        battery: {
+          avg: roundStat(row?.avgBattery)
+        },
+        temperature: {
+          avg: roundStat(row?.avgTemperature),
+          max: roundStat(row?.maxTemperature)
+        }
+      };
+
+      if (cpuThreshold !== null) {
+        const count = row?.cpuAboveThreshold || 0;
+        result.cpuAboveThreshold = {
+          threshold: cpuThreshold,
+          count,
+          percentOfSamples: sampleCount > 0 ? roundStat((count / sampleCount) * 100) : 0
+        };
+      }
+
+      resolve(result);
+    }
+  );
+}
+
+function roundStat(value) {
+  if (value === null || value === undefined) return null;
+  return Math.round(Number(value) * 100) / 100;
+}
+
 // Clean up old data (older than 30 days)
 function cleanupOldData() {
   return new Promise((resolve, reject) => {
@@ -385,6 +494,7 @@ module.exports = {
   storeStats,
   getHistory,
   getTimeRange,
+  analyzeHistory,
   cleanupOldData,
   clearAllHistory,
   importHistoryEntries,

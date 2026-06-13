@@ -1,31 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { MdSettings, MdMemory, MdStorage, MdNetworkCheck, MdBatteryFull, MdAccessTime, MdPowerSettingsNew, MdPalette, MdVisibility, MdVisibilityOff, MdFileDownload, MdFileUpload, MdDeleteForever } from 'react-icons/md';
+import { MdSettings, MdMemory, MdStorage, MdNetworkCheck, MdBatteryFull, MdAccessTime, MdPowerSettingsNew, MdPalette, MdVisibility, MdVisibilityOff, MdFileDownload, MdFileUpload, MdDeleteForever, MdSmartToy } from 'react-icons/md';
 import TimezoneDropdown from './TimezoneDropdown';
 import { getIpcRenderer, isElectron } from '../utils/electron';
+import { getEnabledProviders, PROVIDER_META } from '../utils/agentProvidersClient';
+import { getRoute, navigate, subscribe, SETTINGS_SECTION_IDS } from '../utils/appRoute';
 
 const ipcRenderer = getIpcRenderer();
 
-const scrollToSection = (sectionId) => {
-  document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-};
-
 const ToggleSwitch = ({ enabled, onChange, label, description }) => (
-  <div className="flex items-center justify-between gap-4 rounded-lg border border-theme bg-theme-secondary/60 px-4 py-3">
+  <div className="flex items-center justify-between gap-3 py-1">
     <div className="min-w-0 flex-1">
-      <div className="text-theme-primary font-medium text-sm">{label}</div>
-      {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
+      {label && <div className="text-theme-primary text-sm">{label}</div>}
+      {description && <div className="text-theme-muted text-[11px] leading-4 mt-0.5">{description}</div>}
     </div>
     <button
       type="button"
       onClick={onChange}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 ${
-        enabled ? 'bg-red-500' : 'bg-theme-secondary border border-theme'
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+        enabled ? 'bg-red-500' : 'bg-theme-secondary border border-theme-subtle'
       }`}
       aria-pressed={enabled}
     >
       <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
-          enabled ? 'translate-x-6' : 'translate-x-1'
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+          enabled ? 'translate-x-4' : 'translate-x-0.5'
         }`}
       />
     </button>
@@ -33,39 +31,76 @@ const ToggleSwitch = ({ enabled, onChange, label, description }) => (
 );
 
 const SelectOption = ({ value, onChange, options, label, description }) => (
-  <div className="rounded-lg border border-theme bg-theme-secondary/60 px-4 py-3">
-    <div className="mb-2">
-      <div className="text-theme-primary font-medium text-sm">{label}</div>
-      {description && <div className="text-theme-muted text-xs mt-0.5">{description}</div>}
-    </div>
+  <div className="py-1">
+    {label && <div className="text-theme-primary text-sm mb-1">{label}</div>}
+    {description && <div className="text-theme-muted text-[11px] mb-1.5">{description}</div>}
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full px-3 py-2 bg-theme-card border border-theme rounded-md text-theme-primary text-xs focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+      className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs focus:outline-none focus:ring-1 focus:ring-red-500"
     >
       {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
+        <option key={option.value} value={option.value}>{option.label}</option>
       ))}
     </select>
   </div>
 );
 
-const SectionCard = ({ id, icon: Icon, title, description, children }) => (
-  <section id={id} className="scroll-mt-6 rounded-xl border border-theme bg-theme-card shadow-sm">
-    <div className="flex items-start gap-3 border-b border-theme px-5 py-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-theme-secondary text-theme-muted">
-        <Icon className="h-5 w-5" />
-      </div>
-      <div>
-        <h3 className="text-base font-semibold text-theme-primary">{title}</h3>
-        {description && <p className="mt-1 text-xs leading-5 text-theme-muted">{description}</p>}
-      </div>
-    </div>
-    <div className="space-y-3 p-5">{children}</div>
-  </section>
+const SecretInput = ({ value, onChange, placeholder, show, onToggleShow, mono = true }) => (
+  <div className="relative">
+    <input
+      type={show ? 'text' : 'password'}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className={`w-full px-2.5 py-1.5 pr-8 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs focus:outline-none focus:ring-1 focus:ring-red-500 ${mono ? 'font-mono' : ''}`}
+    />
+    <button
+      type="button"
+      onClick={onToggleShow}
+      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary p-0.5"
+      title={show ? 'Hide' : 'Show'}
+    >
+      {show ? <MdVisibilityOff className="w-4 h-4" /> : <MdVisibility className="w-4 h-4" />}
+    </button>
+  </div>
 );
+
+const FieldLabel = ({ children, hint }) => (
+  <div className="mb-1">
+    <label className="text-xs font-medium text-theme-primary">{children}</label>
+    {hint && <div className="text-[11px] text-theme-muted mt-0.5">{hint}</div>}
+  </div>
+);
+
+const ProviderBlock = ({ title, children, className = '' }) => (
+  <div className={`rounded-lg border border-theme-subtle bg-theme-secondary/30 p-3 space-y-2 h-full ${className}`}>
+    <div className="text-xs font-semibold text-theme-primary">{title}</div>
+    {children}
+  </div>
+);
+
+const SettingsPanel = ({ children, className = '' }) => (
+  <div className={`rounded-lg border border-theme-subtle bg-theme-secondary/30 p-3 ${className}`}>
+    {children}
+  </div>
+);
+
+const ToggleCard = ({ enabled, onChange, label, description }) => (
+  <SettingsPanel className="h-full">
+    <ToggleSwitch enabled={enabled} onChange={onChange} label={label} description={description} />
+  </SettingsPanel>
+);
+
+const SETTINGS_GRID = {
+  toggles: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3',
+  cards: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3',
+  cardsTwo: 'grid grid-cols-1 lg:grid-cols-2 gap-3',
+  fields: 'grid grid-cols-1 md:grid-cols-2 gap-3',
+  fieldsThree: 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3',
+  actions: 'grid grid-cols-1 sm:grid-cols-3 gap-2',
+  stack: 'flex flex-col gap-3'
+};
 
 const StatusPill = ({ tone = 'muted', children }) => {
   const toneClass = tone === 'success'
@@ -74,7 +109,7 @@ const StatusPill = ({ tone = 'muted', children }) => {
       ? 'border-yellow-500/30 bg-yellow-500/10 text-yellow-500'
       : tone === 'danger'
         ? 'border-red-500/30 bg-red-500/10 text-red-500'
-        : 'border-theme bg-theme-secondary text-theme-muted';
+        : 'border-theme-subtle bg-theme-secondary text-theme-muted';
 
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClass}`}>
@@ -123,7 +158,6 @@ const Settings = () => {
   const [selectedTimezone, setSelectedTimezone] = useState(null);
   const [timezoneLabel, setTimezoneLabel] = useState('');
   const [showInTray, setShowInTray] = useState(true);
-  const [showChatGPTKey, setShowChatGPTKey] = useState(false);
   const [showIPLocationKey, setShowIPLocationKey] = useState(false);
   const [showUptimePassword, setShowUptimePassword] = useState(false);
   const [showDriveClientSecret, setShowDriveClientSecret] = useState(false);
@@ -133,6 +167,45 @@ const Settings = () => {
   const [backupStatus, setBackupStatus] = useState({ connected: false, enabled: false, intervalHours: 4, keepLast: 10, oauthConfigured: false, lastBackupAt: null, lastBackupStatus: null, lastBackupError: null, running: false });
   const [isConnectingDrive, setIsConnectingDrive] = useState(false);
   const [isBackingUpNow, setIsBackingUpNow] = useState(false);
+  const [agentTestResult, setAgentTestResult] = useState(null);
+  const [agentTesting, setAgentTesting] = useState(false);
+  const [composioToolkits, setComposioToolkits] = useState([]);
+  const [connectingComposioSlug, setConnectingComposioSlug] = useState(null);
+  const [newToolkitSlug, setNewToolkitSlug] = useState('');
+  const [showAgentKeys, setShowAgentKeys] = useState({});
+  const [activeSection, setActiveSection] = useState(() => {
+    const route = getRoute();
+    if (
+      route.tab === 'settings' &&
+      route.settingsSection &&
+      SETTINGS_SECTION_IDS.includes(route.settingsSection)
+    ) {
+      return route.settingsSection;
+    }
+    return 'system-stats';
+  });
+
+  const handleSectionChange = (sectionId) => {
+    setActiveSection(sectionId);
+    navigate({ tab: 'settings', settingsSection: sectionId });
+  };
+
+  useEffect(() => {
+    return subscribe(() => {
+      const route = getRoute();
+      if (
+        route.tab === 'settings' &&
+        route.settingsSection &&
+        SETTINGS_SECTION_IDS.includes(route.settingsSection)
+      ) {
+        setActiveSection(route.settingsSection);
+      }
+    });
+  }, []);
+
+  const toggleAgentKeyVisibility = (key) => {
+    setShowAgentKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const datetimeFormats = [
     { value: 'HH:mm:ss', label: '24-hour (14:30:25)' },
@@ -146,6 +219,7 @@ const Settings = () => {
   useEffect(() => {
     loadSettings();
     loadBackupStatus();
+    loadAgentIntegrations();
     
     // Listen for settings updates
     ipcRenderer.on('settings-updated', handleSettingsUpdate);
@@ -154,6 +228,135 @@ const Settings = () => {
       ipcRenderer.removeListener('settings-updated', handleSettingsUpdate);
     };
   }, []);
+
+  const loadAgentIntegrations = async () => {
+    try {
+      const toolkits = await ipcRenderer.invoke('agent:composio-list-toolkits');
+      setComposioToolkits(toolkits || []);
+    } catch {}
+  };
+
+  const updateAgentSettings = (patch) => {
+    const newSettings = {
+      ...settings,
+      agent: {
+        ...(settings.agent || {}),
+        ...patch,
+        capabilities: {
+          ...(settings.agent?.capabilities || {}),
+          ...(patch.capabilities || {})
+        },
+        providers: {
+          ...(settings.agent?.providers || {}),
+          ...(patch.providers || {})
+        },
+        composio: {
+          ...(settings.agent?.composio || {}),
+          ...(patch.composio || {})
+        },
+        knowledgeBase: {
+          ...(settings.agent?.knowledgeBase || {}),
+          ...(patch.knowledgeBase || {})
+        }
+      }
+    };
+    if (patch.providers) {
+      Object.keys(patch.providers).forEach((key) => {
+        newSettings.agent.providers[key] = {
+          ...(settings.agent?.providers?.[key] || {}),
+          ...patch.providers[key]
+        };
+      });
+    }
+    updateSettings(newSettings);
+  };
+
+  const updateAgentProvider = (providerId, field, value) => {
+    updateAgentSettings({
+      providers: {
+        [providerId]: {
+          ...(settings.agent?.providers?.[providerId] || {}),
+          [field]: value
+        }
+      }
+    });
+  };
+
+  const testAgentProvider = async (providerId) => {
+    setAgentTesting(true);
+    setAgentTestResult(null);
+    try {
+      const result = await ipcRenderer.invoke('agent:test-provider', providerId);
+      setAgentTestResult({ success: true, preview: result.preview });
+    } catch (error) {
+      setAgentTestResult({ success: false, error: error.message });
+    } finally {
+      setAgentTesting(false);
+    }
+  };
+
+  const cancelComposioConnection = async (slug) => {
+    try {
+      await ipcRenderer.invoke('agent:composio-cancel-wait', slug);
+    } catch (error) {
+      console.warn('Cancel Composio connection:', error.message);
+    }
+    setConnectingComposioSlug((current) => (current === slug ? null : current));
+  };
+
+  const connectComposioToolkit = async (slug) => {
+    if (connectingComposioSlug === slug) return;
+    if (connectingComposioSlug) {
+      await cancelComposioConnection(connectingComposioSlug);
+    }
+    setConnectingComposioSlug(slug);
+    try {
+      const result = await ipcRenderer.invoke('agent:composio-connect', slug);
+      await ipcRenderer.invoke('agent:composio-wait', {
+        toolkitSlug: slug,
+        knownAccountIds: result?.knownAccountIds || [],
+        connectionRequestId: result?.connectionRequestId || null
+      });
+      await loadAgentIntegrations();
+    } catch (error) {
+      if (error?.message !== 'Connection cancelled') {
+        alert(`Connect failed: ${error.message}`);
+      }
+    } finally {
+      setConnectingComposioSlug((current) => (current === slug ? null : current));
+    }
+  };
+
+  const addCustomToolkit = () => {
+    const slug = newToolkitSlug.trim().toLowerCase().replace(/\s+/g, '');
+    if (!slug) return;
+    const existing = settings.agent?.composio?.customToolkits || [];
+    if (existing.includes(slug)) {
+      setNewToolkitSlug('');
+      return;
+    }
+    updateAgentSettings({ composio: { customToolkits: [...existing, slug] } });
+    setNewToolkitSlug('');
+    loadAgentIntegrations();
+  };
+
+  const removeCustomToolkit = (slug) => {
+    if (connectingComposioSlug === slug) {
+      cancelComposioConnection(slug);
+    }
+    const existing = settings.agent?.composio?.customToolkits || [];
+    updateAgentSettings({ composio: { customToolkits: existing.filter((s) => s !== slug) } });
+    loadAgentIntegrations();
+  };
+
+  const disconnectComposioToolkit = async (accountId) => {
+    try {
+      await ipcRenderer.invoke('agent:composio-disconnect', accountId);
+      await loadAgentIntegrations();
+    } catch (error) {
+      alert(`Disconnect failed: ${error.message}`);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -484,30 +687,37 @@ const Settings = () => {
     { id: 'system-behavior', label: 'System', icon: MdPowerSettingsNew },
     { id: 'appearance', label: 'Appearance', icon: MdPalette },
     { id: 'api-keys', label: 'API Keys', icon: MdSettings },
+    { id: 'agent', label: 'AI Agent', icon: MdSmartToy },
     { id: 'uptime-kuma', label: 'Uptime Kuma', icon: MdNetworkCheck },
     { id: 'data-management', label: 'Data Management', icon: MdStorage },
     { id: 'cloud-backup', label: 'Cloud Backup', icon: MdFileUpload }
   ];
 
+  const activeSectionMeta = settingsSections.find((s) => s.id === activeSection) || settingsSections[0];
+
   return (
     <div className="h-full bg-theme-primary overflow-hidden">
       <div className="flex h-full min-h-0">
-        <aside className="hidden w-64 shrink-0 border-r border-theme bg-theme-card/70 p-4 lg:block">
-          <div className="mb-5">
-            <div className="text-lg font-semibold text-theme-primary">Settings</div>
-            <div className="mt-1 text-xs leading-5 text-theme-muted">Configure DeskMaster tools, integrations, backup, and system behavior.</div>
+        <aside className="w-52 shrink-0 border-r border-theme-subtle bg-theme-card/50 p-3">
+          <div className="mb-3 px-1">
+            <div className="text-sm font-semibold text-theme-primary">Settings</div>
           </div>
-          <nav className="space-y-1">
+          <nav className="space-y-0.5">
             {settingsSections.map((section) => {
               const Icon = section.icon;
+              const isActive = activeSection === section.id;
               return (
                 <button
                   type="button"
                   key={section.id}
-                  onClick={() => scrollToSection(section.id)}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-theme-muted transition-colors hover:bg-theme-secondary hover:text-theme-primary"
+                  onClick={() => handleSectionChange(section.id)}
+                  className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
+                    isActive
+                      ? 'bg-red-500/10 text-red-500 font-medium'
+                      : 'text-theme-muted hover:bg-theme-secondary hover:text-theme-primary'
+                  }`}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span>{section.label}</span>
                 </button>
               );
@@ -516,91 +726,84 @@ const Settings = () => {
         </aside>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-5xl space-y-5 px-4 py-5 sm:px-6">
-            <div className="rounded-xl border border-theme bg-theme-card px-5 py-5 shadow-sm">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-500">DeskMaster</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-theme-primary">Settings</h2>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-theme-muted">
-                    A cleaner control center for tray stats, clocks, integrations, cloud backup, and data management.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <StatusPill tone={settings.webAccess ? 'success' : 'muted'}>
-                    Web {settings.webAccess ? 'On' : 'Off'}
-                  </StatusPill>
+          <div className="w-full px-5 py-4 lg:px-8">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-theme-subtle pb-3">
+              <div>
+                <h2 className="text-base font-semibold text-theme-primary">{activeSectionMeta.label}</h2>
+                <p className="text-[11px] text-theme-muted mt-0.5">
+                  {activeSection === 'system-stats' && 'Tray and dashboard metrics'}
+                  {activeSection === 'world-clocks' && 'Timezones and display format'}
+                  {activeSection === 'system-behavior' && 'Startup, web access, dock'}
+                  {activeSection === 'appearance' && 'Theme preferences'}
+                  {activeSection === 'api-keys' && 'Keys for built-in tools'}
+                  {activeSection === 'agent' && 'LLM providers and Composio OAuth'}
+                  {activeSection === 'uptime-kuma' && 'Monitor connection'}
+                  {activeSection === 'data-management' && 'Export, import, reset'}
+                  {activeSection === 'cloud-backup' && 'Google Drive backups'}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <StatusPill tone={settings.webAccess ? 'success' : 'muted'}>Web {settings.webAccess ? 'On' : 'Off'}</StatusPill>
+                {activeSection === 'cloud-backup' && (
                   <StatusPill tone={backupStatus.connected ? 'success' : backupStatus.oauthConfigured ? 'warning' : 'muted'}>
-                    Drive {backupStatus.connected ? 'Connected' : backupStatus.oauthConfigured ? 'Ready' : 'Not Set'}
+                    Drive {backupStatus.connected ? 'OK' : '—'}
                   </StatusPill>
-                  <StatusPill tone={settings.autoStart ? 'success' : 'muted'}>
-                    Auto Start {settings.autoStart ? 'On' : 'Off'}
-                  </StatusPill>
-                  <StatusPill tone={settings.uptimeKuma?.enabled !== false ? 'success' : 'muted'}>
-                    Uptime {settings.uptimeKuma?.enabled !== false ? 'On' : 'Off'}
-                  </StatusPill>
-                </div>
+                )}
               </div>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-3">
           
-              <SectionCard
-                id="system-stats"
-                icon={MdMemory}
-                title="System Stats"
-                description="Choose which live system metrics appear in DeskMaster and the tray."
-              >
-            <div className="space-y-2">
-              <ToggleSwitch
+              {activeSection === 'system-stats' && (
+              <div className={SETTINGS_GRID.toggles}>
+              <ToggleCard
                 enabled={settings.stats.cpu}
                 onChange={() => toggleStat('cpu')}
                 label="CPU Usage"
                 description="Show in tray"
               />
-              <ToggleSwitch
+              <ToggleCard
                 enabled={settings.stats.ram}
                 onChange={() => toggleStat('ram')}
                 label="Memory Usage"
                 description="Show in tray"
               />
-              <ToggleSwitch
+              <ToggleCard
                 enabled={settings.stats.disk}
                 onChange={() => toggleStat('disk')}
                 label="Storage Usage"
                 description="Show in tray"
               />
-              <ToggleSwitch
+              <ToggleCard
                 enabled={settings.stats.network}
                 onChange={() => toggleStat('network')}
                 label="Network Activity"
                 description="Show in tray"
               />
-              <ToggleSwitch
+              <ToggleCard
                 enabled={settings.stats.battery}
                 onChange={() => toggleStat('battery')}
                 label="Battery Status"
                 description="Show in tray"
               />
             </div>
-              </SectionCard>
+              )}
 
-              <SectionCard
-                id="world-clocks"
-                icon={MdAccessTime}
-                title="World Clocks"
-                description="Set display formats and manage the timezones shown in the app and tray."
-              >
-            <div className="space-y-3">
-              <SelectOption
-                value={settings.datetimeFormat}
-                onChange={updateDatetimeFormat}
-                options={datetimeFormats}
-                label="Time Format"
-                description="Display format"
-              />
+              {activeSection === 'world-clocks' && (
+            <div className={SETTINGS_GRID.stack}>
+              <div className={SETTINGS_GRID.cardsTwo}>
+                <SettingsPanel>
+                  <SelectOption
+                    value={settings.datetimeFormat}
+                    onChange={updateDatetimeFormat}
+                    options={datetimeFormats}
+                    label="Time Format"
+                    description="Display format"
+                  />
+                </SettingsPanel>
+              </div>
               
-              <div>
+              <SettingsPanel>
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs text-theme-primary font-medium">Timezones</div>
                   <button
@@ -642,44 +845,27 @@ const Settings = () => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </SettingsPanel>
             </div>
-              </SectionCard>
+              )}
 
-              <SectionCard
-                id="system-behavior"
-                icon={MdPowerSettingsNew}
-                title="System"
-                description="Control startup behavior, browser access, and macOS dock visibility."
-              >
-            <div className="space-y-2">
-              <ToggleSwitch
+              {activeSection === 'system-behavior' && (
+            <div className={SETTINGS_GRID.stack}>
+              <div className={SETTINGS_GRID.toggles}>
+              <ToggleCard
                 enabled={settings.autoStart}
                 onChange={toggleAutoStart}
                 label="Start with System"
                 description="Auto-start on boot"
               />
-              <ToggleSwitch
+              <ToggleCard
                 enabled={settings.webAccess}
                 onChange={toggleWebAccess}
                 label="Web Access"
                 description="Enable browser access"
               />
-              {settings.webAccess && (
-                <div className="mt-2 pt-2 border-t border-theme">
-                  <div className="text-xs text-theme-muted mb-1">Web URL:</div>
-                  <button
-                    type="button"
-                    onClick={openWebUrl}
-                    className="text-xs text-red-500 hover:text-red-400 underline break-all text-left transition-colors duration-200"
-                    title="Click to open in browser"
-                  >
-                    http://localhost:65530
-                  </button>
-                </div>
-              )}
               {isElectron() && (
-                <ToggleSwitch
+                <ToggleCard
                   enabled={settings.showInDock !== false}
                   onChange={() => {
                     const newSettings = {
@@ -692,16 +878,26 @@ const Settings = () => {
                   description="Show app icon in macOS dock (macOS only)"
                 />
               )}
+              </div>
+              {settings.webAccess && (
+                <SettingsPanel>
+                  <div className="text-xs text-theme-muted mb-1">Web URL</div>
+                  <button
+                    type="button"
+                    onClick={openWebUrl}
+                    className="text-xs text-red-500 hover:text-red-400 underline break-all text-left transition-colors duration-200"
+                    title="Click to open in browser"
+                  >
+                    http://localhost:65530
+                  </button>
+                </SettingsPanel>
+              )}
             </div>
-              </SectionCard>
+              )}
 
-              <SectionCard
-                id="appearance"
-                icon={MdPalette}
-                title="Appearance"
-                description="Choose the app theme used across DeskMaster."
-              >
-            <div className="space-y-2">
+              {activeSection === 'appearance' && (
+            <div className={SETTINGS_GRID.cardsTwo}>
+              <SettingsPanel>
               <SelectOption
                 value={settings.theme}
                 onChange={updateTheme}
@@ -713,174 +909,329 @@ const Settings = () => {
                 label="Theme"
                 description="Color scheme"
               />
+              </SettingsPanel>
             </div>
-              </SectionCard>
+              )}
 
-              <SectionCard
-                id="api-keys"
-                icon={MdSettings}
-                title="API Keys"
-                description="Store service keys used by built-in productivity tools."
-              >
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-theme-primary mb-1">
-                  ChatGPT API Key (GPT-4o mini)
-                </label>
-                <div className="relative">
-                <input
-                    type={showChatGPTKey ? "text" : "password"}
-                  value={settings.apiKeys?.chatgpt || ''}
-                  onChange={(e) => {
-                    const newSettings = {
-                      ...settings,
-                      apiKeys: {
-                        ...settings.apiKeys,
-                        chatgpt: e.target.value
-                      }
-                    };
-                    updateSettings(newSettings);
-                  }}
-                  placeholder="sk-..."
-                    className="w-full px-2 py-1.5 pr-8 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                />
-                  <button
-                    type="button"
-                    onClick={() => setShowChatGPTKey(!showChatGPTKey)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary transition-colors"
-                    title={showChatGPTKey ? "Hide password" : "Show password"}
-                  >
-                    {showChatGPTKey ? (
-                      <MdVisibilityOff className="w-4 h-4" />
-                    ) : (
-                      <MdVisibility className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-                <div className="text-theme-muted text-xs mt-1">For text reformatting tool</div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-theme-primary mb-1">
-                  IP Location API Key
-                </label>
-                <div className="relative">
-                <input
-                    type={showIPLocationKey ? "text" : "password"}
+              {activeSection === 'api-keys' && (
+            <div className={SETTINGS_GRID.fields}>
+              <SettingsPanel>
+                <FieldLabel hint="For IP location lookup tool">IP Location API Key</FieldLabel>
+                <SecretInput
                   value={settings.apiKeys?.ipLocation || ''}
-                  onChange={(e) => {
-                    const newSettings = {
-                      ...settings,
-                      apiKeys: {
-                        ...settings.apiKeys,
-                        ipLocation: e.target.value
-                      }
-                    };
-                    updateSettings(newSettings);
-                  }}
+                  onChange={(e) => updateSettings({
+                    ...settings,
+                    apiKeys: { ...settings.apiKeys, ipLocation: e.target.value }
+                  })}
                   placeholder="API key..."
-                    className="w-full px-2 py-1.5 pr-8 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  show={showIPLocationKey}
+                  onToggleShow={() => setShowIPLocationKey(!showIPLocationKey)}
                 />
-                  <button
-                    type="button"
-                    onClick={() => setShowIPLocationKey(!showIPLocationKey)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary transition-colors"
-                    title={showIPLocationKey ? "Hide password" : "Show password"}
-                  >
-                    {showIPLocationKey ? (
-                      <MdVisibilityOff className="w-4 h-4" />
-                    ) : (
-                      <MdVisibility className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-                <div className="text-theme-muted text-xs mt-1">For IP location lookup tool</div>
-              </div>
+              </SettingsPanel>
             </div>
-              </SectionCard>
+              )}
 
-              <SectionCard
-                id="uptime-kuma"
-                icon={MdNetworkCheck}
-                title="Uptime Kuma"
-                description="Connect DeskMaster to your Uptime Kuma instance using URL, username, and password."
-              >
-            <div className="space-y-3">
-              <ToggleSwitch
+              {activeSection === 'agent' && (
+                <div className={SETTINGS_GRID.stack}>
+                  <div className={SETTINGS_GRID.cardsTwo}>
+                    <SettingsPanel>
+                      <SelectOption
+                        value={settings.agent?.defaultProvider || 'openai'}
+                        onChange={(value) => updateAgentSettings({ defaultProvider: value })}
+                        options={getEnabledProviders(settings).length > 0
+                          ? getEnabledProviders(settings).map((id) => ({ value: id, label: PROVIDER_META[id]?.label || id }))
+                          : [{ value: 'openai', label: 'Add credentials below' }]}
+                        label="Default Provider"
+                        description="Configured providers with credentials appear in Agent"
+                      />
+                    </SettingsPanel>
+                    <SettingsPanel>
+                      <div className="text-xs font-semibold text-theme-primary mb-2">Default chat capabilities</div>
+                      <ToggleSwitch
+                        enabled={settings.agent?.capabilities?.knowledgeBase === true}
+                        onChange={() => updateAgentSettings({
+                          capabilities: { knowledgeBase: settings.agent?.capabilities?.knowledgeBase !== true }
+                        })}
+                        label="Knowledge Base"
+                        description="Notes + custom doc search"
+                      />
+                      <ToggleSwitch
+                        enabled={settings.agent?.capabilities?.deskMasterTools === true}
+                        onChange={() => updateAgentSettings({
+                          capabilities: { deskMasterTools: settings.agent?.capabilities?.deskMasterTools !== true }
+                        })}
+                        label="DeskMaster Tools"
+                        description="Excludes clipboard and authenticator"
+                      />
+                      <ToggleSwitch
+                        enabled={settings.agent?.capabilities?.composioIntegrations === true}
+                        onChange={() => updateAgentSettings({
+                          capabilities: { composioIntegrations: settings.agent?.capabilities?.composioIntegrations !== true }
+                        })}
+                        label="Composio Integrations"
+                        description="External OAuth toolkits"
+                      />
+                    </SettingsPanel>
+                  </div>
+
+                  <div className={SETTINGS_GRID.cards}>
+                  <ProviderBlock title="OpenAI">
+                    <SecretInput
+                      value={settings.agent?.providers?.openai?.apiKey || ''}
+                      onChange={(e) => updateAgentProvider('openai', 'apiKey', e.target.value)}
+                      placeholder="API key (sk-...)"
+                      show={showAgentKeys.openai}
+                      onToggleShow={() => toggleAgentKeyVisibility('openai')}
+                    />
+                    <input
+                      type="text"
+                      value={settings.agent?.providers?.openai?.model || 'gpt-4o-mini'}
+                      onChange={(e) => updateAgentProvider('openai', 'model', e.target.value)}
+                      placeholder="Model"
+                      className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                    />
+                  </ProviderBlock>
+
+                  <ProviderBlock title="Anthropic">
+                    <SecretInput
+                      value={settings.agent?.providers?.anthropic?.apiKey || ''}
+                      onChange={(e) => updateAgentProvider('anthropic', 'apiKey', e.target.value)}
+                      placeholder="API key"
+                      show={showAgentKeys.anthropic}
+                      onToggleShow={() => toggleAgentKeyVisibility('anthropic')}
+                    />
+                    <input
+                      type="text"
+                      value={settings.agent?.providers?.anthropic?.model || ''}
+                      onChange={(e) => updateAgentProvider('anthropic', 'model', e.target.value)}
+                      placeholder="Model"
+                      className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                    />
+                  </ProviderBlock>
+
+                  <ProviderBlock title="OpenRouter">
+                    <SecretInput
+                      value={settings.agent?.providers?.openrouter?.apiKey || ''}
+                      onChange={(e) => updateAgentProvider('openrouter', 'apiKey', e.target.value)}
+                      placeholder="API key"
+                      show={showAgentKeys.openrouter}
+                      onToggleShow={() => toggleAgentKeyVisibility('openrouter')}
+                    />
+                    <input
+                      type="text"
+                      value={settings.agent?.providers?.openrouter?.model || ''}
+                      onChange={(e) => updateAgentProvider('openrouter', 'model', e.target.value)}
+                      placeholder="Model (e.g. openai/gpt-4o-mini)"
+                      className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                    />
+                  </ProviderBlock>
+
+                  <ProviderBlock title="AWS Bedrock">
+                    <input
+                      type="text"
+                      value={settings.agent?.providers?.bedrock?.accessKeyId || ''}
+                      onChange={(e) => updateAgentProvider('bedrock', 'accessKeyId', e.target.value)}
+                      placeholder="Access Key ID"
+                      className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                    />
+                    <SecretInput
+                      value={settings.agent?.providers?.bedrock?.secretAccessKey || ''}
+                      onChange={(e) => updateAgentProvider('bedrock', 'secretAccessKey', e.target.value)}
+                      placeholder="Secret Access Key"
+                      show={showAgentKeys.bedrock}
+                      onToggleShow={() => toggleAgentKeyVisibility('bedrock')}
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={settings.agent?.providers?.bedrock?.region || 'us-east-1'}
+                        onChange={(e) => updateAgentProvider('bedrock', 'region', e.target.value)}
+                        placeholder="Region"
+                        className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                      />
+                      <input
+                        type="text"
+                        value={settings.agent?.providers?.bedrock?.model || ''}
+                        onChange={(e) => updateAgentProvider('bedrock', 'model', e.target.value)}
+                        placeholder="Model ID"
+                        className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                      />
+                    </div>
+                  </ProviderBlock>
+
+                  <ProviderBlock title="Local Server (Ollama / LM Studio)">
+                    <input
+                      type="text"
+                      value={settings.agent?.providers?.local?.baseUrl || 'http://127.0.0.1:11434/v1'}
+                      onChange={(e) => updateAgentProvider('local', 'baseUrl', e.target.value)}
+                      placeholder="Base URL"
+                      className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                    />
+                    <input
+                      type="text"
+                      value={settings.agent?.providers?.local?.model || 'llama3.2'}
+                      onChange={(e) => updateAgentProvider('local', 'model', e.target.value)}
+                      placeholder="Model name"
+                      className="w-full px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                    />
+                  </ProviderBlock>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={agentTesting}
+                      onClick={() => testAgentProvider(settings.agent?.defaultProvider || 'openai')}
+                      className="btn btn-secondary text-xs py-1.5"
+                    >
+                      {agentTesting ? 'Testing…' : 'Test default provider'}
+                    </button>
+                    {agentTestResult && (
+                      <StatusPill tone={agentTestResult.success ? 'success' : 'danger'}>
+                        {agentTestResult.success ? `OK: ${agentTestResult.preview}` : agentTestResult.error}
+                      </StatusPill>
+                    )}
+                  </div>
+
+                  <ProviderBlock title="Composio" className="xl:col-span-2">
+                    <FieldLabel hint="From composio.com dashboard">API key</FieldLabel>
+                    <SecretInput
+                      value={settings.agent?.composio?.apiKey || ''}
+                      onChange={(e) => updateAgentSettings({ composio: { apiKey: e.target.value } })}
+                      placeholder="Composio API key"
+                      show={showAgentKeys.composio}
+                      onToggleShow={() => toggleAgentKeyVisibility('composio')}
+                    />
+                    <div className={SETTINGS_GRID.fields}>
+                      <div>
+                        <FieldLabel hint="OAuth2 toolkit slug (e.g. github, gmail, slack)">Add toolkit</FieldLabel>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newToolkitSlug}
+                            onChange={(e) => setNewToolkitSlug(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && addCustomToolkit()}
+                            placeholder="toolkit slug"
+                            className="flex-1 px-2.5 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono"
+                          />
+                          <button type="button" onClick={addCustomToolkit} className="btn btn-secondary text-xs px-3">Add</button>
+                        </div>
+                      </div>
+                    </div>
+                    {composioToolkits.length === 0 && (
+                      <p className="text-[11px] text-theme-muted">No toolkits added. Enter a Composio toolkit slug above.</p>
+                    )}
+                    <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(220px,280px))]">
+                      {composioToolkits.map((t) => (
+                        <div key={t.slug} className="rounded-md border border-theme-subtle bg-theme-secondary/40 px-2.5 py-2">
+                          <div className="flex items-center justify-between gap-2 min-h-[2rem]">
+                            <span className="text-xs font-mono text-theme-primary truncate">{t.slug}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {connectingComposioSlug === t.slug ? (
+                                <button
+                                  type="button"
+                                  onClick={() => cancelComposioConnection(t.slug)}
+                                  className="text-[10px] text-theme-muted hover:text-red-400 inline-flex items-center gap-1"
+                                >
+                                  <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                  Cancel
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => connectComposioToolkit(t.slug)}
+                                  className="text-[10px] text-red-500 hover:text-red-400"
+                                >
+                                  {t.accounts?.length ? '+ Add account' : 'Connect'}
+                                </button>
+                              )}
+                              <button type="button" onClick={() => removeCustomToolkit(t.slug)} className="text-[10px] text-theme-muted hover:text-red-400">Remove</button>
+                            </div>
+                          </div>
+                          {t.accounts?.length > 0 ? (
+                            <div className="mt-2 space-y-1 border-t border-theme-subtle pt-2">
+                              {t.accounts.map((account) => (
+                                <div key={account.id} className="flex items-center justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <div className="text-[11px] text-green-500 truncate">{account.label}</div>
+                                    {account.alias && account.alias !== account.label && (
+                                      <div className="text-[10px] text-theme-muted truncate">{account.alias}</div>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => disconnectComposioToolkit(account.id)}
+                                    className="text-[10px] text-theme-muted hover:text-red-400 shrink-0"
+                                  >
+                                    Disconnect
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-[10px] text-theme-muted">No accounts connected</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </ProviderBlock>
+                </div>
+              )}
+
+              {activeSection === 'uptime-kuma' && (
+            <div className={SETTINGS_GRID.stack}>
+              <ToggleCard
                 enabled={settings.uptimeKuma?.enabled !== false}
                 onChange={() => updateUptimeKumaSettings({ enabled: settings.uptimeKuma?.enabled === false })}
                 label="Enable Uptime Kuma"
-                description="Show the Uptime tab, home stats, and tray alerts. Your URL and credentials are kept when disabled."
+                description="Show the Uptime tab, home stats, and tray alerts"
               />
 
-              <div className="space-y-3 rounded border border-theme bg-theme-secondary px-3 py-3">
+              <SettingsPanel>
+              <div className={SETTINGS_GRID.fields}>
               <div>
-                <label className="block text-xs font-medium text-theme-primary mb-1">
-                  Uptime Kuma URL
-                </label>
+                <FieldLabel hint="Used by the Uptime tab">Uptime Kuma URL</FieldLabel>
                 <input
                   type="url"
                   value={settings.uptimeKuma?.url || ''}
                   onChange={(e) => updateUptimeKumaSettings({ url: e.target.value })}
                   placeholder="https://uptime-kuma.example.com"
-                  className="w-full px-2 py-1.5 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  className="w-full px-2 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-1 focus:ring-red-500"
                 />
-                <div className="text-theme-muted text-xs mt-1">Used by the Uptime tab to connect to your Uptime Kuma instance</div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-theme-primary mb-1">
-                  Username
-                </label>
+                <FieldLabel>Username</FieldLabel>
                 <input
                   type="text"
                   value={settings.uptimeKuma?.username || ''}
                   onChange={(e) => updateUptimeKumaSettings({ username: e.target.value })}
                   placeholder="Uptime Kuma username"
-                  className="w-full px-2 py-1.5 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  className="w-full px-2 py-1.5 bg-theme-secondary border border-theme-subtle rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-1 focus:ring-red-500"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-theme-primary mb-1">
-                  Password
-                </label>
-                <div className="relative">
-                  <input
-                    type={showUptimePassword ? "text" : "password"}
-                    value={settings.uptimeKuma?.password || ''}
-                    onChange={(e) => updateUptimeKumaSettings({ password: e.target.value })}
-                    placeholder="Uptime Kuma password"
-                    className="w-full px-2 py-1.5 pr-8 bg-theme-secondary border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowUptimePassword(!showUptimePassword)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary transition-colors"
-                    title={showUptimePassword ? "Hide password" : "Show password"}
-                  >
-                    {showUptimePassword ? (
-                      <MdVisibilityOff className="w-4 h-4" />
-                    ) : (
-                      <MdVisibility className="w-4 h-4" />
-                    )}
-                  </button>
-                </div>
-                <div className="text-theme-muted text-xs mt-1">Token authentication is intentionally not used</div>
+              <div className="md:col-span-2">
+                <FieldLabel hint="Token authentication is not used">Password</FieldLabel>
+                <SecretInput
+                  value={settings.uptimeKuma?.password || ''}
+                  onChange={(e) => updateUptimeKumaSettings({ password: e.target.value })}
+                  placeholder="Uptime Kuma password"
+                  show={showUptimePassword}
+                  onToggleShow={() => setShowUptimePassword(!showUptimePassword)}
+                />
               </div>
               </div>
+              </SettingsPanel>
             </div>
-              </SectionCard>
+              )}
 
-              <SectionCard
-                id="data-management"
-                icon={MdStorage}
-                title="Data Management"
-                description="Export, import, or reset DeskMaster data with authentication prompts."
-              >
-            <div className="space-y-2">
+              {activeSection === 'data-management' && (
+            <div className={SETTINGS_GRID.stack}>
+              <div className={SETTINGS_GRID.actions}>
               <button
                 type="button"
                 onClick={handleExport}
                 disabled={isExporting}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
+                className="flex items-center justify-center gap-2 px-3 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
               >
                 <MdFileDownload className="w-4 h-4" />
                 {isExporting ? 'Exporting...' : 'Export All Data'}
@@ -889,7 +1240,7 @@ const Settings = () => {
                 type="button"
                 onClick={handleImport}
                 disabled={isImporting}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
+                className="flex items-center justify-center gap-2 px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
               >
                 <MdFileUpload className="w-4 h-4" />
                 {isImporting ? 'Importing...' : 'Import Data'}
@@ -898,80 +1249,64 @@ const Settings = () => {
                 type="button"
                 onClick={handleReset}
                 disabled={isResetting}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-500 hover:bg-red-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
+                className="flex items-center justify-center gap-2 px-3 py-2 bg-red-500 hover:bg-red-600 disabled:bg-theme-secondary disabled:cursor-not-allowed text-white rounded-md transition-colors duration-200 text-xs"
               >
                 <MdDeleteForever className="w-4 h-4" />
                 {isResetting ? 'Resetting...' : 'Reset All Data'}
               </button>
-              <div className="text-theme-muted text-xs mt-2 pt-2 border-t border-theme">
-                <p className="mb-1">Export: Save all settings, authenticators, and clipboard history to a file (optional encryption).</p>
-                <p className="mb-1">Import: Restore data from an exported file (replaces current data).</p>
+              </div>
+              <SettingsPanel>
+              <div className="text-theme-muted text-xs space-y-1">
+                <p>Export: Save all settings, authenticators, and clipboard history to a file (optional encryption).</p>
+                <p>Import: Restore data from an exported file (replaces current data).</p>
                 <p>Reset: Permanently delete all data and restore defaults.</p>
               </div>
+              </SettingsPanel>
             </div>
-              </SectionCard>
+              )}
 
-              <SectionCard
-                id="cloud-backup"
-                icon={MdFileUpload}
-                title="Cloud Backup"
-                description="Back up DeskMaster data to Google Drive and keep the latest backup history."
-              >
-
-            <div className="space-y-2">
+              {activeSection === 'cloud-backup' && (
+            <div className={SETTINGS_GRID.stack}>
+                <SettingsPanel>
                 <div className="text-theme-muted text-xs">
                   Stores backups in a Google Drive folder named <span className="text-theme-primary font-medium">DeskMaster Backups</span>, keeping the last {backupStatus.keepLast || 10}.
                 </div>
+                </SettingsPanel>
 
-                <div className="space-y-2 rounded border border-theme bg-theme-secondary px-3 py-2">
+                <SettingsPanel>
+                <div className={SETTINGS_GRID.fields}>
                   <div>
-                    <label className="block text-xs font-medium text-theme-primary mb-1">
-                      Google OAuth Client ID
-                    </label>
+                    <FieldLabel>Google OAuth Client ID</FieldLabel>
                     <input
                       type="text"
                       value={settings.cloudBackup?.clientId || ''}
                       onChange={(e) => updateBackupSettings({ clientId: e.target.value })}
                       placeholder="Google OAuth client ID"
-                      className="w-full px-2 py-1.5 bg-theme-card border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      className="w-full px-2 py-1.5 bg-theme-card border border-theme-subtle rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-1 focus:ring-red-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-theme-primary mb-1">
-                      Google OAuth Client Secret
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showDriveClientSecret ? "text" : "password"}
-                        value={settings.cloudBackup?.clientSecret || ''}
-                        onChange={(e) => updateBackupSettings({ clientSecret: e.target.value })}
-                        placeholder="Google OAuth client secret"
-                        className="w-full px-2 py-1.5 pr-8 bg-theme-card border border-theme rounded-md text-theme-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowDriveClientSecret(!showDriveClientSecret)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-theme-muted hover:text-theme-primary transition-colors"
-                        title={showDriveClientSecret ? "Hide password" : "Show password"}
-                      >
-                        {showDriveClientSecret ? (
-                          <MdVisibilityOff className="w-4 h-4" />
-                        ) : (
-                          <MdVisibility className="w-4 h-4" />
-                        )}
-                      </button>
-                    </div>
+                    <FieldLabel>Google OAuth Client Secret</FieldLabel>
+                    <SecretInput
+                      value={settings.cloudBackup?.clientSecret || ''}
+                      onChange={(e) => updateBackupSettings({ clientSecret: e.target.value })}
+                      placeholder="Google OAuth client secret"
+                      show={showDriveClientSecret}
+                      onToggleShow={() => setShowDriveClientSecret(!showDriveClientSecret)}
+                    />
                     <div className="text-theme-muted text-xs mt-1">
                       Required in installed builds because release apps cannot read your development .env file.
                     </div>
                     <div className="text-theme-muted text-xs mt-2">
-                      In Google Cloud Console, add this redirect URI to your OAuth Web client:
+                      Redirect URI for Google Cloud OAuth Web client:
                       <span className="block mt-1 font-mono text-theme-primary break-all">http://127.0.0.1:8765/oauth2callback</span>
                     </div>
                   </div>
                 </div>
+                </SettingsPanel>
 
-                <div className="flex items-center justify-between gap-2 rounded border border-theme bg-theme-secondary px-3 py-2">
+                <div className={SETTINGS_GRID.cardsTwo}>
+                <SettingsPanel className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-theme-primary text-xs font-medium">Connection</div>
                     <div className="text-theme-muted text-xs truncate">
@@ -1002,7 +1337,7 @@ const Settings = () => {
                     ) : (
                       <button
                         type="button"
-                        className="px-3 py-1.5 rounded-md bg-theme-secondary hover:bg-theme-card-hover border border-theme text-theme-primary text-xs"
+                        className="px-3 py-1.5 rounded-md bg-theme-secondary hover:bg-theme-card-hover border border-theme-subtle text-theme-primary text-xs"
                         onClick={async () => {
                           try {
                             await ipcRenderer.invoke('gdrive:disconnect');
@@ -1016,24 +1351,27 @@ const Settings = () => {
                       </button>
                     )}
                   </div>
-                </div>
+                </SettingsPanel>
 
-                <div className="flex items-center justify-between gap-2 rounded border border-theme bg-theme-secondary px-3 py-2">
+                <SettingsPanel className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-theme-primary text-xs font-medium">Automatic backup</div>
                     <div className="text-theme-muted text-xs truncate">Every {settings.cloudBackup?.intervalHours || 4} hours</div>
                   </div>
                   <button
                     type="button"
-                    className={`px-3 py-1.5 rounded-md text-xs ${settings.cloudBackup?.enabled ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-theme-secondary hover:bg-theme-card-hover border border-theme text-theme-primary'}`}
+                    className={`px-3 py-1.5 rounded-md text-xs shrink-0 ${settings.cloudBackup?.enabled ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-theme-secondary hover:bg-theme-card-hover border border-theme-subtle text-theme-primary'}`}
                     disabled={!backupStatus.connected}
                     onClick={() => updateBackupSettings({ enabled: !settings.cloudBackup?.enabled })}
                     title={!backupStatus.connected ? 'Connect Google Drive first' : ''}
                   >
                     {settings.cloudBackup?.enabled ? 'Enabled' : 'Disabled'}
                   </button>
+                </SettingsPanel>
                 </div>
 
+                <div className={SETTINGS_GRID.cardsTwo}>
+                <SettingsPanel>
                 <SelectOption
                   value={String(settings.cloudBackup?.intervalHours || 4)}
                   onChange={(v) => updateBackupSettings({ intervalHours: Number(v) || 4 })}
@@ -1044,11 +1382,11 @@ const Settings = () => {
                   label="Backup frequency"
                   description="Runs in background when DeskMaster is open"
                 />
-
-                <div className="flex gap-2">
+                </SettingsPanel>
+                <SettingsPanel className="flex items-center justify-center">
                   <button
                     type="button"
-                    className="flex-1 px-3 py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-xs disabled:opacity-60"
+                    className="w-full px-3 py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-xs disabled:opacity-60"
                     disabled={!backupStatus.connected || isBackingUpNow}
                     onClick={async () => {
                       setIsBackingUpNow(true);
@@ -1068,12 +1406,14 @@ const Settings = () => {
                   >
                     {isBackingUpNow ? 'Backing up…' : 'Backup now'}
                   </button>
+                </SettingsPanel>
                 </div>
 
-                <div className="text-theme-muted text-xs pt-2 border-t border-theme">
+                <SettingsPanel>
+                <div className="text-theme-muted text-xs space-y-1">
                   <div>Last backup: {backupStatus.lastBackupAt ? new Date(backupStatus.lastBackupAt).toLocaleString() : 'Never'}</div>
                   {backupStatus.lastBackupStatus === 'error' ? (
-                    <div className="text-red-500 mt-1">
+                    <div className="text-red-500">
                       Error: {backupStatus.lastBackupError || 'Unknown error'}
                       {!backupStatus.connected && backupStatus.lastBackupError?.toLowerCase().includes('session expired') ? (
                         <div className="text-theme-muted mt-1">Connection was cleared. Click Connect after verifying your OAuth credentials and redirect URI.</div>
@@ -1081,8 +1421,9 @@ const Settings = () => {
                     </div>
                   ) : null}
                 </div>
-              </div>
-              </SectionCard>
+                </SettingsPanel>
+            </div>
+              )}
 
             </div>
           </div>
@@ -1121,7 +1462,7 @@ const Settings = () => {
                   value={timezoneLabel}
                   onChange={(e) => setTimezoneLabel(e.target.value)}
                   placeholder="e.g., New York, London"
-                  className="w-full px-3 py-2 bg-theme-primary border border-theme rounded-md text-theme-primary focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  className="w-full px-3 py-2 bg-theme-primary border border-theme-subtle rounded-md text-theme-primary focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 />
               </div>
               <div className="flex items-center justify-between py-2">

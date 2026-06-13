@@ -62,7 +62,7 @@ const TextReformatTool = ({ onClose }) => {
       setError(null);
     } catch (error) {
       console.error(`Error ${mode === 'reformat' ? 'reformatting' : 'translating'} text:`, error);
-      setError(error.message || `Error ${mode === 'reformat' ? 'reformatting' : 'translating'} text. Please check your API key in settings.`);
+      setError(error.message || `Error ${mode === 'reformat' ? 'reformatting' : 'translating'} text. Configure an LLM provider in Settings > AI Agent.`);
     } finally {
       setIsLoading(false);
     }
@@ -132,7 +132,7 @@ const TextReformatTool = ({ onClose }) => {
             onClick={() => setShowModeDropdown(!showModeDropdown)}
             className="flex items-center gap-1 text-sm font-semibold text-theme-primary hover:text-red-500 transition-colors duration-200"
           >
-            {mode === 'reformat' ? 'Text Reformat' : 'Translator'} (ChatGPT)
+            {mode === 'reformat' ? 'Text Reformat' : 'Translator'}
             <MdArrowDropDown className={`w-4 h-4 transition-transform duration-200 ${showModeDropdown ? 'rotate-180' : ''}`} />
           </button>
           {showModeDropdown && (

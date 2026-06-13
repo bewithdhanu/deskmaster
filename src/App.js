@@ -7,36 +7,34 @@ import Authenticator from './components/Authenticator';
 import Notes from './components/Notes';
 import UptimeMonitor from './components/UptimeMonitor';
 import Settings from './components/Settings';
+import Agent from './components/Agent';
 import Navigation from './components/Navigation';
 import { getIpcRenderer } from './utils/electron';
 import { isUptimeKumaEnabled } from './utils/uptimeKuma';
+import { navigate } from './utils/appRoute';
+import { useAppRoute } from './utils/useAppRoute';
 
 const ipcRenderer = getIpcRenderer();
 
+const PROTECTED_TABS = ['clipboard', 'authenticator', 'settings'];
+
 function App() {
+  const route = useAppRoute();
+  const activeTab = route.tab;
   const [currentTheme, setCurrentTheme] = useState('dark');
-  const [activeTab, setActiveTab] = useState(() => {
-    // Get last active tab from localStorage, default to 'home'
-    return localStorage.getItem('lastActiveTab') || 'home';
-  });
   const [uptimeKumaEnabled, setUptimeKumaEnabled] = useState(true);
 
-  // Authentication state: tracks when user was last authenticated
   const [authState, setAuthState] = useState(() => {
     const stored = localStorage.getItem('authState');
     if (stored) {
       const parsed = JSON.parse(stored);
-      // Check if authentication is still valid (5 minutes timeout)
-      const AUTH_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+      const AUTH_TIMEOUT = 5 * 60 * 1000;
       if (Date.now() - parsed.timestamp < AUTH_TIMEOUT) {
         return parsed;
       }
     }
     return { authenticated: false, timestamp: 0 };
   });
-  
-  // Protected tabs that require authentication
-  const PROTECTED_TABS = ['clipboard', 'authenticator', 'settings'];
 
   const authenticateUser = async (reason) => {
     try {
@@ -54,34 +52,32 @@ function App() {
     }
   };
 
-  // Check authentication on mount if user is on a protected tab
   useEffect(() => {
-    const checkInitialAuth = async () => {
-      if (PROTECTED_TABS.includes(activeTab)) {
-        const AUTH_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-        const isAuthenticated = authState.authenticated && 
-                                (Date.now() - authState.timestamp < AUTH_TIMEOUT);
-        
-        if (!isAuthenticated) {
-          const tabNames = {
-            clipboard: 'Clipboard',
-            authenticator: 'Authenticator',
-            settings: 'Settings'
-          };
-          const reason = `Access to ${tabNames[activeTab]} requires authentication`;
-          const authenticated = await authenticateUser(reason);
-          
-          if (!authenticated) {
-            // Redirect to home if authentication failed
-            setActiveTab('home');
-            localStorage.setItem('lastActiveTab', 'home');
-          }
+    const checkAuthForRoute = async () => {
+      if (!PROTECTED_TABS.includes(activeTab)) return;
+
+      const AUTH_TIMEOUT = 5 * 60 * 1000;
+      const isAuthenticated =
+        authState.authenticated && Date.now() - authState.timestamp < AUTH_TIMEOUT;
+
+      if (!isAuthenticated) {
+        const tabNames = {
+          clipboard: 'Clipboard',
+          authenticator: 'Authenticator',
+          settings: 'Settings'
+        };
+        const reason = `Access to ${tabNames[activeTab]} requires authentication`;
+        const authenticated = await authenticateUser(reason);
+
+        if (!authenticated) {
+          navigate({ tab: 'home' }, { replace: true });
+          localStorage.setItem('lastActiveTab', 'home');
         }
       }
     };
-    
-    checkInitialAuth();
-  }, []); // Only run on mount
+
+    checkAuthForRoute();
+  }, [activeTab]);
 
   useEffect(() => {
     const loadUptimeSetting = async () => {
@@ -109,28 +105,27 @@ function App() {
 
   useEffect(() => {
     if (!uptimeKumaEnabled && activeTab === 'uptime') {
-      setActiveTab('home');
-      localStorage.setItem('lastActiveTab', 'home');
+      navigate({ tab: 'home' }, { replace: true });
     }
   }, [uptimeKumaEnabled, activeTab]);
 
   useEffect(() => {
-    // Get initial theme from main process
+    localStorage.setItem('lastActiveTab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
     const getInitialTheme = async () => {
       try {
         const settings = await ipcRenderer.invoke('get-settings');
         if (settings && settings.theme) {
-          // Determine effective theme based on user setting
           let effectiveTheme = settings.theme;
           if (settings.theme === 'system') {
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             effectiveTheme = prefersDark ? 'dark' : 'light';
           }
-          console.log('Initial theme from settings:', effectiveTheme, '(user setting:', settings.theme, ')');
           setCurrentTheme(effectiveTheme);
           applyTheme(effectiveTheme);
         } else {
-          // Fallback to system theme if no settings
           const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
           const initialTheme = prefersDark ? 'dark' : 'light';
           setCurrentTheme(initialTheme);
@@ -138,19 +133,16 @@ function App() {
         }
       } catch (error) {
         console.error('Error getting initial theme:', error);
-        // Fallback to system theme
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const initialTheme = prefersDark ? 'dark' : 'light';
-    setCurrentTheme(initialTheme);
-    applyTheme(initialTheme);
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const initialTheme = prefersDark ? 'dark' : 'light';
+        setCurrentTheme(initialTheme);
+        applyTheme(initialTheme);
       }
     };
 
     getInitialTheme();
 
-    // Listen for theme changes
     const handleThemeChange = (event, theme) => {
-      console.log('Theme changed in renderer:', theme);
       setCurrentTheme(theme);
       applyTheme(theme);
     };
@@ -171,15 +163,12 @@ function App() {
       return;
     }
 
-    // Check if this tab requires authentication
     if (PROTECTED_TABS.includes(tabId)) {
-      // Check if user is already authenticated (within timeout)
-      const AUTH_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-      const isAuthenticated = authState.authenticated && 
-                              (Date.now() - authState.timestamp < AUTH_TIMEOUT);
-      
+      const AUTH_TIMEOUT = 5 * 60 * 1000;
+      const isAuthenticated =
+        authState.authenticated && Date.now() - authState.timestamp < AUTH_TIMEOUT;
+
       if (!isAuthenticated) {
-        // Prompt for authentication
         const tabNames = {
           clipboard: 'Clipboard',
           authenticator: 'Authenticator',
@@ -187,17 +176,29 @@ function App() {
         };
         const reason = `Access to ${tabNames[tabId]} requires authentication`;
         const authenticated = await authenticateUser(reason);
-        
+
         if (!authenticated) {
-          // User cancelled or failed authentication, don't switch tabs
           return;
         }
       }
     }
-    
-    setActiveTab(tabId);
-    // Save the active tab to localStorage
-    localStorage.setItem('lastActiveTab', tabId);
+
+    const nextRoute = { tab: tabId };
+
+    if (tabId === 'settings') {
+      nextRoute.settingsSection =
+        route.tab === 'settings' && route.settingsSection ? route.settingsSection : 'system-stats';
+    }
+
+    if (tabId === 'agent' && route.tab === 'agent' && route.chatId) {
+      nextRoute.chatId = route.chatId;
+    }
+
+    if (tabId === 'notes' && route.tab === 'notes' && route.noteId) {
+      nextRoute.noteId = route.noteId;
+    }
+
+    navigate(nextRoute);
   };
 
   const renderContent = () => {
@@ -214,6 +215,8 @@ function App() {
         return <Authenticator />;
       case 'notes':
         return <Notes />;
+      case 'agent':
+        return <Agent />;
       case 'uptime':
         return uptimeKumaEnabled ? <UptimeMonitor /> : <Tools />;
       case 'settings':
