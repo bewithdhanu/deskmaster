@@ -140,6 +140,11 @@ const connectWebSocket = async () => {
           if (callbacks) {
             callbacks.forEach(cb => cb(null, message.data));
           }
+        } else if (message.type === 'agent:stream') {
+          const callbacks = globalListeners.get('agent:stream');
+          if (callbacks) {
+            callbacks.forEach(cb => cb(null, message.data));
+          }
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -825,7 +830,194 @@ const createBrowserIpcRenderer = () => {
           const [url] = args;
           window.open(url, '_blank');
           return { success: true };
+        } else if (channel === 'agent:list-chats') {
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/agent/chats`, { headers });
+          if (!response.ok) throw new Error('Failed to list agent chats');
+          return await response.json();
+        } else if (channel === 'agent:search-chats') {
+          const [query] = args;
+          const headers = await addApiTokenToHeaders();
+          const url = new URL(`${API_BASE}/agent/chats/search`);
+          url.searchParams.set('q', query || '');
+          const response = await fetch(url.toString(), { headers });
+          if (!response.ok) throw new Error('Failed to search chats');
+          return await response.json();
+        } else if (channel === 'agent:get-chat') {
+          const [sessionId] = args;
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/agent/chat?id=${encodeURIComponent(sessionId || '')}`, { headers });
+          if (!response.ok) throw new Error('Failed to load chat');
+          return await response.json();
+        } else if (channel === 'agent:create-chat') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/chats`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload || {})
+          });
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Failed to create chat');
+          }
+          return await response.json();
+        } else if (channel === 'agent:delete-chat') {
+          const [sessionId] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/chat/delete`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ sessionId })
+          });
+          if (!response.ok) throw new Error('Failed to delete chat');
+          return await response.json();
+        } else if (channel === 'agent:update-chat') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/chat/update`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload || {})
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Failed to update chat');
+          return result;
+        } else if (channel === 'agent:replace-messages') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/chat/replace-messages`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload || {})
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Failed to replace messages');
+          return result;
+        } else if (channel === 'agent:kb-status') {
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/agent/kb-status`, { headers });
+          if (!response.ok) throw new Error('Failed to get KB status');
+          return await response.json();
+        } else if (channel === 'agent:kb-reindex') {
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/kb-reindex`, { method: 'POST', headers, body: '{}' });
+          if (!response.ok) throw new Error('Failed to reindex knowledge base');
+          return await response.json();
+        } else if (channel === 'agent:composio-list-toolkits') {
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/agent/composio-toolkits`, { headers });
+          if (!response.ok) throw new Error('Failed to list Composio toolkits');
+          return await response.json();
+        } else if (channel === 'agent:composio-connected') {
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/agent/composio/connected`, { headers });
+          if (!response.ok) throw new Error('Failed to list connected Composio toolkits');
+          return await response.json();
+        } else if (channel === 'agent:composio-connect') {
+          const [toolkitSlug] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/composio/connect`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ toolkitSlug })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Composio connect failed');
+          if (result.redirectUrl) {
+            window.open(result.redirectUrl, '_blank', 'noopener,noreferrer');
+          }
+          return result;
+        } else if (channel === 'agent:composio-wait') {
+          const [payload] = args;
+          const waitPayload = typeof payload === 'string' ? { toolkitSlug: payload } : (payload || {});
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/composio/wait`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(waitPayload)
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Composio connection timed out');
+          return result;
+        } else if (channel === 'agent:composio-cancel-wait') {
+          const [toolkitSlug] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/composio/cancel-wait`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ toolkitSlug })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Failed to cancel Composio connection');
+          return result;
+        } else if (channel === 'agent:composio-disconnect') {
+          const [accountId] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/composio/disconnect`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ accountId })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Composio disconnect failed');
+          return result;
+        } else if (channel === 'agent:chat') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/chat`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload || {})
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(result.error || 'Agent chat failed');
+          }
+          return result;
+        } else if (channel === 'agent:get-notes-save-context') {
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/agent/notes-save-context`, { headers });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Failed to load notes context');
+          return result;
+        } else if (channel === 'agent:set-notes-save-parent') {
+          const [parentId] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/set-notes-save-parent`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ parentId })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Failed to update save location');
+          return result;
+        } else if (channel === 'agent:save-to-notes') {
+          const [payload] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/save-to-notes`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload || {})
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || 'Failed to save to notes');
+          return result;
+        } else if (channel === 'agent:test-provider') {
+          const [providerId] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/agent/test-provider`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ providerId })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(result.error || 'Provider test failed');
+          }
+          return result;
         }
+        console.warn(`[Browser Mode] Unhandled IPC channel: ${channel}`);
         return null;
       } catch (error) {
         console.error(`[Browser Mode] IPC invoke error for ${channel}:`, error);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity, MdNotes, MdComputer } from 'react-icons/md';
+import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity, MdNotes, MdComputer, MdSmartToy } from 'react-icons/md';
 
 const Navigation = ({ activeTab, onTabChange, uptimeKumaEnabled = true }) => {
   const menuItems = [
@@ -22,6 +22,11 @@ const Navigation = ({ activeTab, onTabChange, uptimeKumaEnabled = true }) => {
       id: 'notes',
       label: 'Notes',
       icon: <MdNotes className="w-5 h-5" />
+    },
+    {
+      id: 'agent',
+      label: 'Agent',
+      icon: <MdSmartToy className="w-5 h-5" />
     },
     {
       id: 'uptime',

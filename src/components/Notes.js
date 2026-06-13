@@ -14,6 +14,7 @@ import { cva } from 'class-variance-authority';
 import { CheckIcon, ChevronRightIcon } from 'lucide-react';
 import { OneNoteEditor } from '../vendor/onenote-style-editor/index.js';
 import { getIpcRenderer, isElectron } from '../utils/electron';
+import { getRoute, navigate, subscribe } from '../utils/appRoute';
 import { DeskMasterFormattingToolbar } from './blocknote/MarkdownAiToolbarButtons.js';
 import './onenote-style-editor.css';
 
@@ -1076,11 +1077,17 @@ const Notes = () => {
           const allNodeIds = new Set(flattenIds(nextTree));
           const expandedIds = Array.isArray(ui.expandedIds) ? ui.expandedIds.filter((id) => allNodeIds.has(id)) : [];
           const candidateSelected = ui.selectedId && allNodeIds.has(ui.selectedId) && ui.selectedId !== ARCHIVE_ROOT_ID ? ui.selectedId : null;
+          const route = getRoute();
+          const routeNoteId =
+            route.tab === 'notes' && route.noteId && allNodeIds.has(route.noteId) && route.noteId !== ARCHIVE_ROOT_ID
+              ? route.noteId
+              : null;
 
           setMode(nextMode);
           setNewPageType(nextNewType);
           setExpanded(new Set(expandedIds));
-          if (candidateSelected) setSelectedId(candidateSelected);
+          if (routeNoteId) setSelectedId(routeNoteId);
+          else if (candidateSelected) setSelectedId(candidateSelected);
         } catch {}
         uiHydratedRef.current = true;
         setIsLoading(false);
@@ -1108,6 +1115,25 @@ const Notes = () => {
   useEffect(() => {
     if (!uiHydratedRef.current) return;
     if (allIds.length && (!selectedId || !allIds.includes(selectedId))) setSelectedId(allIds[0]);
+  }, [allIds, selectedId]);
+
+  useEffect(() => {
+    if (!uiHydratedRef.current) return;
+    if (!selectedId) return;
+    const route = getRoute();
+    if (route.tab !== 'notes') return;
+    if (route.noteId === selectedId) return;
+    navigate({ tab: 'notes', noteId: selectedId }, { replace: true });
+  }, [selectedId]);
+
+  useEffect(() => {
+    return subscribe(() => {
+      const route = getRoute();
+      if (route.tab !== 'notes' || !route.noteId) return;
+      if (allIds.includes(route.noteId) && route.noteId !== selectedId) {
+        setSelectedId(route.noteId);
+      }
+    });
   }, [allIds, selectedId]);
 
   useEffect(() => {

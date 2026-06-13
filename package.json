@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "3.1.3",
+  "version": "3.3.0",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -20,7 +20,10 @@
     "dev-app": "node dev.js",
     "test-app": "node test-app.js",
     "serve": "node server.js",
-    "serve:build": "npm run build-app && node server.js"
+    "serve:build": "npm run build-app && node server.js",
+    "test:e2e": "playwright test",
+    "test:e2e:agent": "playwright test tests/e2e/agent.spec.js",
+    "test:unit:agent": "node tests/unit/agentChatStore.test.js"
   },
   "keywords": [
     "desktop-productivity",
@@ -41,6 +44,7 @@
     "@babel/preset-env": "^7.23.0",
     "@babel/preset-react": "^7.22.0",
     "@electron/notarize": "^3.1.1",
+    "@playwright/test": "^1.60.0",
     "autoprefixer": "^10.4.21",
     "babel-loader": "^9.1.0",
     "copy-webpack-plugin": "^13.0.1",
@@ -58,9 +62,11 @@
     "webpack-dev-server": "^4.15.0"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1068.0",
     "@blocknote/core": "^0.50.0",
     "@blocknote/react": "^0.50.0",
     "@blocknote/shadcn": "^0.50.0",
+    "@composio/core": "^0.10.0",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-toggle": "^1.1.10",
@@ -69,6 +75,7 @@
     "auto-launch": "^5.0.6",
     "bcryptjs": "^2.4.3",
     "chart.js": "^4.4.0",
+    "chokidar": "^5.0.0",
     "class-variance-authority": "^0.7.1",
     "dotenv": "^16.6.1",
     "html2canvas": "^1.4.1",
@@ -81,10 +88,13 @@
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18.2.0",
     "react-icons": "^5.5.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.3",
     "sqlite3": "^5.1.7",
     "systeminformation": "^5.21.15",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "zod": "^4.4.3"
   },
   "build": {
     "appId": "app.deskmaster",
@@ -120,6 +130,17 @@
       "uptimeMonitor.js",
       "gdriveBackup.js",
       "notesSearch.js",
+      "agentChatStore.js",
+      "agentProviders.js",
+      "agentOrchestrator.js",
+      "agentTools.js",
+      "agentKnowledge.js",
+      "composioBridge.js",
+      "agentHandlers.js",
+      "agentHttp.js",
+      "textLlmService.js",
+      "agentProviderConfig.js",
+      "agentMessageFormat.js",
       "package.json",
       "assets/**/*"
     ],

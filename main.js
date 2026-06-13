@@ -13,6 +13,11 @@ const clipboardTracker = require("./clipboard")
 const authenticator = require("./authenticator")
 const uptimeMonitor = require("./uptimeMonitor")
 const notesSearch = require("./notesSearch")
+const { registerAgentHandlers } = require("./agentHandlers")
+const agentKnowledge = require("./agentKnowledge")
+const agentHttp = require("./agentHttp")
+const agentOrchestrator = require("./agentOrchestrator")
+const textLlmService = require("./textLlmService")
 const bcrypt = require("bcryptjs")
 const { spawn } = require("child_process")
 const { randomUUID } = require("crypto")
@@ -291,98 +296,6 @@ let lastTOTPCodes = null
 // Security: Generate a secret token for API authentication (only accessible within Electron app)
 const crypto = require('crypto')
 const API_SECRET_TOKEN = crypto.randomBytes(32).toString('hex')
-
-// Text reformat: tone-specific instructions (multi-select: combine selected tones)
-const REFORMAT_TONE_INSTRUCTIONS = {
-  casual: 'Casual: Use everyday language, contractions, and a relaxed style. Keep it conversational and approachable.',
-  professional: 'Professional: Clear, polished, business-appropriate language. Correct grammar, concise and direct. Suitable for emails and reports.',
-  managerial: 'Managerial: Formal, authoritative, executive-level. Precise language, commanding but respectful. Suited for leadership and senior-stakeholder communication.',
-  friendly: 'Friendly: Warm, approachable, and personable. Use a positive and welcoming tone.',
-  formal: 'Formal: Proper, reserved, and polished. Avoid contractions and colloquialisms; suitable for official documents.',
-  concise: 'Concise: Short and to the point. Remove filler words and redundancy; keep only essential information.',
-  empathetic: 'Empathetic: Acknowledge feelings and show understanding. Use supportive and considerate language.',
-  assertive: 'Assertive: Direct and confident. State points clearly without being aggressive.',
-  diplomatic: 'Diplomatic: Tactful and considerate. Soften potentially harsh points while staying clear.',
-  funny: 'Funny: Light, witty, or humorous where appropriate. Add tasteful humor and playfulness without undermining the message.'
-};
-
-function getReformatMessages(text, tones) {
-  const selected = Array.isArray(tones) && tones.length > 0 ? tones : ['professional'];
-  const instructions = selected
-    .map(t => REFORMAT_TONE_INSTRUCTIONS[t])
-    .filter(Boolean);
-  const toneInstruction = instructions.length > 0
-    ? `Apply the following tone(s) together: ${instructions.join(' ')}`
-    : REFORMAT_TONE_INSTRUCTIONS.professional;
-  const systemPrompt = `You are an expert editor. Your task is to reformat the user's text so it is clear, correct, and easy to read.
-
-Rules:
-1. Fix all grammar, spelling, and punctuation.
-2. Improve sentence structure and flow; break run-on sentences and tighten wordy phrases.
-3. Use clear paragraph breaks where ideas change; keep paragraphs short (2–4 sentences when possible).
-4. Preserve every fact, number, and piece of information; do not add or remove content.
-5. Do not add headings, bullet points, or lists unless the original text already has them or they are clearly needed for clarity.
-6. Use emojis where they fit the tone and add clarity or warmth (e.g. in casual, friendly, or funny tones). Use them sparingly in professional or formal tones; avoid overusing them.
-7. Output only the reformatted text, with no preamble or explanation.
-
-Tone: ${toneInstruction}`;
-  const userPrompt = `Reformat the following text according to the rules and tone given. Output only the reformatted text.\n\n---\n\n${text}`;
-  return [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt }
-  ];
-}
-
-/** Prompts for Notes markdown editor — AI actions on selected text (same API key as Tools > Text reformat). */
-const AI_SELECTION_ACTIONS = {
-  improve:
-    'Rewrite the following text to be clearer and more polished while preserving meaning and tone. Output only the rewritten text, with no preamble or quotes.',
-  shorten:
-    'Shorten the following text while keeping every important fact and the overall tone. Output only the shortened text, with no preamble or quotes.',
-  expand:
-    'Expand the following text with useful detail and smoother sentences. Do not invent facts. Output only the expanded text, with no preamble or quotes.',
-  'fix-grammar':
-    'Fix grammar, spelling, and punctuation. Preserve meaning and tone. Output only the corrected text, with no preamble or quotes.',
-  simplify:
-    'Simplify the wording: use shorter sentences and simpler vocabulary where possible, while preserving the original meaning. Output only the simplified text, with no preamble or quotes.'
-};
-
-function getAiSelectionMessages(text, action, extra = {}) {
-  const trimmed = typeof text === 'string' ? text.trim() : '';
-
-  if (action === 'custom') {
-    const instr = typeof extra.instruction === 'string' ? extra.instruction.trim() : '';
-    return [
-      {
-        role: 'system',
-        content:
-          'Apply the following instruction to the user text. Output only the resulting text, with no preamble, quotes, or explanation.\n\nInstruction: ' +
-          instr
-      },
-      { role: 'user', content: trimmed }
-    ];
-  }
-
-  if (action === 'translate') {
-    const lang =
-      typeof extra.targetLanguage === 'string' && extra.targetLanguage.trim()
-        ? extra.targetLanguage.trim()
-        : 'English';
-    return [
-      {
-        role: 'system',
-        content: `Translate the following text into ${lang}. Preserve meaning and tone. Output only the translated text, with no preamble or quotes.`
-      },
-      { role: 'user', content: trimmed }
-    ];
-  }
-
-  const instruction = AI_SELECTION_ACTIONS[action] || AI_SELECTION_ACTIONS.improve;
-  return [
-    { role: 'system', content: instruction },
-    { role: 'user', content: trimmed }
-  ];
-}
 
 // Helper function to get the effective theme based on user preference
 function getEffectiveTheme() {
@@ -705,6 +618,23 @@ function broadcastClipboardUpdate() {
       data: { timestamp: Date.now() }
     });
     
+    connectedClients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      } else {
+        connectedClients.delete(client);
+      }
+    });
+  }
+}
+
+function broadcastAgentStream(payload) {
+  if (wss && connectedClients.size > 0) {
+    const message = JSON.stringify({
+      type: 'agent:stream',
+      data: payload
+    });
+
     connectedClients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(message);
@@ -1059,6 +989,8 @@ function startBrowserServers() {
   // Handle GET requests
   async function handleGetRequest(req, res) {
     try {
+      if (agentHttp.handleAgentGet(req, res, appSettings, agentHttpDeps)) return
+
       if (req.url === '/api/get-settings') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(appSettings));
@@ -1262,6 +1194,8 @@ function startBrowserServers() {
   // Handle POST requests
   async function handlePostRequest(req, res, body) {
     try {
+      if (await agentHttp.handleAgentPost(req, res, body, appSettings, agentHttpDeps)) return
+
       if (req.url === '/api/update-settings') {
         const newSettings = JSON.parse(body);
         config.setAppSettings(newSettings);
@@ -1842,56 +1776,14 @@ function startBrowserServers() {
       } else if (req.url === '/api/get-ip-location') {
         const { ips } = JSON.parse(body);
         try {
-          const https = require('https');
-          const apiKey = appSettings.apiKeys?.ipLocation || process.env.IPGEOLOCATION_API_KEY;
-          
-          if (!apiKey) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'IPGeolocation API key not found. Please set it in Settings > API Keys' }));
-            return;
-          }
-          
-          const results = await Promise.all(
-            ips.map(ip => {
-              return new Promise((resolve) => {
-                const url = `https://api.ipgeolocation.io/ipgeo?apiKey=${apiKey}&ip=${encodeURIComponent(ip)}`;
-                https.get(url, { timeout: 10000 }, (ipRes) => {
-                  let data = '';
-                  ipRes.on('data', (chunk) => {
-                    data += chunk;
-                  });
-                  ipRes.on('end', () => {
-                    try {
-                      const result = JSON.parse(data);
-                      if (result.message || result.error) {
-                        resolve({ ip, error: result.message || result.error || 'Invalid IP address' });
-                      } else {
-                        resolve({
-                          ip: result.ip || ip,
-                          country: result.country_name,
-                          region: result.state_prov,
-                          city: result.city,
-                          zip: result.zipcode,
-                          lat: result.latitude,
-                          lon: result.longitude,
-                          isp: result.isp,
-                          org: result.organization || result.isp
-                        });
-                      }
-                    } catch (error) {
-                      resolve({ ip, error: 'Failed to parse location data' });
-                    }
-                  });
-                }).on('error', (error) => {
-                  resolve({ ip, error: error.message || 'Network error' });
-                });
-              });
-            })
-          );
+          const { fetchIpLocationResults } = require('./ipGeolocation')
+          const apiKey = appSettings.apiKeys?.ipLocation || process.env.IPGEOLOCATION_API_KEY
+          const results = await fetchIpLocationResults(ips, apiKey)
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(results));
         } catch (error) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
+          const status = error.message?.includes('API key') ? 400 : 500
+          res.writeHead(status, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message }));
         }
       } else if (req.url === '/api/start-pinggy-tunnel') {
@@ -1917,91 +1809,9 @@ function startBrowserServers() {
       } else if (req.url === '/api/translate-text') {
         const { text, targetLanguage } = JSON.parse(body);
         try {
-          const apiKey = appSettings.apiKeys?.chatgpt;
-          
-          if (!apiKey) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'ChatGPT API key not found. Please set it in Settings > API Keys' }));
-            return;
-          }
-
-          if (!targetLanguage || !targetLanguage.trim()) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Target language is required' }));
-            return;
-          }
-
-          const https = require('https');
-          const requestData = JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [
-              {
-                role: 'system',
-                content: `You are a professional translator. Translate the given text to ${targetLanguage.trim()}. Preserve the original meaning, tone, and style. Only provide the translation, no explanations or additional text.`
-              },
-              {
-                role: 'user',
-                content: `Translate the following text to ${targetLanguage.trim()}:\n\n${text}`
-              }
-            ],
-            temperature: 0.3,
-            max_tokens: 2000
-          });
-
-          const options = {
-            hostname: 'api.openai.com',
-            port: 443,
-            path: '/v1/chat/completions',
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Length': Buffer.byteLength(requestData)
-            },
-            timeout: 30000
-          };
-
-          const httpsReq = https.request(options, (httpsRes) => {
-            let data = '';
-            httpsRes.on('data', (chunk) => {
-              data += chunk;
-            });
-            httpsRes.on('end', () => {
-              try {
-                if (httpsRes.statusCode !== 200) {
-                  const error = JSON.parse(data);
-                  res.writeHead(httpsRes.statusCode, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ error: error.error?.message || `API returned status ${httpsRes.statusCode}` }));
-                  return;
-                }
-                const response = JSON.parse(data);
-                if (response.choices && response.choices[0] && response.choices[0].message) {
-                  res.writeHead(200, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ text: response.choices[0].message.content.trim() }));
-                } else {
-                  res.writeHead(500, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ error: 'Invalid response from API' }));
-                }
-              } catch (error) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Failed to parse API response' }));
-              }
-            });
-          });
-
-          httpsReq.on('error', (error) => {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: `Network error: ${error.message}` }));
-          });
-
-          httpsReq.on('timeout', () => {
-            httpsReq.destroy();
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Request timeout' }));
-          });
-
-          httpsReq.write(requestData);
-          httpsReq.end();
+          const translated = await textLlmService.translateText(appSettings, text, targetLanguage);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ text: translated }));
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message || 'Internal server error' }));
@@ -2190,77 +2000,9 @@ function startBrowserServers() {
         const text = bodyData.text;
         const tones = Array.isArray(bodyData.tones) ? bodyData.tones : (bodyData.tone != null ? [bodyData.tone] : ['professional']);
         try {
-          const apiKey = appSettings.apiKeys?.chatgpt;
-          
-          if (!apiKey) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'ChatGPT API key not found. Please set it in Settings > API Keys' }));
-            return;
-          }
-
-          const https = require('https');
-          const messages = getReformatMessages(text, tones);
-          const requestData = JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages,
-            temperature: 0.3,
-            max_tokens: 2000
-          });
-
-          const options = {
-            hostname: 'api.openai.com',
-            port: 443,
-            path: '/v1/chat/completions',
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Length': Buffer.byteLength(requestData)
-            },
-            timeout: 30000
-          };
-
-          const apiReq = https.request(options, (apiRes) => {
-            let data = '';
-            apiRes.on('data', (chunk) => {
-              data += chunk;
-            });
-            apiRes.on('end', () => {
-              try {
-                if (apiRes.statusCode !== 200) {
-                  const error = JSON.parse(data);
-                  res.writeHead(apiRes.statusCode, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ error: error.error?.message || `API returned status ${apiRes.statusCode}` }));
-                  return;
-                }
-                const result = JSON.parse(data);
-                if (result.choices && result.choices.length > 0) {
-                  res.writeHead(200, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ text: result.choices[0].message.content }));
-                } else {
-                  res.writeHead(500, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ error: 'No response from ChatGPT API' }));
-                }
-              } catch (error) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Failed to parse API response' }));
-              }
-            });
-          });
-
-          apiReq.on('error', (error) => {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: `Request failed: ${error.message}` }));
-          });
-
-          apiReq.on('timeout', () => {
-            apiReq.destroy();
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Request timeout' }));
-          });
-
-          apiReq.write(requestData);
-          apiReq.end();
+          const reformatted = await textLlmService.reformatText(appSettings, text, tones);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ text: reformatted }));
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message || 'Failed to reformat text' }));
@@ -2274,90 +2016,9 @@ function startBrowserServers() {
           targetLanguage: typeof bodyData.targetLanguage === 'string' ? bodyData.targetLanguage : undefined
         };
         try {
-          const apiKey = appSettings.apiKeys?.chatgpt;
-
-          if (!apiKey) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'ChatGPT API key not found. Please set it in Settings > API Keys' }));
-            return;
-          }
-
-          const trimmed = typeof text === 'string' ? text.trim() : '';
-          if (!trimmed) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Select some text first' }));
-            return;
-          }
-
-          if (action === 'custom' && (!extra.instruction || !String(extra.instruction).trim())) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Enter a prompt for AI' }));
-            return;
-          }
-
-          const https = require('https');
-          const messages = getAiSelectionMessages(trimmed, action, extra);
-          const requestData = JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages,
-            temperature: 0.35,
-            max_tokens: 2000
-          });
-
-          const options = {
-            hostname: 'api.openai.com',
-            port: 443,
-            path: '/v1/chat/completions',
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Length': Buffer.byteLength(requestData)
-            },
-            timeout: 45000
-          };
-
-          const apiReq = https.request(options, (apiRes) => {
-            let data = '';
-            apiRes.on('data', (chunk) => {
-              data += chunk;
-            });
-            apiRes.on('end', () => {
-              try {
-                if (apiRes.statusCode !== 200) {
-                  const error = JSON.parse(data);
-                  res.writeHead(apiRes.statusCode, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ error: error.error?.message || `API returned status ${apiRes.statusCode}` }));
-                  return;
-                }
-                const result = JSON.parse(data);
-                if (result.choices && result.choices.length > 0) {
-                  res.writeHead(200, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ text: String(result.choices[0].message.content || '').trim() }));
-                } else {
-                  res.writeHead(500, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ error: 'No response from ChatGPT API' }));
-                }
-              } catch (error) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Failed to parse API response' }));
-              }
-            });
-          });
-
-          apiReq.on('error', (error) => {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: `Request failed: ${error.message}` }));
-          });
-
-          apiReq.on('timeout', () => {
-            apiReq.destroy();
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Request timeout' }));
-          });
-
-          apiReq.write(requestData);
-          apiReq.end();
+          const edited = await textLlmService.aiEditText(appSettings, text, action, extra);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ text: edited }));
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message || 'Failed to apply AI edit' }));
@@ -2578,6 +2239,37 @@ app.whenReady().then(async () => {
       // When dock icon is clicked, show the window
       showWindow()
     })
+  }
+
+  // Register agent IPC handlers first so Agent tab works even if KB DB init fails
+  try {
+    setupAgentModule()
+    console.log('✅ Agent IPC handlers registered')
+  } catch (error) {
+    console.error('Failed to register agent handlers:', error)
+  }
+
+  try {
+    await agentKnowledge.initDatabase()
+    console.log('✅ Agent knowledge database initialized')
+
+    try {
+      const chokidar = require('chokidar')
+      const notesRoot = path.join(app.getPath('userData'), 'notes')
+      let reindexTimer = null
+      chokidar.watch(notesRoot, { ignoreInitial: true, depth: 10 }).on('all', () => {
+        clearTimeout(reindexTimer)
+        reindexTimer = setTimeout(() => {
+          if (appSettings?.agent?.capabilities?.knowledgeBase) {
+            agentKnowledge.reindexAll(appSettings, appSettings?.agent?.knowledgeBase).catch(() => {})
+          }
+        }, 5000)
+      })
+    } catch (watchErr) {
+      console.warn('Notes watch for agent KB unavailable:', watchErr.message)
+    }
+  } catch (error) {
+    console.error('Failed to initialize agent module:', error)
   }
 
   // Initialize history database
@@ -3287,6 +2979,105 @@ function getNotesTreePayload() {
   return [...rootNodes, { id: 'notes_archived_root', title: 'Archived', children: archivedChildren }];
 }
 
+const AI_RESPONSES_FOLDER_TITLE = 'AI responses';
+
+function pageExistsInNotesTree(nodes, id) {
+  if (!id) return false;
+  for (const n of nodes || []) {
+    if (n.id === id) return true;
+    if (n.children?.length && pageExistsInNotesTree(n.children, id)) return true;
+  }
+  return false;
+}
+
+function findRootNotesPageIdByTitle(title) {
+  ensureNotesDirs();
+  const dirs = listChildPageDirs(getNotesRootDir())
+    .filter((p) => p !== getNotesArchivedDir() && p !== getNotesClipboardDir());
+  for (const dir of dirs) {
+    const meta = readJsonFile(getMetaPath(dir), null);
+    if (meta?.title === title && meta.id) return meta.id;
+  }
+  return null;
+}
+
+function persistAgentSettingPatch(patch) {
+  const current = config.getAppSettings();
+  config.setAppSettings({
+    ...current,
+    agent: { ...current.agent, ...patch }
+  });
+  appSettings = config.getAppSettings();
+}
+
+function ensureAgentAiResponsesFolderId() {
+  ensureNotesDirs();
+  const stored = appSettings.agent?.aiResponsesFolderId;
+  if (stored && findPageDirById(getNotesRootDir(), stored)) {
+    return stored;
+  }
+  const byTitle = findRootNotesPageIdByTitle(AI_RESPONSES_FOLDER_TITLE);
+  if (byTitle) {
+    persistAgentSettingPatch({ aiResponsesFolderId: byTitle });
+    return byTitle;
+  }
+  const id = createPageOnDisk({
+    parentDir: getNotesRootDir(),
+    title: AI_RESPONSES_FOLDER_TITLE,
+    type: 'text'
+  });
+  persistAgentSettingPatch({ aiResponsesFolderId: id });
+  return id;
+}
+
+function getNotesTreeForAgentPicker() {
+  return getNotesTreePayload().filter((n) => n.id !== 'notes_archived_root');
+}
+
+function resolveAgentNotesSaveParentId(tree) {
+  const defaultId = ensureAgentAiResponsesFolderId();
+  const lastId = appSettings.agent?.lastNotesSaveParentId;
+  if (lastId && pageExistsInNotesTree(tree, lastId)) return lastId;
+  return defaultId;
+}
+
+function getAgentNotesSaveContext() {
+  ensureNotesDirs();
+  const tree = getNotesTreeForAgentPicker();
+  const aiResponsesFolderId = ensureAgentAiResponsesFolderId();
+  const selectedParentId = resolveAgentNotesSaveParentId(tree);
+  return { tree, aiResponsesFolderId, selectedParentId };
+}
+
+function setAgentNotesSaveParent(parentId) {
+  const tree = getNotesTreeForAgentPicker();
+  if (!parentId || !pageExistsInNotesTree(tree, parentId)) {
+    throw new Error('Invalid notes location');
+  }
+  persistAgentSettingPatch({ lastNotesSaveParentId: parentId });
+  return { parentId };
+}
+
+function saveAgentResponseToNotes({ parentId, title, markdown }) {
+  ensureNotesDirs();
+  const tree = getNotesTreeForAgentPicker();
+  let resolvedParent = parentId;
+  if (!resolvedParent || !pageExistsInNotesTree(tree, resolvedParent)) {
+    resolvedParent = resolveAgentNotesSaveParentId(tree);
+  }
+  const parentDir = resolveParentDir(resolvedParent);
+  if (!parentDir) throw new Error('Invalid parent location');
+  const pageTitle = String(title || '').trim().slice(0, 80) || 'Agent response';
+  const content = String(markdown || '').trim();
+  if (!content) throw new Error('Nothing to save');
+  const id = createPageOnDisk({ parentDir, title: pageTitle, type: 'markdown' });
+  const dir = findPageDirById(getNotesRootDir(), id);
+  if (!dir) throw new Error('Failed to create note');
+  writeJsonFile(getContentPath(dir), { text: content });
+  persistAgentSettingPatch({ lastNotesSaveParentId: resolvedParent });
+  return { id, parentId: resolvedParent, title: pageTitle };
+}
+
 function notesHasPages() {
   ensureNotesDirs();
   const rootDirs = listChildPageDirs(getNotesRootDir()).filter((p) => p !== getNotesArchivedDir() && p !== getNotesClipboardDir());
@@ -3913,87 +3704,10 @@ ipcMain.handle('bcrypt-verify', async (event, text, hash) => {
   }
 });
 
-// Text Reformat IPC handler using ChatGPT API
-// Translation IPC handler
+// Text tools IPC handlers (use AI Agent provider + fallback)
 ipcMain.handle('translate-text', async (event, text, targetLanguage) => {
   try {
-    const https = require('https');
-    const apiKey = appSettings.apiKeys?.chatgpt;
-    
-    if (!apiKey) {
-      throw new Error('ChatGPT API key not found. Please set it in Settings > API Keys');
-    }
-
-    if (!targetLanguage || !targetLanguage.trim()) {
-      throw new Error('Target language is required');
-    }
-
-    const requestData = JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a professional translator. Translate the given text to ${targetLanguage.trim()}. Preserve the original meaning, tone, and style. Only provide the translation, no explanations or additional text.`
-        },
-        {
-          role: 'user',
-          content: `Translate the following text to ${targetLanguage.trim()}:\n\n${text}`
-        }
-      ],
-      temperature: 0.3,
-      max_tokens: 2000
-    });
-
-    return new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.openai.com',
-        port: 443,
-        path: '/v1/chat/completions',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Length': Buffer.byteLength(requestData)
-        },
-        timeout: 30000
-      };
-
-      const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-        res.on('end', () => {
-          try {
-            if (res.statusCode !== 200) {
-              const error = JSON.parse(data);
-              reject(new Error(error.error?.message || `API returned status ${res.statusCode}`));
-              return;
-            }
-            const response = JSON.parse(data);
-            if (response.choices && response.choices[0] && response.choices[0].message) {
-              resolve(response.choices[0].message.content.trim());
-            } else {
-              reject(new Error('Invalid response from API'));
-            }
-          } catch (error) {
-            reject(new Error('Failed to parse API response'));
-          }
-        });
-      });
-
-      req.on('error', (error) => {
-        reject(new Error(`Network error: ${error.message}`));
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-
-      req.write(requestData);
-      req.end();
-    });
+    return await textLlmService.translateText(appSettings, text, targetLanguage);
   } catch (error) {
     console.error('Error translating text:', error);
     throw error;
@@ -4002,84 +3716,7 @@ ipcMain.handle('translate-text', async (event, text, targetLanguage) => {
 
 ipcMain.handle('ai-edit-text', async (event, text, action, extra = {}) => {
   try {
-    const https = require('https');
-    const apiKey = appSettings.apiKeys?.chatgpt;
-
-    if (!apiKey) {
-      throw new Error('ChatGPT API key not found. Please set it in Settings > API Keys');
-    }
-
-    const trimmed = typeof text === 'string' ? text.trim() : '';
-    if (!trimmed) {
-      throw new Error('Select some text first');
-    }
-
-    const resolvedAction = typeof action === 'string' && action ? action : 'improve';
-    if (resolvedAction === 'custom') {
-      const instr = typeof extra?.instruction === 'string' ? extra.instruction.trim() : '';
-      if (!instr) {
-        throw new Error('Enter a prompt for AI');
-      }
-    }
-
-    const messages = getAiSelectionMessages(trimmed, resolvedAction, extra && typeof extra === 'object' ? extra : {});
-    const requestData = JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages,
-      temperature: 0.35,
-      max_tokens: 2000
-    });
-
-    return new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.openai.com',
-        port: 443,
-        path: '/v1/chat/completions',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Length': Buffer.byteLength(requestData)
-        },
-        timeout: 45000
-      };
-
-      const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-        res.on('end', () => {
-          try {
-            if (res.statusCode !== 200) {
-              const error = JSON.parse(data);
-              reject(new Error(error.error?.message || `API returned status ${res.statusCode}`));
-              return;
-            }
-            const response = JSON.parse(data);
-            if (response.choices && response.choices[0] && response.choices[0].message) {
-              resolve(String(response.choices[0].message.content || '').trim());
-            } else {
-              reject(new Error('Invalid response from API'));
-            }
-          } catch (err) {
-            reject(new Error('Failed to parse API response'));
-          }
-        });
-      });
-
-      req.on('error', (error) => {
-        reject(new Error(`Network error: ${error.message}`));
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-
-      req.write(requestData);
-      req.end();
-    });
+    return await textLlmService.aiEditText(appSettings, text, action, extra);
   } catch (error) {
     console.error('Error applying AI edit:', error);
     throw error;
@@ -4088,71 +3725,7 @@ ipcMain.handle('ai-edit-text', async (event, text, action, extra = {}) => {
 
 ipcMain.handle('reformat-text', async (event, text, tones) => {
   try {
-    const https = require('https');
-    const apiKey = appSettings.apiKeys?.chatgpt;
-    
-    if (!apiKey) {
-      throw new Error('ChatGPT API key not found. Please set it in Settings > API Keys');
-    }
-
-    const messages = getReformatMessages(text, tones);
-    const requestData = JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages,
-      temperature: 0.3,
-      max_tokens: 2000
-    });
-
-    return new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.openai.com',
-        port: 443,
-        path: '/v1/chat/completions',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Length': Buffer.byteLength(requestData)
-        },
-        timeout: 30000
-      };
-
-      const req = https.request(options, (res) => {
-        let data = '';
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-        res.on('end', () => {
-          try {
-            if (res.statusCode !== 200) {
-              const error = JSON.parse(data);
-              reject(new Error(error.error?.message || `API returned status ${res.statusCode}`));
-              return;
-            }
-            const result = JSON.parse(data);
-            if (result.choices && result.choices.length > 0) {
-              resolve(result.choices[0].message.content);
-            } else {
-              reject(new Error('No response from ChatGPT API'));
-            }
-          } catch (error) {
-            reject(new Error('Failed to parse API response'));
-          }
-        });
-      });
-
-      req.on('error', (error) => {
-        reject(new Error(`Request failed: ${error.message}`));
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-
-      req.write(requestData);
-      req.end();
-    });
+    return await textLlmService.reformatText(appSettings, text, tones);
   } catch (error) {
     console.error('Error reformatting text:', error);
     throw error;
@@ -4264,54 +3837,12 @@ ipcMain.handle('get-public-ip', async () => {
 // IP Location IPC handler using IPGeolocation.io
 ipcMain.handle('get-ip-location', async (event, ips) => {
   try {
-    const https = require('https');
-    const apiKey = appSettings.apiKeys?.ipLocation || process.env.IPGEOLOCATION_API_KEY;
-    
-    if (!apiKey) {
-      throw new Error('IPGeolocation API key not found. Please set it in Settings > API Keys');
-    }
-    
-    const results = await Promise.all(
-      ips.map(ip => {
-        return new Promise((resolve) => {
-          const url = `https://api.ipgeolocation.io/ipgeo?apiKey=${apiKey}&ip=${encodeURIComponent(ip)}`;
-          https.get(url, { timeout: 10000 }, (res) => {
-            let data = '';
-            res.on('data', (chunk) => {
-              data += chunk;
-            });
-            res.on('end', () => {
-              try {
-                const result = JSON.parse(data);
-                if (result.message || result.error) {
-                  resolve({ ip, error: result.message || result.error || 'Invalid IP address' });
-                } else {
-                  resolve({
-                    ip: result.ip || ip,
-                    country: result.country_name,
-                    region: result.state_prov,
-                    city: result.city,
-                    zip: result.zipcode,
-                    lat: result.latitude,
-                    lon: result.longitude,
-                    isp: result.isp,
-                    org: result.organization || result.isp
-                  });
-                }
-              } catch (error) {
-                resolve({ ip, error: 'Failed to parse location data' });
-              }
-            });
-          }).on('error', (error) => {
-            resolve({ ip, error: error.message || 'Network error' });
-          });
-        });
-      })
-    );
-    return results;
+    const { fetchIpLocationResults } = require('./ipGeolocation')
+    const apiKey = appSettings.apiKeys?.ipLocation || process.env.IPGEOLOCATION_API_KEY
+    return await fetchIpLocationResults(ips, apiKey)
   } catch (error) {
-    console.error('Error fetching IP locations:', error);
-    throw error;
+    console.error('Error fetching IP locations:', error)
+    throw error
   }
 });
 
@@ -4920,6 +4451,194 @@ process.on('uncaughtException', (error) => {
   }
   pinggyInstances.clear();
 });
+
+const STATS_HISTORY_RANGE_MS = {
+  '1h': 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000
+};
+
+async function querySystemStatsHistoryForAgent(args = {}) {
+  const now = Date.now();
+  let endTime = now;
+  let startTime;
+
+  if (args.range && STATS_HISTORY_RANGE_MS[args.range]) {
+    startTime = now - STATS_HISTORY_RANGE_MS[args.range];
+  } else if (args.startTime) {
+    startTime = new Date(args.startTime).getTime();
+    if (Number.isNaN(startTime)) throw new Error('Invalid startTime');
+    if (args.endTime) {
+      endTime = new Date(args.endTime).getTime();
+      if (Number.isNaN(endTime)) throw new Error('Invalid endTime');
+    }
+  } else {
+    startTime = now - STATS_HISTORY_RANGE_MS['24h'];
+  }
+
+  if (startTime > endTime) {
+    const swap = startTime;
+    startTime = endTime;
+    endTime = swap;
+  }
+
+  const availableRange = await history.getTimeRange();
+  const analysis = await history.analyzeHistory(startTime, endTime, {
+    cpuThreshold: typeof args.cpuThreshold === 'number' ? args.cpuThreshold : undefined
+  });
+
+  return {
+    availableDataRange: {
+      oldest: availableRange.oldest,
+      newest: availableRange.newest,
+      oldestISO: availableRange.oldest ? new Date(availableRange.oldest).toISOString() : null,
+      newestISO: availableRange.newest ? new Date(availableRange.newest).toISOString() : null,
+      totalSamplesInDatabase: availableRange.count
+    },
+    query: {
+      range: args.range || null,
+      cpuThreshold: typeof args.cpuThreshold === 'number' ? args.cpuThreshold : null
+    },
+    ...analysis,
+    note: analysis.sampleCount === 0
+      ? 'No samples in the requested range. DeskMaster stores up to ~30 days of performance history (same as Performance screen).'
+      : 'Each row is one stored sample (interval varies: ~5s recent, up to ~15min for older data). cpuAboveThreshold counts samples where CPU was >= threshold.'
+  };
+}
+
+function updateAgentComposioToolkits(toolkits) {
+  const next = {
+    ...appSettings,
+    agent: {
+      ...(appSettings.agent || {}),
+      composio: {
+        ...(appSettings.agent?.composio || {}),
+        enabledToolkits: toolkits
+      }
+    }
+  }
+  config.setAppSettings(next)
+  appSettings = config.getAppSettings()
+}
+
+const agentHttpDeps = {
+  updateAgentComposioToolkits,
+  getAgentNotesSaveContext: () => getAgentNotesSaveContext(),
+  setAgentNotesSaveParent: (parentId) => setAgentNotesSaveParent(parentId),
+  saveAgentResponseToNotes: (payload) => saveAgentResponseToNotes(payload)
+}
+
+function getNotesPageForAgent(id) {
+  ensureNotesDirs()
+  const dir = findPageDirById(getNotesRootDir(), id)
+  if (!dir) return null
+  const meta = readJsonFile(getMetaPath(dir), null)
+  const content = readJsonFile(getContentPath(dir), {})
+  const body = notesSearch.extractPageBodyText(meta?.type || 'canvas', content)
+  return { id: meta?.id, title: meta?.title, type: meta?.type, body, content }
+}
+
+function saveNotesPageTextForAgent(id, text) {
+  ensureNotesDirs()
+  const dir = findPageDirById(getNotesRootDir(), id)
+  if (!dir) return { success: false, error: 'Page not found' }
+  const meta = readJsonFile(getMetaPath(dir), null)
+  const type = meta?.type || 'canvas'
+  if (type === 'canvas') {
+    return { success: false, error: 'Canvas pages cannot be saved as plain text via agent. Use text or markdown pages.' }
+  }
+  const state = type === 'text' ? { text } : { text, blocknote: [{ type: 'paragraph', content: [{ type: 'text', text }] }] }
+  writeJsonFile(getContentPath(dir), state)
+  writeJsonFile(getMetaPath(dir), { ...meta, updatedAt: new Date().toISOString() })
+  return { success: true, id }
+}
+
+function setupAgentModule() {
+  agentOrchestrator.setBrowserStreamBroadcast(broadcastAgentStream)
+  registerAgentHandlers({
+    getAppSettings: () => appSettings,
+    openExternal: (url) => shell.openExternal(url),
+    updateAgentComposioToolkits,
+    getAgentNotesSaveContext: () => getAgentNotesSaveContext(),
+    setAgentNotesSaveParent: (parentId) => setAgentNotesSaveParent(parentId),
+    saveAgentResponseToNotes: (payload) => saveAgentResponseToNotes(payload),
+    getSystemStats: async () => {
+      await stats.updateTrayStats()
+      return stats.getCurrentStats()
+    },
+    querySystemStatsHistory: (args) => querySystemStatsHistoryForAgent(args),
+    getAppVersion: () => app.getVersion(),
+    notesSearch: (query) => notesSearch.searchNotesPages(query),
+    notesGetPage: (id) => getNotesPageForAgent(id),
+    notesCreatePage: (args) => {
+      ensureNotesDirs()
+      const parentDir = resolveParentDir(args?.parentId)
+      const id = createPageOnDisk({ parentDir, title: args?.title || 'New page', type: args?.type || 'text' })
+      return { id }
+    },
+    notesSavePage: (id, text) => saveNotesPageTextForAgent(id, text),
+    bcryptGenerate: async (text) => {
+      const hash = await bcrypt.hash(text, 10)
+      return { hash }
+    },
+    bcryptVerify: async (text, hash) => ({ isValid: await bcrypt.compare(text, hash) }),
+    getPublicIp: async () => {
+      const https = require('https')
+      return new Promise((resolve, reject) => {
+        https.get('https://api.ipify.org?format=json', { timeout: 5000 }, (res) => {
+          let data = ''
+          res.on('data', (c) => { data += c })
+          res.on('end', () => {
+            try { resolve(JSON.parse(data).ip) } catch { reject(new Error('Failed to parse IP')) }
+          })
+        }).on('error', reject)
+      })
+    },
+    getIpLocation: async (ips) => {
+      const { fetchIpLocationResults } = require('./ipGeolocation')
+      const apiKey = appSettings.apiKeys?.ipLocation || process.env.IPGEOLOCATION_API_KEY
+      return fetchIpLocationResults(ips, apiKey)
+    },
+    translateText: (text, targetLanguage) => textLlmService.translateText(appSettings, text, targetLanguage),
+    reformatText: (text, tones) => textLlmService.reformatText(appSettings, text, tones),
+    uptimeListMonitors: async () => {
+      if (appSettings.uptimeKuma?.enabled === false) return { enabled: false, monitors: [] }
+      return uptimeMonitor.getMonitorResponse({ force: false })
+    },
+    gdriveStatus: async () => {
+      const auth = getGdriveAuthConfig()
+      const s = getCloudBackupSettings()
+      return {
+        connected: Boolean(auth?.refresh_token),
+        enabled: Boolean(s?.enabled),
+        lastBackupAt: s?.lastBackupAt || null,
+        lastBackupStatus: s?.lastBackupStatus || null
+      }
+    },
+    gdriveBackupNow: () => uploadBackupToDrive(),
+    getSettingsSummary: () => ({
+      theme: appSettings.theme,
+      stats: appSettings.stats,
+      timezoneCount: (appSettings.timezones || []).length,
+      uptimeKumaEnabled: appSettings.uptimeKuma?.enabled !== false,
+      webAccess: appSettings.webAccess
+    }),
+    kbSearch: (query, limit, agentSettings) => agentKnowledge.searchKnowledge(query, { agent: agentSettings, apiKeys: appSettings.apiKeys }, limit || 8),
+    kbListDocuments: () => agentKnowledge.listCustomDocuments(),
+    kbCreateDocument: async (title, content, agentSettings) => {
+      const doc = agentKnowledge.createCustomDocument({ title, content })
+      await agentKnowledge.reindexAll({ agent: agentSettings, apiKeys: appSettings.apiKeys }, appSettings.agent?.knowledgeBase)
+      return doc
+    },
+    kbUpdateDocument: async (id, args, agentSettings) => {
+      const doc = agentKnowledge.updateCustomDocument(id, args)
+      await agentKnowledge.reindexAll({ agent: agentSettings, apiKeys: appSettings.apiKeys }, appSettings.agent?.knowledgeBase)
+      return doc
+    }
+  })
+}
 
 // Add IPC handler for tray icon screenshot from renderer
 ipcMain.on('tray-icon-screenshot', (event, dataUrl) => {

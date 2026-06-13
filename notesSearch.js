@@ -158,6 +158,47 @@ function searchNotesPages(query) {
   return results
 }
 
+function collectAllPages(parentDir, archived, pages) {
+  const archivedDir = getNotesArchivedDir()
+  const clipboardDir = getNotesClipboardDir()
+
+  for (const dir of listChildPageDirs(parentDir)) {
+    if (dir === archivedDir || dir === clipboardDir) continue
+
+    const meta = readJsonFile(getMetaPath(dir), null)
+    if (!meta?.id) continue
+
+    const content = readJsonFile(getContentPath(dir), {})
+    const title = String(meta.title || 'Untitled').trim()
+    const type = meta.type || 'canvas'
+    const body = extractPageBodyText(type, content)
+
+    pages.push({
+      id: meta.id,
+      title,
+      type,
+      archived: Boolean(archived),
+      body,
+      updatedAt: meta.updatedAt || meta.createdAt || null
+    })
+
+    collectAllPages(dir, archived, pages)
+  }
+}
+
+function enumerateAllNotesPages() {
+  fs.mkdirSync(getNotesRootDir(), { recursive: true })
+  fs.mkdirSync(getNotesArchivedDir(), { recursive: true })
+
+  const pages = []
+  collectAllPages(getNotesRootDir(), false, pages)
+  collectAllPages(getNotesArchivedDir(), true, pages)
+  return pages
+}
+
 module.exports = {
-  searchNotesPages
+  searchNotesPages,
+  enumerateAllNotesPages,
+  extractPageBodyText,
+  getNotesRootDir
 }

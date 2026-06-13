@@ -54,10 +54,121 @@ let appSettings = {
     lastBackupAt: null,
     lastBackupStatus: null,
     lastBackupError: null
+  },
+  agent: {
+    enabled: true,
+    defaultProvider: 'openai',
+    defaultModel: 'gpt-4o-mini',
+    capabilities: {
+      knowledgeBase: false,
+      deskMasterTools: false,
+      composioIntegrations: false
+    },
+    knowledgeBase: {
+      includeNotes: true,
+      includeCustomDocs: true,
+      maxContextChunks: 8
+    },
+    composio: {
+      apiKey: '',
+      userId: 'deskmaster-local-user',
+      customToolkits: [],
+      enabledToolkits: []
+    },
+    providers: {
+      openai: { enabled: false, apiKey: '', baseUrl: '', model: 'gpt-4o-mini' },
+      anthropic: { enabled: false, apiKey: '', model: 'claude-sonnet-4-20250514' },
+      openrouter: { enabled: false, apiKey: '', model: 'openai/gpt-4o-mini' },
+      bedrock: { enabled: false, accessKeyId: '', secretAccessKey: '', region: 'us-east-1', model: 'anthropic.claude-3-haiku-20240307-v1:0' },
+      local: { enabled: false, baseUrl: 'http://127.0.0.1:11434/v1', model: 'llama3.2', apiKey: 'ollama' }
+    }
   }
 };
 
 // Configuration storage functions
+function getDefaultAgentSettings() {
+  return JSON.parse(JSON.stringify(appSettings.agent || {
+    enabled: true,
+    defaultProvider: 'openai',
+    defaultModel: 'gpt-4o-mini',
+    capabilities: {
+      knowledgeBase: false,
+      deskMasterTools: false,
+      composioIntegrations: false
+    },
+    knowledgeBase: {
+      includeNotes: true,
+      includeCustomDocs: true,
+      maxContextChunks: 8
+    },
+    composio: {
+      apiKey: '',
+      userId: 'deskmaster-local-user',
+      customToolkits: [],
+      enabledToolkits: []
+    },
+    providers: {
+      openai: { enabled: false, apiKey: '', baseUrl: '', model: 'gpt-4o-mini' },
+      anthropic: { enabled: false, apiKey: '', model: 'claude-sonnet-4-20250514' },
+      openrouter: { enabled: false, apiKey: '', model: 'openai/gpt-4o-mini' },
+      bedrock: { enabled: false, accessKeyId: '', secretAccessKey: '', region: 'us-east-1', model: 'anthropic.claude-3-haiku-20240307-v1:0' },
+      local: { enabled: false, baseUrl: 'http://127.0.0.1:11434/v1', model: 'llama3.2', apiKey: 'ollama' }
+    }
+  }))
+}
+
+function providerHasCredentials(providerId, p) {
+  if (!p) return false
+  switch (providerId) {
+    case 'openai':
+    case 'anthropic':
+    case 'openrouter':
+      return Boolean(p.apiKey)
+    case 'bedrock':
+      return Boolean(p.accessKeyId && p.secretAccessKey)
+    case 'local':
+      return Boolean(p.baseUrl)
+    default:
+      return false
+  }
+}
+
+function migrateAgentSettings(settings) {
+  const defaults = getDefaultAgentSettings()
+  const agent = { ...defaults, ...(settings.agent || {}) }
+  agent.capabilities = { ...defaults.capabilities, ...(settings.agent?.capabilities || {}) }
+  agent.knowledgeBase = { ...defaults.knowledgeBase, ...(settings.agent?.knowledgeBase || {}) }
+  agent.composio = { ...defaults.composio, ...(settings.agent?.composio || {}) }
+  if (!agent.composio.customToolkits?.length && agent.composio.enabledToolkits?.length) {
+    agent.composio.customToolkits = [...agent.composio.enabledToolkits]
+  }
+  if (!agent.composio.customToolkits) {
+    agent.composio.customToolkits = []
+  }
+  agent.providers = {
+    openai: { ...defaults.providers.openai, ...(settings.agent?.providers?.openai || {}) },
+    anthropic: { ...defaults.providers.anthropic, ...(settings.agent?.providers?.anthropic || {}) },
+    openrouter: { ...defaults.providers.openrouter, ...(settings.agent?.providers?.openrouter || {}) },
+    bedrock: { ...defaults.providers.bedrock, ...(settings.agent?.providers?.bedrock || {}) },
+    local: { ...defaults.providers.local, ...(settings.agent?.providers?.local || {}) }
+  }
+
+  for (const id of Object.keys(agent.providers)) {
+    const p = agent.providers[id]
+    if (p.enabled === undefined) {
+      p.enabled = providerHasCredentials(id, p)
+    }
+  }
+
+  if (settings.apiKeys?.chatgpt && !agent.providers.openai.apiKey) {
+    agent.providers.openai.apiKey = settings.apiKeys.chatgpt
+    if (!agent.providers.openai.enabled) agent.providers.openai.enabled = true
+  }
+
+  settings.agent = agent
+  return settings
+}
+
 function getConfigStoragePath() {
   return path.join(app.getPath('userData'), '.config.json');
 }
@@ -74,7 +185,9 @@ function loadConfig() {
     
     // Load app settings from config first
     if (config.appSettings) {
-      appSettings = { ...appSettings, ...config.appSettings };
+      appSettings = migrateAgentSettings({ ...appSettings, ...config.appSettings })
+    } else {
+      appSettings = migrateAgentSettings(appSettings)
     }
     
     // Load timezones - prioritize appSettings.timezones if it exists, otherwise use config.timezones
@@ -181,7 +294,7 @@ function getAppSettings() {
 }
 
 function setAppSettings(newSettings) {
-  appSettings = { ...appSettings, ...newSettings };
+  appSettings = migrateAgentSettings({ ...appSettings, ...newSettings });
   // Update timezones variable if timezones are provided in newSettings
   if (newSettings.timezones !== undefined) {
     timezones = newSettings.timezones;
