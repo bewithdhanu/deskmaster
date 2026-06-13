@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "3.3.3",
+  "version": "3.3.4",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -147,6 +147,10 @@
       "textLlmService.js",
       "agentProviderConfig.js",
       "agentMessageFormat.js",
+      "agentResponseMedia.js",
+      "agentDocumentExtract.js",
+      "agentDocumentGenerator.js",
+      "agentFileAttach.js",
       "package.json",
       "assets/**/*"
     ],
