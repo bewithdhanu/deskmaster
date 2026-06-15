@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -131,6 +131,7 @@
       "config.js",
       "stats.js",
       "history.js",
+      "ipGeolocation.js",
       "clipboard.js",
       "authenticator.js",
       "uptimeMonitor.js",

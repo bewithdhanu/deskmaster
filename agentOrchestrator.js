@@ -242,104 +242,32 @@ function buildAssistantMessage(content, streamAttachments = [], citations = []) 
   }
 }
 
-async function runChatTurn({
-  appSettings,
+function mapChatMessagesForApi(messages) {
+  return (messages || []).map((m) => ({
+    role: m.role,
+    content: m.content,
+    images: m.images,
+    files: m.files,
+    tool_calls: m.tool_calls,
+    tool_call_id: m.tool_call_id
+  }))
+}
+
+async function runToolLoop({
   sessionId,
-  message,
-  images,
-  files,
-  attachments,
-  capabilities,
-  provider,
-  model,
-  confirmedToolIds,
-  webContents
+  pendingMessages,
+  turnCitations,
+  providerId,
+  modelId,
+  appSettings,
+  tools,
+  toolsEnabled,
+  textMessage,
+  webContents,
+  effectiveCapabilities,
+  confirmedToolIds = []
 }) {
-  const agentSettings = appSettings?.agent || {}
-  const textMessage = typeof message === 'string' ? message.trim() : ''
-  const { images: imageAttachments, files: fileAttachments } = normalizeIncomingAttachments({ images, files, attachments })
-  if (!textMessage && !imageAttachments.length && !fileAttachments.length) {
-    throw new Error('Message or attachment required')
-  }
-  let chat = agentChatStore.readChat(sessionId)
-  if (!chat) {
-    chat = agentChatStore.createChat({ capabilities, provider, model })
-    sessionId = chat.id
-  } else {
-    const metaPatch = {}
-    if (capabilities) metaPatch.capabilities = capabilities
-    if (provider) metaPatch.provider = provider
-    if (model) metaPatch.model = model
-    if (Object.keys(metaPatch).length > 0) {
-      chat = agentChatStore.updateChatMeta(sessionId, metaPatch)
-    }
-  }
-
-  chat = agentChatStore.appendMessage(sessionId, {
-    role: 'user',
-    content: textMessage,
-    ...(imageAttachments.length ? { images: imageAttachments } : {}),
-    ...(fileAttachments.length ? { files: fileAttachments } : {}),
-    timestamp: new Date().toISOString()
-  })
-
-  const effectiveCapabilities = chat.capabilities || {
-    knowledgeBase: false,
-    deskMasterTools: false,
-    composioIntegrations: false
-  }
-
-  const kbSettings = agentSettings.knowledgeBase || {}
-  let kbContext = []
-  if (effectiveCapabilities.knowledgeBase) {
-    emit(webContents, { type: 'status', message: 'Searching knowledge base...' })
-    kbContext = await retrieveKbContext(
-      textMessage || (fileAttachments.length ? 'User sent document attachment(s)' : 'User sent image attachment(s)'),
-      appSettings,
-      kbSettings.maxContextChunks || 8
-    )
-    if (kbContext.length) {
-      emit(webContents, { type: 'kb_citations', citations: kbContext.map((c) => ({ title: c.title, sourceType: c.sourceType })) })
-    }
-  }
-
-  const turnCitations = kbContext.length
-    ? kbContext.map((c) => ({ title: c.title, sourceType: c.sourceType }))
-    : []
-
-  const tools = await collectTools(effectiveCapabilities, agentSettings)
-  const toolsEnabled = tools.length > 0
-
-  emit(webContents, { type: 'status', message: 'Thinking...', sessionId })
-
-  const systemPrompt = await buildSystemPrompt({
-    capabilities: effectiveCapabilities,
-    kbContext,
-    toolsEnabled
-  })
-
-  const history = normalizeMessagesForOpenAi(
-    (chat.messages || []).map((m) => ({
-      role: m.role,
-      content: m.content,
-      images: m.images,
-      files: m.files,
-      tool_calls: m.tool_calls,
-      tool_call_id: m.tool_call_id
-    }))
-  )
-
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...history
-  ]
-
-  const providerId = provider || chat.provider || agentSettings.defaultProvider || 'openai'
-  const modelId = model || chat.model || agentSettings.defaultModel
-
   let iteration = 0
-  let pendingMessages = [...messages]
-  const assistantMessages = []
 
   while (iteration < MAX_TOOL_ITERATIONS) {
     iteration += 1
@@ -461,8 +389,6 @@ async function runChatTurn({
         content: t.content
       }))
     ])
-
-    assistantMessages.push(assistantWithTools, ...toolResults)
   }
 
   const fallback = {
@@ -486,6 +412,225 @@ async function runChatTurn({
     webContents
   })
   return { sessionId, message: fallback }
+}
+
+async function resumeConfirmedToolExecution({
+  appSettings,
+  sessionId,
+  capabilities,
+  provider,
+  model,
+  confirmedToolIds,
+  webContents
+}) {
+  let chat = agentChatStore.readChat(sessionId)
+  if (!chat) throw new Error('Chat session not found')
+
+  const assistantWithTools = agentChatStore.findAssistantMessageWithToolCalls(chat, confirmedToolIds)
+  if (!assistantWithTools) {
+    throw new Error('No pending tool call found to confirm. Try sending your request again.')
+  }
+
+  agentChatStore.removePendingConfirmations(sessionId, confirmedToolIds)
+  chat = agentChatStore.readChat(sessionId)
+
+  const effectiveCapabilities = chat.capabilities || capabilities || {
+    knowledgeBase: false,
+    deskMasterTools: false,
+    composioIntegrations: false
+  }
+
+  const agentSettings = appSettings?.agent || {}
+  const tools = await collectTools(effectiveCapabilities, agentSettings)
+  const toolsEnabled = tools.length > 0
+  const providerId = provider || chat.provider || agentSettings.defaultProvider || 'openai'
+  const modelId = model || chat.model || agentSettings.defaultModel
+
+  emit(webContents, { type: 'status', message: 'Running tools...', sessionId })
+
+  const toolCalls = assistantWithTools.tool_calls.map((tc) => ({
+    id: tc.id,
+    name: tc.name,
+    arguments: tc.arguments
+  }))
+
+  for (const tc of toolCalls) {
+    emit(webContents, { type: 'tool_start', name: tc.name, sessionId })
+    const result = await executeToolCall(tc, {
+      confirmedToolIds,
+      appSettings,
+      composioEnabled: Boolean(effectiveCapabilities.composioIntegrations)
+    })
+    emit(webContents, { type: 'tool_result', ...result, sessionId })
+    if (result?.result?.path && result?.result?.name) {
+      emit(webContents, { type: 'generated_file', file: result.result, sessionId })
+    }
+
+    if (result.requiresConfirmation) {
+      const confirmMsg = {
+        role: 'assistant',
+        content: `${result.message}\n\nPlease confirm to proceed with \`${result.name}\`.`,
+        pendingConfirmation: { toolCallId: tc.id, name: tc.name, arguments: result.arguments },
+        timestamp: new Date().toISOString()
+      }
+      agentChatStore.appendMessage(sessionId, confirmMsg)
+      emit(webContents, { type: 'confirmation_required', ...result, sessionId })
+      emit(webContents, { type: 'done', sessionId, message: confirmMsg })
+      return { sessionId, message: confirmMsg, requiresConfirmation: true }
+    }
+
+    const toolMsg = {
+      role: 'tool',
+      tool_call_id: tc.id,
+      name: tc.name,
+      content: JSON.stringify(result.result ?? { error: result.error }),
+      timestamp: new Date().toISOString()
+    }
+    agentChatStore.appendMessage(sessionId, toolMsg)
+  }
+
+  chat = agentChatStore.readChat(sessionId)
+  const systemPrompt = await buildSystemPrompt({
+    capabilities: effectiveCapabilities,
+    kbContext: [],
+    toolsEnabled
+  })
+  const pendingMessages = [
+    { role: 'system', content: systemPrompt },
+    ...normalizeMessagesForOpenAi(mapChatMessagesForApi(chat.messages))
+  ]
+
+  emit(webContents, { type: 'status', message: 'Thinking...', sessionId })
+
+  return runToolLoop({
+    sessionId,
+    pendingMessages,
+    turnCitations: [],
+    providerId,
+    modelId,
+    appSettings,
+    tools,
+    toolsEnabled,
+    textMessage: '',
+    webContents,
+    effectiveCapabilities,
+    confirmedToolIds
+  })
+}
+
+async function runChatTurn({
+  appSettings,
+  sessionId,
+  message,
+  images,
+  files,
+  attachments,
+  capabilities,
+  provider,
+  model,
+  confirmedToolIds,
+  webContents
+}) {
+  if (Array.isArray(confirmedToolIds) && confirmedToolIds.length > 0) {
+    if (!sessionId) throw new Error('Chat session required to confirm tool execution')
+    return resumeConfirmedToolExecution({
+      appSettings,
+      sessionId,
+      capabilities,
+      provider,
+      model,
+      confirmedToolIds,
+      webContents
+    })
+  }
+
+  const agentSettings = appSettings?.agent || {}
+  const textMessage = typeof message === 'string' ? message.trim() : ''
+  const { images: imageAttachments, files: fileAttachments } = normalizeIncomingAttachments({ images, files, attachments })
+  if (!textMessage && !imageAttachments.length && !fileAttachments.length) {
+    throw new Error('Message or attachment required')
+  }
+  let chat = agentChatStore.readChat(sessionId)
+  if (!chat) {
+    chat = agentChatStore.createChat({ capabilities, provider, model })
+    sessionId = chat.id
+  } else {
+    const metaPatch = {}
+    if (capabilities) metaPatch.capabilities = capabilities
+    if (provider) metaPatch.provider = provider
+    if (model) metaPatch.model = model
+    if (Object.keys(metaPatch).length > 0) {
+      chat = agentChatStore.updateChatMeta(sessionId, metaPatch)
+    }
+  }
+
+  chat = agentChatStore.appendMessage(sessionId, {
+    role: 'user',
+    content: textMessage,
+    ...(imageAttachments.length ? { images: imageAttachments } : {}),
+    ...(fileAttachments.length ? { files: fileAttachments } : {}),
+    timestamp: new Date().toISOString()
+  })
+
+  const effectiveCapabilities = chat.capabilities || {
+    knowledgeBase: false,
+    deskMasterTools: false,
+    composioIntegrations: false
+  }
+
+  const kbSettings = agentSettings.knowledgeBase || {}
+  let kbContext = []
+  if (effectiveCapabilities.knowledgeBase) {
+    emit(webContents, { type: 'status', message: 'Searching knowledge base...' })
+    kbContext = await retrieveKbContext(
+      textMessage || (fileAttachments.length ? 'User sent document attachment(s)' : 'User sent image attachment(s)'),
+      appSettings,
+      kbSettings.maxContextChunks || 8
+    )
+    if (kbContext.length) {
+      emit(webContents, { type: 'kb_citations', citations: kbContext.map((c) => ({ title: c.title, sourceType: c.sourceType })) })
+    }
+  }
+
+  const turnCitations = kbContext.length
+    ? kbContext.map((c) => ({ title: c.title, sourceType: c.sourceType }))
+    : []
+
+  const tools = await collectTools(effectiveCapabilities, agentSettings)
+  const toolsEnabled = tools.length > 0
+
+  emit(webContents, { type: 'status', message: 'Thinking...', sessionId })
+
+  const systemPrompt = await buildSystemPrompt({
+    capabilities: effectiveCapabilities,
+    kbContext,
+    toolsEnabled
+  })
+
+  const history = normalizeMessagesForOpenAi(mapChatMessagesForApi(chat.messages))
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...history
+  ]
+
+  const providerId = provider || chat.provider || agentSettings.defaultProvider || 'openai'
+  const modelId = model || chat.model || agentSettings.defaultModel
+
+  return runToolLoop({
+    sessionId,
+    pendingMessages: messages,
+    turnCitations,
+    providerId,
+    modelId,
+    appSettings,
+    tools,
+    toolsEnabled,
+    textMessage,
+    webContents,
+    effectiveCapabilities,
+    confirmedToolIds
+  })
 }
 
 module.exports = {

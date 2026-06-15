@@ -32,7 +32,12 @@ const IPLocationTool = ({ onClose }) => {
       }
 
       const results = await ipcRenderer.invoke('get-ip-location', ips);
-      setLocationData(results);
+      const rows = Array.isArray(results) ? results : [];
+      if (rows.length === 0) {
+        setError('No location results returned');
+        return;
+      }
+      setLocationData(rows);
       setShowResultsModal(true);
       setError(null);
     } catch (error) {
@@ -85,7 +90,7 @@ const IPLocationTool = ({ onClose }) => {
           </div>
         )}
 
-        {locationData.length > 0 && (
+        {(locationData?.length ?? 0) > 0 && (
           <button
             onClick={() => setShowResultsModal(true)}
             className="w-full px-3 py-2 bg-theme-secondary border border-theme rounded-lg text-theme-primary text-xs hover:bg-theme-card-hover transition-colors duration-200"
@@ -96,7 +101,7 @@ const IPLocationTool = ({ onClose }) => {
       </div>
 
       {/* Results Modal */}
-      {showResultsModal && locationData.length > 0 && (
+      {showResultsModal && Array.isArray(locationData) && locationData.length > 0 && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowResultsModal(false)}>
           <div className="bg-theme-primary border border-theme rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">

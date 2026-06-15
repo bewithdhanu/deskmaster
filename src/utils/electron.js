@@ -527,10 +527,11 @@ const createBrowserIpcRenderer = () => {
             headers,
             body: JSON.stringify({ ips })
           });
-          if (response.ok) {
-            return await response.json();
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(data.error || 'Failed to get IP location');
           }
-          throw new Error('Failed to get IP location');
+          return Array.isArray(data) ? data : [];
         } else if (channel === 'start-pinggy-tunnel') {
           const [{ port, options }] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
@@ -1046,7 +1047,6 @@ const createBrowserIpcRenderer = () => {
         return null;
       } catch (error) {
         console.error(`[Browser Mode] IPC invoke error for ${channel}:`, error);
-        // Return fallback data if connection fails
         if (channel === 'get-settings') {
           return {
             stats: { cpu: true, ram: true, disk: true, network: true, battery: true },
@@ -1056,7 +1056,7 @@ const createBrowserIpcRenderer = () => {
             theme: 'system'
           };
         }
-        return null;
+        throw error;
       }
     },
     on: (channel, callback) => {

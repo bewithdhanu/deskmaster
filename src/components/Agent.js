@@ -602,7 +602,8 @@ const Agent = () => {
     const attachmentsToSend = attachmentsOverride ?? pendingAttachments;
     const { images: imagesToSend, files: filesToSend } = splitAttachmentsForSend(attachmentsToSend);
     const userMessage = text.trim();
-    if ((!userMessage && !imagesToSend.length && !filesToSend.length) || isStreaming) return;
+    const isConfirmationResume = confirmedToolIds.length > 0;
+    if ((!userMessage && !imagesToSend.length && !filesToSend.length && !isConfirmationResume) || isStreaming) return;
     if (enabledProviders.length === 0) {
       alert('Enable and configure at least one LLM provider in Settings > AI Agent.');
       return;
@@ -622,16 +623,18 @@ const Agent = () => {
     setStreamingCitations([]);
     setPendingConfirmation(null);
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: 'user',
-        content: userMessage,
-        ...(imagesToSend.length ? { images: imagesToSend } : {}),
-        ...(filesToSend.length ? { files: filesToSend } : {}),
-        timestamp: new Date().toISOString()
-      }
-    ]);
+    if (!isConfirmationResume) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'user',
+          content: userMessage,
+          ...(imagesToSend.length ? { images: imagesToSend } : {}),
+          ...(filesToSend.length ? { files: filesToSend } : {}),
+          timestamp: new Date().toISOString()
+        }
+      ]);
+    }
 
     try {
       let sessionId = activeChatId;
@@ -659,7 +662,7 @@ const Agent = () => {
         capabilities: capsForTurn,
         provider,
         model: model || undefined,
-        confirmedToolIds
+        confirmedToolIds: isConfirmationResume ? confirmedToolIds : []
       });
 
       const resolvedSessionId = result?.sessionId || sessionId;
@@ -714,7 +717,7 @@ const Agent = () => {
   const confirmPendingTool = () => {
     if (!pendingConfirmation) return;
     const toolId = pendingConfirmation.toolCallId || pendingConfirmation.id;
-    sendMessage('Yes, proceed with the tool call.', [toolId]);
+    sendMessage('', [toolId]);
   };
 
   const handleReindexKb = async () => {
