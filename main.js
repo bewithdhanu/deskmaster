@@ -60,7 +60,8 @@ let appSettings = {};
 // Google Drive backup
 let gdriveBackupTimer = null
 let gdriveBackupRunning = false
-let gdriveStartupBackupTimer = null
+const GDRIVE_BACKUP_MIN_DELAY_MS = 10000
+const GDRIVE_BACKUP_RETRY_MS = 60000
 
 const GDRIVE_OAUTH_PORT = 8765
 
@@ -117,6 +118,9 @@ function getCloudBackupSettings() {
 function setCloudBackupSettings(patch) {
   const s = config.getAppSettings()
   const next = { ...(s?.cloudBackup || {}), ...(patch || {}) }
+  if (patch?.intervalHours !== undefined) {
+    next.intervalHours = normalizeBackupIntervalHours(patch.intervalHours)
+  }
   config.setAppSettings({ cloudBackup: next })
   appSettings = config.getAppSettings()
   // Start Drive backup scheduler if enabled.
@@ -197,15 +201,13 @@ async function uploadBackupToDrive() {
 
     const { clientId, clientSecret } = getGdriveOAuthCredentialsForRefresh()
     const { zipPath, baseName } = await createBackupZipToTemp()
-    const { keepLast = 10 } = getCloudBackupSettings()
 
     const file = await gdriveBackup.uploadBackup({
       clientId,
       clientSecret,
       refreshToken,
       zipPath,
-      fileName: baseName,
-      keepLast
+      fileName: baseName
     })
 
     setCloudBackupSettings({ lastBackupAt: new Date().toISOString(), lastBackupStatus: 'success', lastBackupError: null })
@@ -279,33 +281,51 @@ async function createBackupZipToTemp() {
   return { zipPath, baseName }
 }
 
-function restartGdriveBackupScheduler() {
+function clearGdriveBackupTimer() {
   if (gdriveBackupTimer) {
-    clearInterval(gdriveBackupTimer)
+    clearTimeout(gdriveBackupTimer)
     gdriveBackupTimer = null
   }
-  if (gdriveStartupBackupTimer) {
-    clearTimeout(gdriveStartupBackupTimer)
-    gdriveStartupBackupTimer = null
+}
+
+function normalizeBackupIntervalHours(value) {
+  const hours = Number(value)
+  if (!Number.isFinite(hours)) return 4
+  return Math.max(1, Math.min(24, Math.round(hours)))
+}
+
+function getNextGdriveBackupDelayMs(settings = getCloudBackupSettings()) {
+  const intervalMs = normalizeBackupIntervalHours(settings?.intervalHours) * 60 * 60 * 1000
+  const lastBackupAt = settings?.lastBackupAt ? Date.parse(settings.lastBackupAt) : NaN
+
+  if (!Number.isFinite(lastBackupAt) || lastBackupAt <= 0) {
+    return GDRIVE_BACKUP_MIN_DELAY_MS
   }
+
+  const dueAt = lastBackupAt + intervalMs
+  return Math.max(GDRIVE_BACKUP_MIN_DELAY_MS, dueAt - Date.now())
+}
+
+function restartGdriveBackupScheduler() {
+  clearGdriveBackupTimer()
+
   const s = getCloudBackupSettings()
   const enabled = Boolean(s?.enabled)
-  const intervalHours = Math.max(1, Number(s?.intervalHours) || 4)
   const auth = getGdriveAuthConfig()
   if (!enabled || !auth?.refresh_token) return
-  gdriveBackupTimer = setInterval(() => {
-    void uploadBackupToDrive()
-  }, intervalHours * 60 * 60 * 1000)
 
-  const lastBackupAt = s?.lastBackupAt ? Date.parse(s.lastBackupAt) : 0
-  const intervalMs = intervalHours * 60 * 60 * 1000
-  const backupIsDue = !lastBackupAt || Number.isNaN(lastBackupAt) || Date.now() - lastBackupAt >= intervalMs
-  if (backupIsDue) {
-    gdriveStartupBackupTimer = setTimeout(() => {
-      gdriveStartupBackupTimer = null
-      void uploadBackupToDrive()
-    }, 10000)
-  }
+  const delayMs = getNextGdriveBackupDelayMs(s)
+  gdriveBackupTimer = setTimeout(() => {
+    gdriveBackupTimer = null
+    void uploadBackupToDrive().then((result) => {
+      if (result?.running) {
+        gdriveBackupTimer = setTimeout(() => {
+          gdriveBackupTimer = null
+          restartGdriveBackupScheduler()
+        }, GDRIVE_BACKUP_RETRY_MS)
+      }
+    })
+  }, delayMs)
 }
 
 // Pinggy tunnel instances
@@ -4292,14 +4312,7 @@ app.on("window-all-closed", (e) => {
 })
 
 app.on("before-quit", async () => {
-  if (gdriveBackupTimer) {
-    clearInterval(gdriveBackupTimer)
-    gdriveBackupTimer = null
-  }
-  if (gdriveStartupBackupTimer) {
-    clearTimeout(gdriveStartupBackupTimer)
-    gdriveStartupBackupTimer = null
-  }
+  clearGdriveBackupTimer()
   uptimeMonitor.stopBackgroundSync()
 
   // Kill all Pinggy tunnel processes

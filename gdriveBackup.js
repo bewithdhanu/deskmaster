@@ -8,6 +8,12 @@ const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const DRIVE_API = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files'
 
+const RETENTION_12H_MS = 12 * 60 * 60 * 1000
+const RETENTION_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const RETENTION_MONTH_MS = 30 * 24 * 60 * 60 * 1000
+const RETENTION_WEEKLY_PER_DAY = 3
+const RETENTION_MONTHLY_PER_DAY = 1
+
 function formatOAuthError(json) {
   const code = typeof json?.error === 'string' ? json.error : ''
   const description = json?.error_description || ''
@@ -238,26 +244,96 @@ async function uploadZipFile(accessToken, folderId, zipPath, fileName) {
   })
 }
 
-async function pruneOldBackups(accessToken, folderId, keepLast = 10) {
-  const list = await driveRequest(accessToken, '/files', {
-    params: {
-      q: `'${folderId}' in parents and trashed=false and name contains 'deskmaster-backup-'`,
-      fields: 'files(id,name,createdTime)',
-      orderBy: 'createdTime desc',
-      pageSize: 50
-    }
-  })
-  const files = Array.isArray(list.files) ? list.files : []
-  const toDelete = files.slice(Number(keepLast) || 10)
+async function listAllBackupFiles(accessToken, folderId) {
+  const files = []
+  let pageToken = null
 
-  for (const file of toDelete) {
+  do {
+    const params = {
+      q: `'${folderId}' in parents and trashed=false and name contains 'deskmaster-backup-'`,
+      fields: 'nextPageToken, files(id,name,createdTime)',
+      orderBy: 'createdTime desc',
+      pageSize: 100
+    }
+    if (pageToken) params.pageToken = pageToken
+
+    const list = await driveRequest(accessToken, '/files', { params })
+    files.push(...(Array.isArray(list.files) ? list.files : []))
+    pageToken = list.nextPageToken || null
+  } while (pageToken)
+
+  return files
+}
+
+function getUtcDayKey(createdTime) {
+  return new Date(createdTime).toISOString().slice(0, 10)
+}
+
+function sortByCreatedTimeDesc(files) {
+  return [...files].sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime))
+}
+
+function selectBackupFilesToKeep(files, now = Date.now()) {
+  const keepIds = new Set()
+  const sorted = sortByCreatedTimeDesc(files)
+
+  for (const file of sorted) {
+    const createdAt = new Date(file.createdTime).getTime()
+    if (!Number.isFinite(createdAt)) continue
+    if (now - createdAt <= RETENTION_12H_MS) {
+      keepIds.add(file.id)
+    }
+  }
+
+  const weekBuckets = new Map()
+  for (const file of sorted) {
+    const createdAt = new Date(file.createdTime).getTime()
+    if (!Number.isFinite(createdAt)) continue
+    const ageMs = now - createdAt
+    if (ageMs <= RETENTION_12H_MS || ageMs > RETENTION_WEEK_MS) continue
+    const dayKey = getUtcDayKey(file.createdTime)
+    if (!weekBuckets.has(dayKey)) weekBuckets.set(dayKey, [])
+    weekBuckets.get(dayKey).push(file)
+  }
+
+  for (const dayFiles of weekBuckets.values()) {
+    for (const file of sortByCreatedTimeDesc(dayFiles).slice(0, RETENTION_WEEKLY_PER_DAY)) {
+      keepIds.add(file.id)
+    }
+  }
+
+  const monthBuckets = new Map()
+  for (const file of sorted) {
+    const createdAt = new Date(file.createdTime).getTime()
+    if (!Number.isFinite(createdAt)) continue
+    const ageMs = now - createdAt
+    if (ageMs <= RETENTION_WEEK_MS || ageMs > RETENTION_MONTH_MS) continue
+    const dayKey = getUtcDayKey(file.createdTime)
+    if (!monthBuckets.has(dayKey)) monthBuckets.set(dayKey, [])
+    monthBuckets.get(dayKey).push(file)
+  }
+
+  for (const dayFiles of monthBuckets.values()) {
+    const newest = sortByCreatedTimeDesc(dayFiles)[0]
+    if (newest) keepIds.add(newest.id)
+  }
+
+  return keepIds
+}
+
+async function pruneOldBackups(accessToken, folderId) {
+  const files = await listAllBackupFiles(accessToken, folderId)
+  const keepIds = selectBackupFilesToKeep(files)
+
+  for (const file of files) {
+    if (keepIds.has(file.id)) continue
     try {
       await driveRequest(accessToken, `/files/${file.id}`, { method: 'DELETE' })
     } catch {}
   }
 }
 
-async function uploadBackup({ clientId, clientSecret, refreshToken, zipPath, fileName, keepLast = 10 }) {
+async function uploadBackup({ clientId, clientSecret, refreshToken, zipPath, fileName }) {
   let step = 'Google authentication'
   try {
     const accessToken = await getAccessToken({ clientId, clientSecret, refreshToken })
@@ -270,7 +346,7 @@ async function uploadBackup({ clientId, clientSecret, refreshToken, zipPath, fil
     const file = await uploadZipFile(accessToken, folderId, zipPath, fileName)
 
     step = 'Drive backup cleanup'
-    await pruneOldBackups(accessToken, folderId, keepLast)
+    await pruneOldBackups(accessToken, folderId)
     return file
   } catch (error) {
     throw new Error(`${step}: ${error.message}`)
@@ -286,5 +362,9 @@ module.exports = {
   buildAuthUrl,
   exchangeAuthCode,
   uploadBackup,
-  verifyCredentials
+  verifyCredentials,
+  selectBackupFilesToKeep,
+  RETENTION_12H_MS,
+  RETENTION_WEEK_MS,
+  RETENTION_MONTH_MS
 }
