@@ -4,6 +4,7 @@ import {
   MdAdd,
   MdCheckCircle,
   MdClose,
+  MdContentCopy,
   MdDelete,
   MdEdit,
   MdPause,
@@ -13,6 +14,7 @@ import {
   MdSwapVert
 } from 'react-icons/md';
 import { getIpcRenderer } from '../utils/electron';
+import { formatFilteredMonitorStatusText, getMonitorStatusVariant, isMonitorAttentionStatus } from '../utils/uptimeKuma';
 import UptimeStatsSummary from './UptimeStatsSummary';
 import './uptime-monitor.css';
 
@@ -95,11 +97,7 @@ function formatSslDays(monitor) {
 }
 
 function statusVariant(status) {
-  if (status === 'UP') return 'success';
-  if (status === 'DOWN' || status.includes('<= 7D')) return 'destructive';
-  if (status.includes('<= 14D')) return 'caution';
-  if (status === 'MAINTENANCE' || status.includes('<= 21D')) return 'warning';
-  return 'secondary';
+  return getMonitorStatusVariant(status);
 }
 
 function matchesStatusFilter(monitorStatus, selectedStatus) {
@@ -347,6 +345,22 @@ export default function UptimeMonitor() {
     }
   }
 
+  async function copyFilteredStatus() {
+    const text = formatFilteredMonitorStatusText(filteredMonitors);
+    if (!text) {
+      setNotice('No warning monitors to copy');
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      const lineCount = text.split('\n').length;
+      setNotice(`Copied ${lineCount} status line${lineCount === 1 ? '' : 's'}`);
+    } catch (copyError) {
+      setError(copyError.message || 'Could not copy to clipboard');
+    }
+  }
+
   async function toggleMonitorPause(monitor) {
     const shouldPause = monitor.active;
 
@@ -391,6 +405,7 @@ export default function UptimeMonitor() {
       <UptimeStatsSummary monitors={monitors} summary={summary} isLoading={isLoading} error={error} />
 
       <MonitorTable
+        copyFilteredStatus={copyFilteredStatus}
         deleteMonitor={deleteMonitor}
         domainFilter={domainFilter}
         filteredMonitors={filteredMonitors}
@@ -429,6 +444,7 @@ export default function UptimeMonitor() {
 }
 
 function MonitorTable({
+  copyFilteredStatus,
   deleteMonitor,
   deletingId,
   domainFilter,
@@ -449,6 +465,8 @@ function MonitorTable({
   status,
   toggleMonitorPause
 }) {
+  const attentionMonitorCount = filteredMonitors.filter(isMonitorAttentionStatus).length;
+
   return (
     <Card className="uptime-table-card">
       <CardHeader className="uptime-toolbar">
@@ -463,6 +481,15 @@ function MonitorTable({
           </label>
           <FilterToggleGroup allowMultiple fallbackValue={defaultStatusFilters} label="Status filter" options={statusOptions} value={status} onChange={setStatus} />
           <FilterToggleGroup allowMultiple fallbackValue={defaultDomainFilters} label="Domain type filter" options={domainFilterOptions} value={domainFilter} onChange={setDomainFilter} />
+          <Button
+            variant="ghost"
+            onClick={copyFilteredStatus}
+            disabled={isLoading || attentionMonitorCount === 0}
+            title={attentionMonitorCount === 0 ? 'No warning monitors to copy' : 'Copy warning monitors (red/yellow) to clipboard'}
+          >
+            <MdContentCopy size={18} />
+            <span className="uptime-sr-only">Copy warning monitors</span>
+          </Button>
           <Button onClick={startCreate}>
             <MdAdd size={18} />
             <span className="uptime-sr-only">New monitor</span>

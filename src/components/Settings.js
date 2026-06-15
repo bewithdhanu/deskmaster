@@ -1286,7 +1286,7 @@ const Settings = () => {
             <div className={SETTINGS_GRID.stack}>
                 <SettingsPanel>
                 <div className="text-theme-muted text-xs">
-                  Stores backups in a Google Drive folder named <span className="text-theme-primary font-medium">DeskMaster Backups</span>, keeping the last {backupStatus.keepLast || 10}.
+                  Stores backups in a Google Drive folder named <span className="text-theme-primary font-medium">DeskMaster Backups</span>. Retention: all backups from the last 12 hours, 3 per day for the past week, 1 per day for the past month (older backups are removed).
                 </div>
                 </SettingsPanel>
 
@@ -1393,6 +1393,7 @@ const Settings = () => {
                   value={String(settings.cloudBackup?.intervalHours || 4)}
                   onChange={(v) => updateBackupSettings({ intervalHours: Number(v) || 4 })}
                   options={[
+                    { value: '1', label: 'Every 1 hour' },
                     { value: '3', label: 'Every 3 hours' },
                     { value: '4', label: 'Every 4 hours' }
                   ]}
