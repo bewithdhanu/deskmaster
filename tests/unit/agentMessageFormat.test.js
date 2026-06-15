@@ -19,7 +19,14 @@ function testLegacyToolCallsNormalizeForOpenAi() {
     }]
   }
 
-  const normalized = normalizeMessagesForOpenAi([legacy])[0]
+  const normalized = normalizeMessagesForOpenAi([
+    legacy,
+    {
+      role: 'tool',
+      tool_call_id: 'call_WwObskykskLr0Is6O1rx9NOI',
+      content: '{"ip":"1.2.3.4"}'
+    }
+  ])[0]
   assert(normalized.tool_calls[0].type === 'function', 'tool call must include type')
   assert(normalized.tool_calls[0].function.name === 'get_public_ip', 'tool name preserved')
   assert(normalized.tool_calls[0].function.arguments === '{}', 'tool arguments preserved')
@@ -33,11 +40,18 @@ function testPersistedRoundTrip() {
   })
   assert(persisted.name === 'get_public_ip', 'persisted name')
 
-  const apiReady = normalizeMessagesForOpenAi([{
-    role: 'assistant',
-    content: null,
-    tool_calls: [persisted]
-  }])[0]
+  const apiReady = normalizeMessagesForOpenAi([
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [persisted]
+    },
+    {
+      role: 'tool',
+      tool_call_id: 'call_abc',
+      content: '{"ip":"1.2.3.4"}'
+    }
+  ])[0]
   assert(apiReady.tool_calls[0].type === 'function', 'round-trip type')
 }
 
@@ -59,6 +73,61 @@ function testRepairPersistedMessages() {
 
   assert(repaired[0].timestamp, 'repair keeps metadata')
   assert(repaired[1].content === '{"ip":"1.2.3.4"}', 'repair stringifies tool content')
+}
+
+function testRepairOrphanedToolCalls() {
+  const repaired = repairPersistedMessages([
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'call_orphan', name: 'tool_a', arguments: '{}' }]
+    },
+    {
+      role: 'user',
+      content: 'hello'
+    }
+  ])
+
+  assert(!repaired[0].tool_calls, 'orphaned tool_calls removed without pending confirmation')
+  assert(repaired[0].content.includes('interrupted'), 'placeholder content added')
+  assert(repaired[1].role === 'user', 'user message kept')
+}
+
+function testRepairPendingConfirmationKeepsToolCalls() {
+  const repaired = repairPersistedMessages([
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'call_orphan', name: 'tool_a', arguments: '{}' }]
+    },
+    {
+      role: 'assistant',
+      content: 'Please confirm to proceed.',
+      pendingConfirmation: { toolCallId: 'call_orphan' }
+    },
+    {
+      role: 'user',
+      content: 'hello'
+    }
+  ])
+
+  assert(repaired[0].tool_calls?.length === 1, 'pending confirmation keeps tool_calls')
+  assert(repaired[0].tool_calls[0].id === 'call_orphan', 'tool call id preserved')
+  assert(repaired[1].role === 'assistant', 'confirmation message kept')
+}
+
+function testNormalizeOpenAiStripsOrphanedToolCalls() {
+  const normalized = normalizeMessagesForOpenAi([
+    {
+      role: 'assistant',
+      content: null,
+      tool_calls: [{ id: 'call_MZz5Nhn6QN66kxQSAmGqkXwK', name: 'get_public_ip', arguments: '{}' }]
+    },
+    { role: 'user', content: 'try again' }
+  ])
+
+  assert(normalized.length === 2, 'assistant and user remain')
+  assert(!normalized[0].tool_calls, 'orphaned tool_calls stripped before API')
 }
 
 function testUserMessageWithImagesForOpenAi() {
@@ -91,6 +160,9 @@ function testImagesOnlyUserMessageForOpenAi() {
 testLegacyToolCallsNormalizeForOpenAi()
 testPersistedRoundTrip()
 testRepairPersistedMessages()
+testRepairOrphanedToolCalls()
+testRepairPendingConfirmationKeepsToolCalls()
+testNormalizeOpenAiStripsOrphanedToolCalls()
 testUserMessageWithImagesForOpenAi()
 testImagesOnlyUserMessageForOpenAi()
 

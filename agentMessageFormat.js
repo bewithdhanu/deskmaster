@@ -182,30 +182,85 @@ function toPersistedToolCall(tc) {
   }
 }
 
-function repairPersistedMessages(messages) {
-  return (messages || []).map((m) => {
-    if (m.role === 'assistant' && m.tool_calls?.length) {
-      const tool_calls = m.tool_calls.map(toPersistedToolCall).filter(Boolean)
-      return {
-        ...m,
-        content: m.content ?? null,
-        tool_calls
-      }
+function repairSingleMessage(m) {
+  if (m.role === 'assistant' && m.tool_calls?.length) {
+    const tool_calls = m.tool_calls.map(toPersistedToolCall).filter(Boolean)
+    return {
+      ...m,
+      content: m.content ?? null,
+      tool_calls
     }
+  }
 
-    if (m.role === 'tool') {
-      return {
-        ...m,
-        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')
-      }
+  if (m.role === 'tool') {
+    return {
+      ...m,
+      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content ?? '')
     }
+  }
 
-    return m
+  return m
+}
+
+function hasAwaitingConfirmation(messages, startIndex, toolCallIds) {
+  return messages.slice(startIndex + 1).some((msg) => {
+    const pendingId = msg?.pendingConfirmation?.toolCallId
+    return pendingId && toolCallIds.includes(pendingId)
   })
 }
 
+function repairPersistedMessages(messages) {
+  const input = (messages || []).map(repairSingleMessage)
+  const result = []
+
+  for (let i = 0; i < input.length; i++) {
+    const m = input[i]
+
+    if (m.role === 'assistant' && m.tool_calls?.length) {
+      const toolCallIds = m.tool_calls.map((tc) => tc.id).filter(Boolean)
+      const toolResponses = []
+      let j = i + 1
+      while (j < input.length && input[j].role === 'tool') {
+        toolResponses.push(input[j])
+        j++
+      }
+
+      const respondedIds = new Set(toolResponses.map((t) => t.tool_call_id).filter(Boolean))
+      const allResponded = toolCallIds.length > 0 && toolCallIds.every((id) => respondedIds.has(id))
+
+      if (allResponded) {
+        result.push(m)
+        result.push(...toolResponses)
+        i = j - 1
+        continue
+      }
+
+      if (hasAwaitingConfirmation(input, i, toolCallIds)) {
+        result.push(m)
+        continue
+      }
+
+      const { tool_calls, ...rest } = m
+      result.push({
+        ...rest,
+        content: String(rest.content || '').trim()
+          ? rest.content
+          : 'Tool execution was interrupted before completion.'
+      })
+      i = j - 1
+      continue
+    }
+
+    if (m.role === 'tool') continue
+
+    result.push(m)
+  }
+
+  return result
+}
+
 function normalizeMessagesForOpenAi(messages) {
-  return (messages || []).map((m) => {
+  return (repairPersistedMessages(messages) || []).map((m) => {
     if (m.role === 'assistant' && m.tool_calls?.length) {
       const tool_calls = m.tool_calls.map(normalizeToolCallForOpenAi).filter(Boolean)
       if (!tool_calls.length) {

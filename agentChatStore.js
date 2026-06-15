@@ -129,6 +129,37 @@ function replaceMessages(sessionId, messages) {
   return writeChat(chat)
 }
 
+function removePendingConfirmations(sessionId, toolCallIds = []) {
+  const chat = readChat(sessionId)
+  if (!chat?.messages?.length) return chat
+
+  const ids = new Set(toolCallIds.filter(Boolean))
+  if (!ids.size) return chat
+
+  chat.messages = chat.messages.filter((msg) => {
+    if (!msg?.pendingConfirmation?.toolCallId) return true
+    return !ids.has(msg.pendingConfirmation.toolCallId)
+  })
+  chat.updatedAt = new Date().toISOString()
+  return writeChat(chat)
+}
+
+function findAssistantMessageWithToolCalls(chat, toolCallIds) {
+  const ids = new Set(toolCallIds.filter(Boolean))
+  if (!ids.size || !chat?.messages?.length) return null
+
+  for (let i = chat.messages.length - 1; i >= 0; i--) {
+    const msg = chat.messages[i]
+    if (msg.role !== 'assistant' || !msg.tool_calls?.length) continue
+    const matching = msg.tool_calls.filter((tc) => ids.has(tc.id))
+    if (matching.length) {
+      return { ...msg, tool_calls: matching }
+    }
+  }
+
+  return null
+}
+
 function normalizeSearchQuery(query) {
   return String(query || '').trim().toLowerCase()
 }
@@ -234,5 +265,7 @@ module.exports = {
   searchChats,
   exportAllChats,
   clearAllChats,
-  importChats
+  importChats,
+  removePendingConfirmations,
+  findAssistantMessageWithToolCalls
 }
