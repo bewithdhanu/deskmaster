@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import TimezoneManager from './components/TimezoneManager';
 import SystemPerformance from './components/SystemPerformance';
 import Tools from './components/Tools';
@@ -17,6 +17,23 @@ import { useAppRoute } from './utils/useAppRoute';
 const ipcRenderer = getIpcRenderer();
 
 const PROTECTED_TABS = ['clipboard', 'authenticator', 'settings'];
+const AUTH_TIMEOUT = 5 * 60 * 1000;
+
+function readAuthSession() {
+  try {
+    const stored = localStorage.getItem('authState');
+    if (!stored) return { authenticated: false, timestamp: 0 };
+    const parsed = JSON.parse(stored);
+    if (parsed.authenticated && Date.now() - parsed.timestamp < AUTH_TIMEOUT) {
+      return parsed;
+    }
+  } catch {}
+  return { authenticated: false, timestamp: 0 };
+}
+
+function isAuthSessionValid(session = readAuthSession()) {
+  return Boolean(session.authenticated && Date.now() - session.timestamp < AUTH_TIMEOUT);
+}
 
 function App() {
   const route = useAppRoute();
@@ -24,31 +41,27 @@ function App() {
   const [currentTheme, setCurrentTheme] = useState('dark');
   const [uptimeKumaEnabled, setUptimeKumaEnabled] = useState(true);
 
-  const [authState, setAuthState] = useState(() => {
-    const stored = localStorage.getItem('authState');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      const AUTH_TIMEOUT = 5 * 60 * 1000;
-      if (Date.now() - parsed.timestamp < AUTH_TIMEOUT) {
-        return parsed;
-      }
-    }
-    return { authenticated: false, timestamp: 0 };
-  });
+  const skipRouteAuthCheckRef = useRef(null);
+  const authInFlightRef = useRef(false);
 
   const authenticateUser = async (reason) => {
+    if (authInFlightRef.current) {
+      return isAuthSessionValid();
+    }
+
+    authInFlightRef.current = true;
     try {
       const result = await ipcRenderer.invoke('authenticate-user', reason);
       if (result && result.authenticated) {
-        const newAuthState = { authenticated: true, timestamp: Date.now() };
-        setAuthState(newAuthState);
-        localStorage.setItem('authState', JSON.stringify(newAuthState));
+        localStorage.setItem('authState', JSON.stringify({ authenticated: true, timestamp: Date.now() }));
         return true;
       }
       return false;
     } catch (error) {
       console.error('Authentication error:', error);
       return false;
+    } finally {
+      authInFlightRef.current = false;
     }
   };
 
@@ -56,11 +69,12 @@ function App() {
     const checkAuthForRoute = async () => {
       if (!PROTECTED_TABS.includes(activeTab)) return;
 
-      const AUTH_TIMEOUT = 5 * 60 * 1000;
-      const isAuthenticated =
-        authState.authenticated && Date.now() - authState.timestamp < AUTH_TIMEOUT;
+      if (skipRouteAuthCheckRef.current === activeTab) {
+        skipRouteAuthCheckRef.current = null;
+        return;
+      }
 
-      if (!isAuthenticated) {
+      if (!isAuthSessionValid()) {
         const tabNames = {
           clipboard: 'Clipboard',
           authenticator: 'Authenticator',
@@ -164,11 +178,7 @@ function App() {
     }
 
     if (PROTECTED_TABS.includes(tabId)) {
-      const AUTH_TIMEOUT = 5 * 60 * 1000;
-      const isAuthenticated =
-        authState.authenticated && Date.now() - authState.timestamp < AUTH_TIMEOUT;
-
-      if (!isAuthenticated) {
+      if (!isAuthSessionValid()) {
         const tabNames = {
           clipboard: 'Clipboard',
           authenticator: 'Authenticator',
@@ -180,6 +190,8 @@ function App() {
         if (!authenticated) {
           return;
         }
+
+        skipRouteAuthCheckRef.current = tabId;
       }
     }
 
