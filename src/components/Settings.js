@@ -875,7 +875,7 @@ const Settings = () => {
                     updateSettings(newSettings);
                   }}
                   label="Show in Dock"
-                  description="Show app icon in macOS dock (macOS only)"
+                  description="When on, the app stays in the Dock and the window remains open when you click elsewhere. When off, tray-only mode hides the window on focus loss."
                 />
               )}
               </div>
