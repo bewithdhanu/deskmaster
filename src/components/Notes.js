@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MdAdd, MdArchive, MdChevronRight, MdClose, MdExpandMore, MdNotes, MdSearch } from 'react-icons/md';
+import * as monaco from 'monaco-editor';
 import MonacoEditor, { loader as monacoLoader } from '@monaco-editor/react';
 import { FormattingToolbarController, useCreateBlockNote, useEditorChange } from '@blocknote/react';
 import { BlockNoteView, ShadCNDefaultComponents } from '@blocknote/shadcn';
@@ -28,7 +29,7 @@ const PAGE_TYPE_CANVAS = 'canvas';
 const PAGE_TYPE_TEXT = 'text';
 const PAGE_TYPE_MARKDOWN = 'markdown';
 
-monacoLoader.config({ paths: { vs: './vs' } });
+monacoLoader.config({ monaco });
 
 function cn(...values) {
   return values.flat().filter(Boolean).join(' ');
