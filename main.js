@@ -54,6 +54,7 @@ let aboutWindow = null
 let statsInterval = null
 let trayUpdateInterval = null
 let windowBlurHideEnabled = false
+let appIsQuitting = false
 
 // Settings management - will be loaded from config
 let appSettings = {};
@@ -514,6 +515,12 @@ function createWindow() {
     })
   }
   
+  win.on('close', (event) => {
+    if (appIsQuitting) return
+    event.preventDefault()
+    win.hide()
+  })
+
   win.on('blur', () => {
     if (!isTrayOnlyMode() || !windowBlurHideEnabled) return
 
@@ -4343,6 +4350,7 @@ app.on("window-all-closed", (e) => {
 })
 
 app.on("before-quit", async () => {
+  appIsQuitting = true
   clearGdriveBackupTimer()
   uptimeMonitor.stopBackgroundSync()
 
