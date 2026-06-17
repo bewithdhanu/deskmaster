@@ -461,10 +461,13 @@ function createWindow() {
     },
   })
 
-  // Load React app from dist folder
-  // Use proper path resolution for both dev and production
-  const distPath = app.isPackaged ? app.getAppPath() : __dirname;
-  win.loadFile(path.join(distPath, "dist", "index.html"))
+  // Load React app over localhost so Monaco workers/assets load correctly (file:// breaks them).
+  const rendererUrl = `http://127.0.0.1:${STATIC_PORT}/index.html`;
+  win.loadURL(rendererUrl).catch((err) => {
+    console.error('Failed to load renderer over localhost, falling back to file://', err);
+    const distPath = app.isPackaged ? app.getAppPath() : __dirname;
+    win.loadFile(path.join(distPath, 'dist', 'index.html'));
+  });
 
   // Open DevTools for debugging (only in development, but not automatically)
   if (process.env.NODE_ENV === 'development') {
@@ -782,153 +785,168 @@ function getDistPath() {
   }
 }
 
-// Start WebSocket and HTTP servers for browser access
-function startBrowserServers() {
-  const fs = require('fs');
-  const { URL } = require('url');
-  const distPath = getDistPath();
-  
-  // MIME types for static file server
-  const mimeTypes = {
-    '.html': 'text/html',
-    '.js': 'application/javascript',
-    '.css': 'text/css',
-    '.json': 'application/json',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.svg': 'image/svg+xml',
-    '.ico': 'image/x-icon',
-    '.woff': 'font/woff',
-    '.woff2': 'font/woff2',
-    '.ttf': 'font/ttf',
-    '.eot': 'application/vnd.ms-fontobject'
-  };
-  
-  // Static file server for serving the web UI
-  try {
-    staticServer = http.createServer((req, res) => {
-      // Security: Validate request origin - only allow localhost
-      const origin = req.headers.origin || req.headers.referer || '';
-      const host = req.headers.host || '';
-      const remoteAddress = req.socket.remoteAddress || '';
-      
-      const isLocalhost = 
-        remoteAddress === '127.0.0.1' || 
-        remoteAddress === '::1' || 
-        remoteAddress === '::ffff:127.0.0.1' ||
-        host.includes('localhost') ||
-        host.includes('127.0.0.1') ||
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1');
-      
-      // Block all external requests
-      if (!isLocalhost) {
-        console.warn(`🚫 Blocked unauthorized static file request from ${remoteAddress} - ${req.url}`);
-        res.writeHead(403, { 'Content-Type': 'text/plain' });
-        res.end('Forbidden: Access restricted to localhost only');
-        return;
-      }
-      
-      const parsedUrl = new URL(req.url, `http://localhost:${STATIC_PORT}`);
-      let pathname = parsedUrl.pathname;
-      
-      // Handle favicon.ico requests - serve the app icon
-      if (pathname === '/favicon.ico' || pathname === '/assets/icons/app-icon-256.png') {
-        const faviconPath = path.join(distPath, 'assets', 'icons', 'app-icon-256.png');
-        fs.readFile(faviconPath, (err, data) => {
-          if (err) {
-            // Fallback: return 204 if icon not found
-            res.writeHead(204, { 'Content-Type': 'image/x-icon' });
-            res.end();
-            return;
-          }
-          res.writeHead(200, {
-            'Content-Type': 'image/png',
-            'Access-Control-Allow-Origin': origin || `http://localhost:${STATIC_PORT}`,
-            'Cache-Control': 'public, max-age=31536000'
-          });
-          res.end(data);
-        });
-        return;
-      }
-      
-      // Default to index.html
-      if (pathname === '/') {
-        pathname = '/index.html';
-      }
-      
-      // Security: prevent directory traversal
-      const safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
-      const filePath = path.join(distPath, safePath);
-      
-      // Check if file exists
-      fs.access(filePath, fs.constants.F_OK, (err) => {
-        if (err) {
-          res.writeHead(404, { 'Content-Type': 'text/plain' });
-          res.end('404 Not Found');
+// Localhost-only static server for Electron renderer + optional browser UI.
+let staticServerStartupPromise = null;
+
+function startInternalStaticServer() {
+  if (staticServer) return Promise.resolve();
+  if (staticServerStartupPromise) return staticServerStartupPromise;
+
+  staticServerStartupPromise = new Promise((resolve) => {
+    const fs = require('fs');
+    const { URL } = require('url');
+    const distPath = getDistPath();
+
+    const mimeTypes = {
+      '.html': 'text/html',
+      '.js': 'application/javascript',
+      '.css': 'text/css',
+      '.json': 'application/json',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon',
+      '.woff': 'font/woff',
+      '.woff2': 'font/woff2',
+      '.ttf': 'font/ttf',
+      '.eot': 'application/vnd.ms-fontobject'
+    };
+
+    try {
+      staticServer = http.createServer((req, res) => {
+        const origin = req.headers.origin || req.headers.referer || '';
+        const host = req.headers.host || '';
+        const remoteAddress = req.socket.remoteAddress || '';
+
+        const isLocalhost =
+          remoteAddress === '127.0.0.1' ||
+          remoteAddress === '::1' ||
+          remoteAddress === '::ffff:127.0.0.1' ||
+          host.includes('localhost') ||
+          host.includes('127.0.0.1') ||
+          origin.includes('localhost') ||
+          origin.includes('127.0.0.1');
+
+        if (!isLocalhost) {
+          console.warn(`🚫 Blocked unauthorized static file request from ${remoteAddress} - ${req.url}`);
+          res.writeHead(403, { 'Content-Type': 'text/plain' });
+          res.end('Forbidden: Access restricted to localhost only');
           return;
         }
-        
-        // Read and serve file
-        fs.readFile(filePath, (err, data) => {
+
+        const parsedUrl = new URL(req.url, `http://localhost:${STATIC_PORT}`);
+        let pathname = parsedUrl.pathname;
+
+        if (pathname === '/favicon.ico' || pathname === '/assets/icons/app-icon-256.png') {
+          const faviconPath = path.join(distPath, 'assets', 'icons', 'app-icon-256.png');
+          fs.readFile(faviconPath, (err, data) => {
+            if (err) {
+              res.writeHead(204, { 'Content-Type': 'image/x-icon' });
+              res.end();
+              return;
+            }
+            res.writeHead(200, {
+              'Content-Type': 'image/png',
+              'Access-Control-Allow-Origin': origin || `http://localhost:${STATIC_PORT}`,
+              'Cache-Control': 'public, max-age=31536000'
+            });
+            res.end(data);
+          });
+          return;
+        }
+
+        if (pathname === '/') {
+          pathname = '/index.html';
+        }
+
+        const safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
+        const filePath = path.join(distPath, safePath);
+
+        fs.access(filePath, fs.constants.F_OK, (err) => {
           if (err) {
-            res.writeHead(500, { 'Content-Type': 'text/plain' });
-            res.end('500 Internal Server Error');
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('404 Not Found');
             return;
           }
-          
-          // Get MIME type
-          const ext = path.extname(filePath).toLowerCase();
-          const contentType = mimeTypes[ext] || 'application/octet-stream';
-          
-          // Inject API token into HTML files for browser mode
-          let fileData = data;
-          if (ext === '.html') {
-            const htmlContent = data.toString();
-            // Inject token as a script tag before closing </head> or at the start of <body>
-            const tokenScript = `<script>window.DESKMASTER_API_TOKEN = '${API_SECRET_TOKEN}'; localStorage.setItem('deskmaster_api_token', '${API_SECRET_TOKEN}');</script>`;
-            if (htmlContent.includes('</head>')) {
-              fileData = Buffer.from(htmlContent.replace('</head>', `${tokenScript}</head>`));
-            } else if (htmlContent.includes('<body>')) {
-              fileData = Buffer.from(htmlContent.replace('<body>', `<body>${tokenScript}`));
-            } else {
-              // If no head or body, prepend to the beginning
-              fileData = Buffer.from(`${tokenScript}${htmlContent}`);
+
+          fs.readFile(filePath, (readErr, data) => {
+            if (readErr) {
+              res.writeHead(500, { 'Content-Type': 'text/plain' });
+              res.end('500 Internal Server Error');
+              return;
             }
-          }
-          
-          // Set headers - only allow localhost CORS
-          res.writeHead(200, {
-            'Content-Type': contentType,
-            'Access-Control-Allow-Origin': origin || `http://localhost:${STATIC_PORT}`,
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-            'Access-Control-Allow-Credentials': 'true',
-            'Cache-Control': 'no-cache'
+
+            const ext = path.extname(filePath).toLowerCase();
+            const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+            let fileData = data;
+            if (ext === '.html') {
+              const htmlContent = data.toString();
+              const tokenScript = `<script>window.DESKMASTER_API_TOKEN = '${API_SECRET_TOKEN}'; localStorage.setItem('deskmaster_api_token', '${API_SECRET_TOKEN}');</script>`;
+              if (htmlContent.includes('</head>')) {
+                fileData = Buffer.from(htmlContent.replace('</head>', `${tokenScript}</head>`));
+              } else if (htmlContent.includes('<body>')) {
+                fileData = Buffer.from(htmlContent.replace('<body>', `<body>${tokenScript}`));
+              } else {
+                fileData = Buffer.from(`${tokenScript}${htmlContent}`);
+              }
+            }
+
+            res.writeHead(200, {
+              'Content-Type': contentType,
+              'Access-Control-Allow-Origin': origin || `http://localhost:${STATIC_PORT}`,
+              'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type',
+              'Access-Control-Allow-Credentials': 'true',
+              'Cache-Control': 'no-cache'
+            });
+
+            res.end(fileData);
           });
-          
-          res.end(fileData);
         });
       });
-    });
-    
-    // Bind to localhost only (127.0.0.1) - prevents external access
-    staticServer.listen(STATIC_PORT, '127.0.0.1', () => {
-      console.log(`🌐 Static file server started on http://127.0.0.1:${STATIC_PORT} (localhost only)`);
-    });
-    
-    staticServer.on('error', (error) => {
-      if (error.code === 'EADDRINUSE') {
-        console.warn(`⚠️  Static server port ${STATIC_PORT} is already in use. Browser access may not work.`);
-      } else {
-        console.error('Static server error:', error);
-      }
-    });
-  } catch (error) {
-    console.error('Failed to start static file server:', error);
+
+      staticServer.listen(STATIC_PORT, '127.0.0.1', () => {
+        console.log(`🌐 Static file server started on http://127.0.0.1:${STATIC_PORT} (localhost only)`);
+        resolve();
+      });
+
+      staticServer.on('error', (error) => {
+        if (error.code === 'EADDRINUSE') {
+          console.warn(`⚠️  Static server port ${STATIC_PORT} is already in use.`);
+        } else {
+          console.error('Static server error:', error);
+        }
+        resolve();
+      });
+    } catch (error) {
+      console.error('Failed to start static file server:', error);
+      resolve();
+    }
+  });
+
+  return staticServerStartupPromise;
+}
+
+function stopBrowserApiServers() {
+  if (wss) {
+    wss.close();
+    wss = null;
+    connectedClients.clear();
+    console.log('🔌 WebSocket server stopped');
   }
-  
+  if (httpServer) {
+    httpServer.close();
+    httpServer = null;
+    console.log('🌐 HTTP API server stopped');
+  }
+}
+
+// Start WebSocket and HTTP servers for browser access
+function startBrowserApiServers() {
+  if (wss && httpServer) return;
+  const { URL } = require('url');
   // WebSocket server for real-time stats
   try {
     // Bind to localhost only (127.0.0.1) - prevents external access
@@ -1561,22 +1579,10 @@ function startBrowserServers() {
         
         if (enabled) {
           if (!wss || !httpServer) {
-            startBrowserServers();
+            startBrowserApiServers();
           }
         } else {
-          if (staticServer) {
-            staticServer.close();
-            staticServer = null;
-          }
-          if (wss) {
-            wss.close();
-            wss = null;
-            connectedClients.clear();
-          }
-          if (httpServer) {
-            httpServer.close();
-            httpServer = null;
-          }
+          stopBrowserApiServers();
         }
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2090,6 +2096,11 @@ function startBrowserServers() {
   });
 }
 
+async function startBrowserServers() {
+  await startInternalStaticServer();
+  startBrowserApiServers();
+}
+
 async function sendInitialStatsToClient(ws) {
   try {
     const detailedStats = await stats.getDetailedStats();
@@ -2366,9 +2377,10 @@ app.whenReady().then(async () => {
     console.error('Failed to initialize authenticator database:', error)
   }
 
-  // Start WebSocket and HTTP servers for browser access if enabled
+  // Static server for Electron renderer; API servers when browser access is enabled.
+  await startInternalStaticServer();
   if (appSettings.webAccess) {
-    startBrowserServers()
+    startBrowserApiServers();
   }
 
   restartGdriveBackupScheduler()
@@ -2695,28 +2707,12 @@ ipcMain.handle('toggle-web-access', async (event, enabled) => {
   config.updateAppSetting('webAccess', enabled);
   
   if (enabled) {
-    // Start servers if not already running
+    // Start API servers if not already running (static server always stays up for Electron).
     if (!wss || !httpServer) {
-      startBrowserServers();
+      startBrowserApiServers();
     }
   } else {
-    // Stop servers
-    if (staticServer) {
-      staticServer.close();
-      staticServer = null;
-      console.log('🌐 Static file server stopped');
-    }
-    if (wss) {
-      wss.close();
-      wss = null;
-      connectedClients.clear();
-      console.log('🔌 WebSocket server stopped');
-    }
-    if (httpServer) {
-      httpServer.close();
-      httpServer = null;
-      console.log('🌐 HTTP API server stopped');
-    }
+    stopBrowserApiServers();
   }
   
   return true;
