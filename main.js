@@ -53,6 +53,7 @@ let trayIconWindow = null
 let aboutWindow = null
 let statsInterval = null
 let trayUpdateInterval = null
+let windowBlurHideEnabled = false
 
 // Settings management - will be loaded from config
 let appSettings = {};
@@ -513,13 +514,25 @@ function createWindow() {
     })
   }
   
+  win.on('blur', () => {
+    if (!isTrayOnlyMode() || !windowBlurHideEnabled) return
+
+    setTimeout(() => {
+      if (!win || win.isDestroyed() || win.isFocused()) return
+      if (aboutWindow && !aboutWindow.isDestroyed() && aboutWindow.isVisible()) return
+      win.hide()
+    }, 100)
+  })
+
   win.on("hide", () => {
+    windowBlurHideEnabled = false
     // Don't stop stats updates when window is hidden
     // Stats need to continue for WebSocket clients and tray
   })
 
   win.on("closed", () => {
     win = null
+    windowBlurHideEnabled = false
     // Don't stop stats updates when window is closed
     // Stats need to continue for WebSocket clients and tray
   })
@@ -2206,6 +2219,22 @@ async function updateContextMenu() {
   }
 }
 
+function isTrayOnlyMode() {
+  return process.platform === 'darwin' && appSettings.showInDock === false
+}
+
+function scheduleTrayOnlyBlurHide() {
+  windowBlurHideEnabled = false
+  if (!isTrayOnlyMode()) return
+
+  // Brief delay so opening from the tray does not immediately hide on blur.
+  setTimeout(() => {
+    if (win && !win.isDestroyed() && win.isVisible()) {
+      windowBlurHideEnabled = true
+    }
+  }, 300)
+}
+
 function showWindow() {
   // If window is destroyed, recreate it
   if (!win || win.isDestroyed()) {
@@ -2220,6 +2249,7 @@ function showWindow() {
     
   win.show()
   win.focus()
+  scheduleTrayOnlyBlurHide()
   }
   
   // Start stats updates if not already running
@@ -2576,14 +2606,15 @@ ipcMain.handle('uptime:pause-monitor', async (event, payload) => {
   return await uptimeMonitor.pauseMonitor(payload?.id, Boolean(payload?.paused))
 })
 
-// Function to update dock visibility
+// Show or hide the macOS Dock icon (tray-only vs regular app).
 function updateDockVisibility() {
-  if (process.platform === 'darwin') {
-    if (appSettings.showInDock !== false) {
-      app.dock.show()
-    } else {
-      app.dock.hide()
-    }
+  if (process.platform !== 'darwin') return
+
+  if (appSettings.showInDock !== false) {
+    windowBlurHideEnabled = false
+    app.dock.show()
+  } else {
+    app.dock.hide()
   }
 }
 
