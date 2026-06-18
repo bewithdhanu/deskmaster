@@ -55,6 +55,10 @@ let statsInterval = null
 let trayUpdateInterval = null
 let windowBlurHideEnabled = false
 let appIsQuitting = false
+let mainWindowSaveTimer = null
+
+const MAIN_WINDOW_MIN_WIDTH = 480
+const MAIN_WINDOW_MIN_HEIGHT = 360
 
 // Settings management - will be loaded from config
 let appSettings = {};
@@ -433,18 +437,110 @@ function createAboutWindow() {
   })
 }
 
+function getDefaultMainWindowBounds() {
+  const { screen } = require('electron')
+  const display = screen.getPrimaryDisplay()
+  const { width: screenWidth, height: screenHeight } = display.workAreaSize
+  const { x: areaX, y: areaY } = display.workArea
+  const width = Math.min(Math.floor(screenWidth * 0.8), 1100)
+  const height = Math.min(Math.floor(screenHeight * 0.8), 700)
+
+  return {
+    x: areaX + Math.floor((screenWidth - width) / 2),
+    y: areaY + Math.floor((screenHeight - height) / 2),
+    width,
+    height,
+    isMaximized: false
+  }
+}
+
+function sanitizeMainWindowBounds(raw) {
+  if (!raw || typeof raw.width !== 'number' || typeof raw.height !== 'number') {
+    return getDefaultMainWindowBounds()
+  }
+
+  const { screen } = require('electron')
+  const displays = screen.getAllDisplays()
+  const primary = screen.getPrimaryDisplay()
+  const area = primary.workArea
+
+  let width = Math.round(Math.max(MAIN_WINDOW_MIN_WIDTH, Math.min(raw.width, area.width)))
+  let height = Math.round(Math.max(MAIN_WINDOW_MIN_HEIGHT, Math.min(raw.height, area.height)))
+  let x = typeof raw.x === 'number' ? Math.round(raw.x) : null
+  let y = typeof raw.y === 'number' ? Math.round(raw.y) : null
+
+  if (x === null || y === null) {
+    x = area.x + Math.floor((area.width - width) / 2)
+    y = area.y + Math.floor((area.height - height) / 2)
+  }
+
+  const bounds = {
+    x,
+    y,
+    width,
+    height,
+    isMaximized: Boolean(raw.isMaximized)
+  }
+
+  const minVisible = 64
+  const visibleOnSomeDisplay = displays.some((display) => {
+    const workArea = display.workArea
+    const overlapX = Math.min(bounds.x + bounds.width, workArea.x + workArea.width) - Math.max(bounds.x, workArea.x)
+    const overlapY = Math.min(bounds.y + bounds.height, workArea.y + workArea.height) - Math.max(bounds.y, workArea.y)
+    return overlapX >= minVisible && overlapY >= minVisible
+  })
+
+  if (!visibleOnSomeDisplay) {
+    return getDefaultMainWindowBounds()
+  }
+
+  return bounds
+}
+
+function saveMainWindowState() {
+  if (!win || win.isDestroyed()) return
+
+  const bounds = win.isMaximized() ? win.getNormalBounds() : win.getBounds()
+  const state = {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    isMaximized: win.isMaximized()
+  }
+
+  const prev = appSettings.mainWindow
+  if (
+    prev &&
+    prev.x === state.x &&
+    prev.y === state.y &&
+    prev.width === state.width &&
+    prev.height === state.height &&
+    prev.isMaximized === state.isMaximized
+  ) {
+    return
+  }
+
+  config.updateAppSetting('mainWindow', state)
+  appSettings.mainWindow = state
+}
+
+function scheduleSaveMainWindowState() {
+  if (mainWindowSaveTimer) clearTimeout(mainWindowSaveTimer)
+  mainWindowSaveTimer = setTimeout(() => {
+    mainWindowSaveTimer = null
+    saveMainWindowState()
+  }, 400)
+}
+
 function createWindow() {
-  const { screen } = require('electron');
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
-  
-  // Calculate 80% of screen size with max dimensions
-  const windowWidth = Math.min(Math.floor(screenWidth * 0.8), 1100);
-  const windowHeight = Math.min(Math.floor(screenHeight * 0.8), 700);
+  const initialBounds = sanitizeMainWindowBounds(appSettings.mainWindow)
   
   win = new BrowserWindow({
-    width: windowWidth,
-    height: windowHeight,
+    x: initialBounds.x,
+    y: initialBounds.y,
+    width: initialBounds.width,
+    height: initialBounds.height,
     show: false,
     frame: true,
     resizable: true,
@@ -484,9 +580,13 @@ function createWindow() {
 
   // Ensure window is ready before showing
   win.once('ready-to-show', () => {
-    // Window is ready, but don't auto-show
-    // It will be shown when user clicks tray icon
+    if (initialBounds.isMaximized && !win.isMaximized()) {
+      win.maximize()
+    }
   })
+
+  win.on('resize', scheduleSaveMainWindowState)
+  win.on('move', scheduleSaveMainWindowState)
 
   // Add keyboard shortcut to toggle DevTools (only in development)
   if (process.env.NODE_ENV === 'development') {
@@ -520,6 +620,7 @@ function createWindow() {
   
   win.on('close', (event) => {
     if (appIsQuitting) return
+    saveMainWindowState()
     event.preventDefault()
     win.hide()
   })
@@ -535,6 +636,7 @@ function createWindow() {
   })
 
   win.on("hide", () => {
+    saveMainWindowState()
     windowBlurHideEnabled = false
     // Don't stop stats updates when window is hidden
     // Stats need to continue for WebSocket clients and tray
@@ -4347,6 +4449,11 @@ app.on("window-all-closed", (e) => {
 
 app.on("before-quit", async () => {
   appIsQuitting = true
+  if (mainWindowSaveTimer) {
+    clearTimeout(mainWindowSaveTimer)
+    mainWindowSaveTimer = null
+  }
+  saveMainWindowState()
   clearGdriveBackupTimer()
   uptimeMonitor.stopBackgroundSync()
 
