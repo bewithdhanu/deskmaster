@@ -40,10 +40,6 @@ module.exports = {
         {
           from: 'assets/icons/app-icon-256.png',
           to: 'assets/icons/app-icon-256.png'
-        },
-        {
-          from: path.resolve(__dirname, 'node_modules/monaco-editor/min/vs'),
-          to: 'vs'
         }
       ]
     }),
@@ -51,7 +47,8 @@ module.exports = {
       global: 'globalThis'
     }),
     new MonacoWebpackPlugin({
-      languages: ['markdown']
+      languages: [],
+      features: ['coreCommands', 'find']
     })
   ],
   module: {

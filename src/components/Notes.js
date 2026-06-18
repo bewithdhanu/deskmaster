@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MdAdd, MdArchive, MdChevronRight, MdClose, MdExpandMore, MdNotes, MdSearch } from 'react-icons/md';
-import * as monaco from 'monaco-editor';
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 import MonacoEditor, { loader as monacoLoader } from '@monaco-editor/react';
 import { FormattingToolbarController, useCreateBlockNote, useEditorChange } from '@blocknote/react';
 import { BlockNoteView, ShadCNDefaultComponents } from '@blocknote/shadcn';
