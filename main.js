@@ -11,6 +11,7 @@ const stats = require("./stats")
 const history = require("./history")
 const clipboardTracker = require("./clipboard")
 const authenticator = require("./authenticator")
+const authenticatorLogo = require("./authenticatorLogo")
 const uptimeMonitor = require("./uptimeMonitor")
 const notesSearch = require("./notesSearch")
 const { registerAgentHandlers } = require("./agentHandlers")
@@ -763,17 +764,20 @@ function broadcastStats(statsData) {
   }
 }
 
-// Broadcast TOTP codes to all connected WebSocket clients
-function broadcastTOTPCodes(codes, timeRemaining) {
+// Broadcast TOTP codes to Electron renderer and WebSocket clients
+function broadcastTOTPCodes(codes, nextCodes, timeRemaining) {
+  const payload = { codes, nextCodes, timeRemaining };
+
+  if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+    win.webContents.send('totp-codes-update', payload);
+  }
+
   if (wss && connectedClients.size > 0) {
     const message = JSON.stringify({
       type: 'totp-codes-update',
-      data: {
-        codes,
-        timeRemaining
-      }
+      data: payload
     });
-    
+
     connectedClients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(message);
@@ -844,21 +848,18 @@ function startTOTPBroadcasting() {
         return;
       }
       
-      // Get all codes
-      const codes = authenticator.getAllTOTPCodes(secrets);
+      // Live current + computed next at the same instant (T0)
+      const { codes, nextCodes } = authenticator.getAllTOTPCodes(secrets);
       const timeRemaining = authenticator.getTimeRemaining();
       
-      // Only broadcast if codes changed (to avoid unnecessary updates)
+      // Only broadcast if current codes changed (next rolls over with current)
       const codesString = JSON.stringify(codes);
       if (codesString !== lastTOTPCodes) {
         lastTOTPCodes = codesString;
-        broadcastTOTPCodes(codes, timeRemaining);
-      } else {
-        // Still broadcast time remaining updates for smooth countdown
-        // But only if we have connected clients
-        if (wss && connectedClients.size > 0) {
-          broadcastTOTPCodes(codes, timeRemaining);
-        }
+        broadcastTOTPCodes(codes, nextCodes, timeRemaining);
+      } else if (wss && connectedClients.size > 0) {
+        // Keep countdown in sync for browser clients (Electron timer is client-side).
+        broadcastTOTPCodes(codes, nextCodes, timeRemaining);
       }
     } catch (error) {
       console.error('Error broadcasting TOTP codes:', error);
@@ -2094,9 +2095,9 @@ function startBrowserApiServers() {
           if (!Array.isArray(secrets)) {
             throw new Error('secrets must be an array');
           }
-          const codes = authenticator.getAllTOTPCodes(secrets);
+          const { codes, nextCodes } = authenticator.getAllTOTPCodes(secrets);
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ codes }));
+          res.end(JSON.stringify({ codes, nextCodes }));
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message }));
@@ -4048,6 +4049,15 @@ ipcMain.handle('get-all-totp-codes', async (event, secrets) => {
   } catch (error) {
     console.error('Error getting all TOTP codes:', error);
     throw error;
+  }
+});
+
+ipcMain.handle('fetch-authenticator-logo', async (event, domain) => {
+  try {
+    return await authenticatorLogo.fetchFaviconDataUrl(domain);
+  } catch (error) {
+    console.error('Error fetching authenticator logo:', error);
+    return null;
   }
 });
 

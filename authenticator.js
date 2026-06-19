@@ -3,6 +3,22 @@ const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
 const { authenticator: totp } = require('otplib');
+const { authenticatorToken, authenticatorOptions } = require('@otplib/core');
+
+const TOTP_STEP = 30;
+
+function getNextWindowEpochMs(epochMs = Date.now()) {
+  const windowStartSec = Math.floor(Math.floor(epochMs / 1000) / TOTP_STEP) * TOTP_STEP;
+  return (windowStartSec + TOTP_STEP) * 1000;
+}
+
+function generateTOTPAtEpoch(secret, epochMs) {
+  const opts = authenticatorOptions({
+    ...totp.allOptions(),
+    epoch: epochMs
+  });
+  return authenticatorToken(secret, opts);
+}
 
 // Database path
 function getDbPath() {
@@ -267,18 +283,25 @@ function getTOTPCode(secret) {
 function getAllTOTPCodes(secrets) {
   try {
     const codes = {};
-    secrets.forEach(secret => {
+    const nextCodes = {};
+    const epochMs = Date.now();
+    const nextEpochMs = getNextWindowEpochMs(epochMs);
+
+    secrets.forEach((secret) => {
       try {
-        codes[secret] = totp.generate(secret);
+        codes[secret] = generateTOTPAtEpoch(secret, epochMs);
+        nextCodes[secret] = generateTOTPAtEpoch(secret, nextEpochMs);
       } catch (error) {
-        console.error(`Error generating TOTP code for secret:`, error);
+        console.error('Error generating TOTP codes for secret:', error);
         codes[secret] = null;
+        nextCodes[secret] = null;
       }
     });
-    return codes;
+
+    return { codes, nextCodes };
   } catch (error) {
     console.error('Error generating TOTP codes:', error);
-    return {};
+    return { codes: {}, nextCodes: {} };
   }
 }
 
