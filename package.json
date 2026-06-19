@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "3.6.1",
+  "version": "4.0.0",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -23,7 +23,16 @@
     "serve:build": "npm run build-app && node server.js",
     "test:e2e": "playwright test",
     "test:e2e:agent": "playwright test tests/e2e/agent.spec.js",
-    "test:unit:agent": "node tests/unit/agentChatStore.test.js"
+    "test:unit:agent": "node tests/unit/agentChatStore.test.js",
+    "build:cap": "npm run build-react && node scripts/prepare-cap-web.js",
+    "cap:sync": "npm run build:cap && npx cap sync",
+    "cap:copy": "npm run build:cap && npx cap copy",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios",
+    "cap:add:android": "npx cap add android",
+    "cap:add:ios": "npx cap add ios",
+    "cap:build:android": "npm run cap:sync && cd android && ./gradlew assembleDebug",
+    "cap:assets": "npx @capacitor/assets generate --iconBackgroundColor '#1a1a1a' --iconBackgroundColorDark '#1a1a1a' --splashBackgroundColor '#1a1a1a' --splashBackgroundColorDark '#1a1a1a' --logoSplashScale 0.3"
   },
   "keywords": [
     "desktop-productivity",
@@ -46,6 +55,10 @@
     "@blocknote/core": "^0.50.0",
     "@blocknote/react": "^0.50.0",
     "@blocknote/shadcn": "^0.50.0",
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
     "@electron/notarize": "^3.1.1",
     "@monaco-editor/react": "^4.7.0",
     "@playwright/test": "^1.60.0",
@@ -82,6 +95,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1068.0",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@composio/core": "^0.10.0",
     "archiver": "^7.0.1",
     "auto-launch": "^5.0.6",

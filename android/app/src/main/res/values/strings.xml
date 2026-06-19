@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Deskmaster</string>
+    <string name="title_activity_main">Deskmaster</string>
+    <string name="package_name">com.deskmaster.app</string>
+    <string name="custom_url_scheme">com.deskmaster.app</string>
+</resources>

@@ -2,19 +2,29 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>DeskMaster</title>
-    <link rel="icon" type="image/png" href="/assets/icons/app-icon-256.png">
+    <link rel="icon" type="image/png" href="assets/icons/app-icon-256.png">
     <style>
-        body {
+        html, body {
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
             background: transparent;
+            -webkit-text-size-adjust: 100%;
+            overscroll-behavior: none;
         }
         #root {
             width: 100%;
-            height: 100vh;
+            min-height: 100vh;
+            min-height: 100dvh;
+            padding-top: env(safe-area-inset-top);
+            padding-right: env(safe-area-inset-right);
+            padding-bottom: env(safe-area-inset-bottom);
+            padding-left: env(safe-area-inset-left);
+            box-sizing: border-box;
         }
     </style>
 </head>
