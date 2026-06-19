@@ -1,8 +1,171 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MdAdd, MdEdit, MdDelete, MdContentCopy, MdOpenInNew, MdSearch, MdDeleteForever, MdRestore } from 'react-icons/md';
 import { getIpcRenderer } from '../utils/electron';
+import { getCachedAuthenticatorLogo, getFaviconUrl, loadAuthenticatorLogo } from '../utils/authenticatorLogoCache';
 
 const ipcRenderer = getIpcRenderer();
+
+const TOTP_PERIOD = 30;
+
+function getProgressBarColor(timeRemaining) {
+  const ratio = Math.max(0, Math.min(1, timeRemaining / TOTP_PERIOD));
+  const green = { r: 34, g: 197, b: 94 };
+  const red = { r: 255, g: 71, b: 87 };
+  const r = Math.round(red.r + (green.r - red.r) * ratio);
+  const g = Math.round(red.g + (green.g - red.g) * ratio);
+  const b = Math.round(red.b + (green.b - red.b) * ratio);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function formatTotpCode(code) {
+  if (!code || code === '---') return '--- ---';
+  const digits = String(code).replace(/\s/g, '');
+  if (digits.length === 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+  return String(code);
+}
+
+const AWS_ACCOUNT_ID_RE = /^\d{12}$/;
+
+function extractAwsAccountIdFromUrl(url) {
+  if (!url) return null;
+  try {
+    const href = url.startsWith('http') ? url : `https://${url}`;
+    const hostname = new URL(href).hostname;
+    const signInMatch = hostname.match(/^(\d{12})\.signin\.aws\.amazon\.com$/i);
+    if (signInMatch) return signInMatch[1];
+  } catch {
+    // ignore invalid URLs
+  }
+  return null;
+}
+
+function extractAwsAccountIdFromText(text) {
+  if (!text) return null;
+  const trimmed = String(text).trim();
+  if (AWS_ACCOUNT_ID_RE.test(trimmed)) return trimmed;
+  const parenMatch = trimmed.match(/\((\d{12})\)/);
+  if (parenMatch) return parenMatch[1];
+  const awsMatch = trimmed.match(/(?:aws|amazon)[^\d]*(\d{12})/i);
+  if (awsMatch) return awsMatch[1];
+  return null;
+}
+
+function getAwsAccountId(item) {
+  const stored = item.aws_account_id || item.awsAccountId;
+  if (stored && String(stored).trim()) return String(stored).trim();
+
+  return (
+    extractAwsAccountIdFromUrl(item.url)
+    || extractAwsAccountIdFromText(item.name)
+    || extractAwsAccountIdFromText(item.username)
+    || null
+  );
+}
+
+function getDomainFromUrl(url) {
+  if (!url) return null;
+  try {
+    const href = url.startsWith('http') ? url : `https://${url}`;
+    return new URL(href).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function getCardSubtitle(item) {
+  const accountId = getAwsAccountId(item);
+  if (accountId) return accountId;
+  return getDomainFromUrl(item.url);
+}
+
+function getCardInitial(name) {
+  const trimmed = String(name || '').trim();
+  return trimmed ? trimmed.charAt(0).toUpperCase() : '?';
+}
+
+function getLogoDomain(item) {
+  const urlDomain = getDomainFromUrl(item.url);
+  if (urlDomain) {
+    if (/\.signin\.aws\.amazon\.com$/i.test(urlDomain) || urlDomain.includes('aws.amazon.com')) {
+      return 'aws.amazon.com';
+    }
+    return urlDomain;
+  }
+
+  const name = String(item.name || '').toLowerCase();
+  if (getAwsAccountId(item) || /amazon|aws/.test(name)) {
+    return 'aws.amazon.com';
+  }
+
+  return null;
+}
+
+function AuthenticatorCardLogo({ item }) {
+  const domain = getLogoDomain(item);
+  const [logoSrc, setLogoSrc] = useState(() => getCachedAuthenticatorLogo(domain));
+  const [useRemoteFallback, setUseRemoteFallback] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!domain) {
+      setLogoSrc(null);
+      setUseRemoteFallback(false);
+      setFailed(false);
+      return undefined;
+    }
+
+    const cached = getCachedAuthenticatorLogo(domain);
+    if (cached) {
+      setLogoSrc(cached);
+      setUseRemoteFallback(false);
+      setFailed(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setLogoSrc(null);
+    setUseRemoteFallback(true);
+    setFailed(false);
+
+    loadAuthenticatorLogo(domain)
+      .then((dataUrl) => {
+        if (cancelled) return;
+        if (dataUrl) {
+          setLogoSrc(dataUrl);
+          setUseRemoteFallback(false);
+        }
+      })
+      .catch(() => {
+        // Keep remote fallback URL visible on cache fetch failure.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [domain]);
+
+  const imageSrc = logoSrc || (useRemoteFallback && domain ? getFaviconUrl(domain) : null);
+  const showImage = Boolean(imageSrc) && !failed;
+
+  return (
+    <div
+      className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-theme-secondary text-xs font-semibold text-theme-primary"
+      aria-hidden="true"
+    >
+      {showImage ? (
+        <img
+          src={imageSrc}
+          alt=""
+          className="h-5 w-5 object-contain"
+          draggable={false}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        getCardInitial(item.name)
+      )}
+    </div>
+  );
+}
 
 const Authenticator = () => {
   const [authenticators, setAuthenticators] = useState([]);
@@ -32,18 +195,18 @@ const Authenticator = () => {
   const loadAuthenticators = async () => {
     try {
       const data = await ipcRenderer.invoke('get-authenticators');
-      // Initialize codes using batch API (single call instead of multiple)
       if (data && data.length > 0) {
         const secrets = data.map(auth => auth.secret).filter(Boolean);
-        let codesMap = {};
-        
+        let codeSets = { codes: {}, nextCodes: {} };
+
         if (secrets.length > 0) {
-          codesMap = await ipcRenderer.invoke('get-all-totp-codes', secrets) || {};
+          codeSets = await ipcRenderer.invoke('get-all-totp-codes', secrets) || codeSets;
         }
-        
+
         const withCodes = data.map((auth) => ({
           ...auth,
-          currentCode: codesMap[auth.secret] || '---'
+          currentCode: codeSets.codes?.[auth.secret] || '---',
+          nextCode: codeSets.nextCodes?.[auth.secret] || '---'
         }));
         setAuthenticators(withCodes);
       } else {
@@ -122,28 +285,29 @@ const Authenticator = () => {
     // Listen for TOTP code updates via WebSocket
     const handleTOTPUpdate = (event, data) => {
       if (data && data.codes) {
-        // Update codes for regular authenticators
-        const updated = authenticators.map((auth) => ({
-          ...auth,
-          currentCode: data.codes[auth.secret] || auth.currentCode || '---'
-        }));
-        setAuthenticators(updated);
-        
-        // Update codes for trash entries if in trash view
-        if (viewMode === 'trash' && trashEntries.length > 0) {
-          const updatedTrash = trashEntries.map((entry) => ({
-            ...entry,
-            currentCode: data.codes[entry.secret] || entry.currentCode || '---'
-          }));
-          setTrashEntries(updatedTrash);
+        setAuthenticators((prev) =>
+          prev.map((auth) => ({
+            ...auth,
+            currentCode: data.codes[auth.secret] || auth.currentCode || '---',
+            nextCode: data.nextCodes?.[auth.secret] || auth.nextCode || '---'
+          }))
+        );
+
+        if (viewMode === 'trash') {
+          setTrashEntries((prev) =>
+            prev.map((entry) => ({
+              ...entry,
+              currentCode: data.codes[entry.secret] || entry.currentCode || '---',
+              nextCode: data.nextCodes?.[entry.secret] || entry.nextCode || '---'
+            }))
+          );
         }
-        
-        // Update time remaining from server
+
         if (data.timeRemaining !== undefined) {
           setTimeRemaining(data.timeRemaining);
         }
-        
-        setUpdateKey(prev => prev + 1); // Force re-render
+
+        setUpdateKey((prev) => prev + 1);
       }
     };
     
@@ -304,15 +468,16 @@ const Authenticator = () => {
       // Initialize codes using batch API (single call instead of multiple)
       if (entries && entries.length > 0) {
         const secrets = entries.map(entry => entry.secret).filter(Boolean);
-        let codesMap = {};
-        
+        let codeSets = { codes: {}, nextCodes: {} };
+
         if (secrets.length > 0) {
-          codesMap = await ipcRenderer.invoke('get-all-totp-codes', secrets) || {};
+          codeSets = await ipcRenderer.invoke('get-all-totp-codes', secrets) || codeSets;
         }
-        
+
         const withCodes = entries.map((entry) => ({
           ...entry,
-          currentCode: codesMap[entry.secret] || '---'
+          currentCode: codeSets.codes?.[entry.secret] || '---',
+          nextCode: codeSets.nextCodes?.[entry.secret] || '---'
         }));
         setTrashEntries(withCodes);
         setFilteredTrashEntries(withCodes);
@@ -392,6 +557,145 @@ const Authenticator = () => {
   const currentItems = viewMode === 'regular' ? filteredAuthenticators : filteredTrashEntries;
   const hasItems = viewMode === 'regular' ? authenticators.length > 0 : trashEntries.length > 0;
 
+  const renderAuthenticatorCard = (item) => {
+    const subtitle = getCardSubtitle(item);
+    const progressPct = Math.max(0, Math.min(100, (timeRemaining / TOTP_PERIOD) * 100));
+
+    return (
+      <article
+        key={item.id}
+        className="flex min-w-[240px] flex-1 basis-[260px] max-w-full flex-col overflow-hidden rounded-xl border border-theme bg-theme-card transition-shadow hover:shadow-sm sm:max-w-[320px]"
+      >
+        <div className="h-1 w-full bg-theme-secondary" aria-hidden="true">
+          <div
+            className="h-full transition-[width,background-color] duration-1000 ease-linear"
+            style={{
+              width: `${progressPct}%`,
+              backgroundColor: getProgressBarColor(timeRemaining)
+            }}
+          />
+        </div>
+
+        <div className="flex flex-1 flex-col p-3.5">
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h3 className="truncate text-base font-semibold leading-tight text-theme-primary">
+                {item.name}
+              </h3>
+              {subtitle ? (
+                <p className="mt-0.5 truncate text-xs text-theme-muted">{subtitle}</p>
+              ) : null}
+            </div>
+            <AuthenticatorCardLogo item={item} />
+          </div>
+
+          <div className="flex items-end justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => handleCopyCode(item.currentCode)}
+              className="group min-w-0 text-left transition-opacity hover:opacity-80"
+              title="Click to copy current code"
+            >
+              <span className="font-mono text-xl font-bold leading-none tracking-[0.12em] text-theme-primary sm:text-2xl">
+                {formatTotpCode(item.currentCode)}
+              </span>
+            </button>
+
+            <div className="shrink-0 text-right">
+              <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-theme-muted">next</div>
+              <button
+                type="button"
+                onClick={() => handleCopyCode(item.nextCode)}
+                className="font-mono text-sm text-theme-muted transition-colors hover:text-theme-primary"
+                title="Click to copy next code"
+              >
+                {formatTotpCode(item.nextCode)}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-0.5 border-t border-theme pt-2.5">
+            {item.url ? (
+              <button
+                type="button"
+                onClick={() => handleOpenUrl(item.url)}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-blue-500 transition-colors hover:bg-blue-500/10"
+                title="Open link"
+              >
+                <MdOpenInNew className="h-3.5 w-3.5" />
+                <span className="max-w-[100px] truncate">Open</span>
+              </button>
+            ) : null}
+            {item.username ? (
+              <button
+                type="button"
+                onClick={() => handleCopyPassword(item.username)}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-theme-primary transition-colors hover:bg-theme-secondary"
+                title="Copy username"
+              >
+                <MdContentCopy className="h-3 w-3" />
+                <span className="max-w-[80px] truncate">User</span>
+              </button>
+            ) : null}
+            {item.password ? (
+              <button
+                type="button"
+                onClick={() => handleCopyPassword(item.password)}
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-theme-primary transition-colors hover:bg-theme-secondary"
+                title="Copy password"
+              >
+                <MdContentCopy className="h-3 w-3" />
+                <span>Pass</span>
+              </button>
+            ) : null}
+
+            <div className="ml-auto flex items-center gap-0.5">
+              {viewMode === 'regular' ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenModal(item)}
+                    className="rounded-md p-1.5 text-blue-500 transition-colors hover:bg-blue-500/10"
+                    title="Edit"
+                  >
+                    <MdEdit className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteClick(item)}
+                    className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-500/10"
+                    title="Delete"
+                  >
+                    <MdDelete className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleRestoreFromTrash(item.id)}
+                    className="rounded-md p-1.5 text-blue-500 transition-colors hover:bg-blue-500/10"
+                    title="Restore"
+                  >
+                    <MdRestore className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePermanentlyDelete(item.id)}
+                    className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-500/10"
+                    title="Permanently delete"
+                  >
+                    <MdDeleteForever className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
   return (
     <div className="h-full overflow-auto p-4">
       <div className="flex items-center justify-between mb-4 gap-3">
@@ -463,122 +767,8 @@ const Authenticator = () => {
           <p className="text-theme-muted">No items match your search</p>
         </div>
       ) : (
-        <div className="bg-theme-card border border-theme rounded-lg overflow-hidden flex flex-col" style={{ maxHeight: 'calc(100vh - 200px)' }}>
-          <div className="overflow-x-auto overflow-y-auto flex-1">
-            <table className="w-full">
-              <thead className="sticky top-0 z-10">
-                <tr className="border-b border-theme bg-theme-secondary">
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-theme-primary">Name</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-theme-primary">URL</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-theme-primary">Username</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-theme-primary">Password</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-theme-primary">
-                    Code ({timeRemaining}s)
-                  </th>
-                  <th className="px-3 py-2 text-center text-xs font-semibold text-theme-primary">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentItems.map((item) => (
-                  <tr key={item.id} className="border-b border-theme hover:bg-theme-secondary transition-colors">
-                    <td className="px-3 py-2 text-sm text-theme-primary">{item.name}</td>
-                    <td className="px-3 py-2">
-                      {item.url ? (
-                        <button
-                          onClick={() => handleOpenUrl(item.url)}
-                          className="flex items-center gap-1 text-blue-500 hover:text-blue-600 transition-colors text-sm"
-                        >
-                          <MdOpenInNew className="w-3 h-3" />
-                          <span className="truncate max-w-xs">{item.url}</span>
-                        </button>
-                      ) : (
-                        <span className="text-theme-muted text-sm">-</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {item.username ? (
-                        <button
-                          onClick={() => handleCopyPassword(item.username)}
-                          className="flex items-center gap-1 text-theme-primary hover:text-red-500 transition-colors text-sm"
-                          title="Click to copy username"
-                        >
-                          <span className="text-sm">{item.username}</span>
-                          <MdContentCopy className="w-3 h-3 flex-shrink-0" />
-                        </button>
-                      ) : (
-                        <span className="text-theme-muted text-sm">-</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {item.password ? (
-                        <button
-                          onClick={() => handleCopyPassword(item.password)}
-                          className="flex items-center gap-1 text-theme-primary hover:text-red-500 transition-colors text-sm"
-                          title="Click to copy password"
-                        >
-                          <MdContentCopy className="w-3 h-3" />
-                          <span className="font-mono">••••••••</span>
-                        </button>
-                      ) : (
-                        <span className="text-theme-muted text-sm">-</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <button
-                        onClick={() => handleCopyCode(item.currentCode)}
-                        className="flex items-center gap-1 text-theme-primary hover:text-red-500 transition-colors cursor-pointer"
-                        title="Click to copy code"
-                      >
-                        <span className="font-mono text-base font-semibold">
-                          {item.currentCode || '---'}
-                        </span>
-                        <MdContentCopy className="w-3 h-3 flex-shrink-0" />
-                      </button>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center justify-center gap-1">
-                        {viewMode === 'regular' ? (
-                          <>
-                        <button
-                              onClick={() => handleOpenModal(item)}
-                          className="p-1.5 text-blue-500 hover:bg-blue-500/10 rounded transition-colors"
-                          title="Edit"
-                        >
-                          <MdEdit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                              onClick={() => handleDeleteClick(item)}
-                          className="p-1.5 text-red-500 hover:bg-red-500/10 rounded transition-colors"
-                          title="Delete"
-                        >
-                          <MdDelete className="w-3.5 h-3.5" />
-                        </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => handleRestoreFromTrash(item.id)}
-                              className="p-1.5 text-blue-500 hover:bg-blue-500/10 rounded transition-colors"
-                              title="Restore"
-                            >
-                              <MdRestore className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handlePermanentlyDelete(item.id)}
-                              className="p-1.5 text-red-500 hover:bg-red-500/10 rounded transition-colors"
-                              title="Permanently delete"
-                            >
-                              <MdDeleteForever className="w-3.5 h-3.5" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="flex max-h-[calc(100vh-200px)] flex-wrap content-start gap-3 overflow-y-auto pr-1">
+          {currentItems.map((item) => renderAuthenticatorCard(item))}
         </div>
       )}
 

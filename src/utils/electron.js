@@ -745,7 +745,7 @@ const createBrowserIpcRenderer = () => {
           });
           if (response.ok) {
             const result = await response.json();
-            return result.codes;
+            return { codes: result.codes || {}, nextCodes: result.nextCodes || {} };
           }
           const error = await response.json();
           throw new Error(error.error || 'Failed to get all TOTP codes');
