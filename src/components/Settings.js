@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MdSettings, MdMemory, MdStorage, MdNetworkCheck, MdBatteryFull, MdAccessTime, MdPowerSettingsNew, MdPalette, MdVisibility, MdVisibilityOff, MdFileDownload, MdFileUpload, MdDeleteForever, MdSmartToy } from 'react-icons/md';
 import TimezoneDropdown from './TimezoneDropdown';
 import { getIpcRenderer, isElectron } from '../utils/electron';
+import { openExternalUrl } from '../utils/openExternalUrl';
 import { getEnabledProviders, PROVIDER_META } from '../utils/agentProvidersClient';
 import { getRoute, navigate, subscribe, SETTINGS_SECTION_IDS } from '../utils/appRoute';
 
@@ -527,13 +528,8 @@ const Settings = () => {
   };
 
   const openWebUrl = () => {
-    const url = 'http://localhost:65530';
-    ipcRenderer.invoke('open-external-url', url).catch(error => {
+    openExternalUrl('http://localhost:65530').catch((error) => {
       console.error('Error opening URL:', error);
-      // Fallback: try using window.open if in browser
-      if (typeof window !== 'undefined' && window.open) {
-        window.open(url, '_blank');
-      }
     });
   };
 

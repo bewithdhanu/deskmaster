@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { isExternalAppUrl, openExternalUrl } from '../utils/openExternalUrl';
 
 const markdownComponents = {
   p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
@@ -26,7 +27,18 @@ const markdownComponents = {
   },
   pre: ({ children }) => <pre className="mb-2 overflow-x-auto rounded-md bg-theme-secondary p-3 text-xs last:mb-0">{children}</pre>,
   a: ({ href, children }) => (
-    <a href={href} className="text-red-500 underline hover:text-red-400" target="_blank" rel="noopener noreferrer">
+    <a
+      href={isExternalAppUrl(href) ? '#' : href}
+      className="text-red-500 underline hover:text-red-400"
+      rel="noopener noreferrer"
+      onClick={(event) => {
+        if (!isExternalAppUrl(href)) return;
+        event.preventDefault();
+        openExternalUrl(href).catch((error) => {
+          console.warn('Failed to open link:', error);
+        });
+      }}
+    >
       {children}
     </a>
   ),
