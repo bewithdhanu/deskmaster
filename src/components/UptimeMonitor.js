@@ -14,6 +14,7 @@ import {
   MdSwapVert
 } from 'react-icons/md';
 import { getIpcRenderer } from '../utils/electron';
+import { openExternalUrl } from '../utils/openExternalUrl';
 import { formatFilteredMonitorStatusText, getMonitorStatusVariant, isMonitorAttentionStatus } from '../utils/uptimeKuma';
 import UptimeStatsSummary from './UptimeStatsSummary';
 import './uptime-monitor.css';
@@ -530,7 +531,13 @@ function MonitorTable({
                     <div className="uptime-domain-cell">
                       <span>{monitor.name}</span>
                       {monitor.url ? (
-                        <a href={monitor.url} target="_blank" rel="noreferrer">{monitor.domain}</a>
+                        <button
+                          type="button"
+                          onClick={() => openExternalUrl(monitor.url)}
+                          className="uptime-domain-link"
+                        >
+                          {monitor.domain}
+                        </button>
                       ) : (
                         <span>{monitor.domain}</span>
                       )}

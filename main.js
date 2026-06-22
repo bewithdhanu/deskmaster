@@ -534,6 +534,45 @@ function scheduleSaveMainWindowState() {
   }, 400)
 }
 
+function isAppRendererNavigationUrl(urlString) {
+  try {
+    const url = new URL(urlString)
+    if (url.protocol === 'file:') {
+      return /\/index\.html$/i.test(url.pathname)
+    }
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      const isLocalHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost'
+      return isLocalHost && /\/index\.html$/i.test(url.pathname)
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+function shouldOpenUrlInSystemBrowser(urlString) {
+  return /^https?:\/\//i.test(String(urlString || '').trim())
+}
+
+function registerExternalLinkHandlers(webContents) {
+  if (!webContents || webContents.isDestroyed()) return
+
+  webContents.setWindowOpenHandler(({ url }) => {
+    if (shouldOpenUrlInSystemBrowser(url)) {
+      shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+
+  webContents.on('will-navigate', (event, url) => {
+    if (isAppRendererNavigationUrl(url)) return
+    event.preventDefault()
+    if (shouldOpenUrlInSystemBrowser(url)) {
+      shell.openExternal(url)
+    }
+  })
+}
+
 function createWindow() {
   const initialBounds = sanitizeMainWindowBounds(appSettings.mainWindow)
   
@@ -571,6 +610,8 @@ function createWindow() {
     // DevTools available but not opened automatically
     // User can open manually with Cmd+Option+I or right-click context menu
   }
+
+  registerExternalLinkHandlers(win.webContents)
 
   win.webContents.on('did-finish-load', () => {
     // Send initial theme to renderer

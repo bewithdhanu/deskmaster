@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MdClose, MdContentCopy, MdCheck, MdOpenInNew } from 'react-icons/md';
 import { getIpcRenderer } from '../../utils/electron';
+import { openExternalUrl } from '../../utils/openExternalUrl';
 
 const ipcRenderer = getIpcRenderer();
 
@@ -68,7 +69,9 @@ const OneTimeSecretTool = ({ onClose }) => {
 
   const handleOpenUrl = () => {
     if (secretUrl) {
-      window.open(secretUrl, '_blank');
+      openExternalUrl(secretUrl).catch((error) => {
+        console.error('Error opening secret URL:', error);
+      });
     }
   };
 

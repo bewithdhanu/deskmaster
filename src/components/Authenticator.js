@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MdAdd, MdEdit, MdDelete, MdContentCopy, MdOpenInNew, MdSearch, MdDeleteForever, MdRestore } from 'react-icons/md';
 import { getIpcRenderer } from '../utils/electron';
 import { getCachedAuthenticatorLogo, getFaviconUrl, loadAuthenticatorLogo } from '../utils/authenticatorLogoCache';
+import { openExternalUrl } from '../utils/openExternalUrl';
 
 const ipcRenderer = getIpcRenderer();
 
@@ -446,7 +447,7 @@ const Authenticator = () => {
   const handleOpenUrl = async (url) => {
     if (!url) return;
     try {
-      await ipcRenderer.invoke('open-external-url', url);
+      await openExternalUrl(url);
     } catch (error) {
       console.error('Error opening URL:', error);
     }
