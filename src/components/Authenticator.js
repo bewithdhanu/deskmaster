@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MdAdd, MdEdit, MdDelete, MdContentCopy, MdOpenInNew, MdSearch, MdDeleteForever, MdRestore } from 'react-icons/md';
 import { getIpcRenderer } from '../utils/electron';
 import { getCachedAuthenticatorLogo, getFaviconUrl, loadAuthenticatorLogo } from '../utils/authenticatorLogoCache';
@@ -7,6 +7,9 @@ import { openExternalUrl } from '../utils/openExternalUrl';
 const ipcRenderer = getIpcRenderer();
 
 const TOTP_PERIOD = 30;
+const INACTIVITY_MS = 60 * 1000;
+const RESUMED_NOTICE_MS = 3000;
+const PAUSED_ON_LEAVE_KEY = 'deskmaster-authenticator-was-paused';
 
 function getProgressBarColor(timeRemaining) {
   const ratio = Math.max(0, Math.min(1, timeRemaining / TOTP_PERIOD));
@@ -189,8 +192,42 @@ const Authenticator = () => {
   const [viewMode, setViewMode] = useState('regular'); // 'regular' or 'trash'
   const [trashEntries, setTrashEntries] = useState([]);
   const [filteredTrashEntries, setFilteredTrashEntries] = useState([]);
-  const timerIntervalRef = useRef(null); // Single interval for both timer and codes
+  const [isPaused, setIsPaused] = useState(false);
+  const [showResumedNotice, setShowResumedNotice] = useState(false);
+  const timerIntervalRef = useRef(null);
   const previousRemainingRef = useRef(30);
+  const lastActivityRef = useRef(Date.now());
+  const inactivityTimerRef = useRef(null);
+  const isPausedRef = useRef(false);
+  const resumedNoticeTimerRef = useRef(null);
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
+  const clearInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleInactivityPause = useCallback(() => {
+    clearInactivityTimer();
+    if (isPausedRef.current) return;
+
+    inactivityTimerRef.current = setTimeout(() => {
+      setIsPaused(true);
+    }, INACTIVITY_MS);
+  }, [clearInactivityTimer]);
+
+  const registerActivity = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    if (!isPausedRef.current) {
+      scheduleInactivityPause();
+    }
+  }, [scheduleInactivityPause]);
 
   // Load authenticators
   const loadAuthenticators = async () => {
@@ -219,6 +256,18 @@ const Authenticator = () => {
       setIsLoading(false);
     }
   };
+
+  const handleResume = useCallback(async () => {
+    setIsPaused(false);
+    lastActivityRef.current = Date.now();
+    scheduleInactivityPause();
+
+    try {
+      await loadAuthenticators();
+    } catch (error) {
+      console.error('Error refreshing authenticators after resume:', error);
+    }
+  }, [scheduleInactivityPause]);
 
   // Calculate time remaining client-side (no API call needed)
   const getTimeRemaining = () => {
@@ -269,8 +318,53 @@ const Authenticator = () => {
     loadAuthenticators();
   }, []);
 
+  useEffect(() => {
+    if (sessionStorage.getItem(PAUSED_ON_LEAVE_KEY)) {
+      sessionStorage.removeItem(PAUSED_ON_LEAVE_KEY);
+      setShowResumedNotice(true);
+      resumedNoticeTimerRef.current = setTimeout(() => {
+        setShowResumedNotice(false);
+      }, RESUMED_NOTICE_MS);
+    }
+
+    const panel = panelRef.current;
+    if (!panel || isLoading) return undefined;
+
+    // Only interaction inside the Authenticator panel counts — not other tabs or apps.
+    const activityEvents = ['mousedown', 'click', 'keydown', 'scroll', 'touchstart', 'input', 'wheel'];
+    const listenerOptions = { passive: true, capture: true };
+
+    activityEvents.forEach((eventName) => {
+      panel.addEventListener(eventName, registerActivity, listenerOptions);
+    });
+    registerActivity();
+
+    return () => {
+      if (isPausedRef.current) {
+        sessionStorage.setItem(PAUSED_ON_LEAVE_KEY, '1');
+      }
+      clearInactivityTimer();
+      if (resumedNoticeTimerRef.current) {
+        clearTimeout(resumedNoticeTimerRef.current);
+      }
+      activityEvents.forEach((eventName) => {
+        panel.removeEventListener(eventName, registerActivity, listenerOptions);
+      });
+    };
+  }, [isLoading, registerActivity, clearInactivityTimer]);
+
+  useEffect(() => {
+    if (isPaused || isLoading) {
+      clearInactivityTimer();
+    } else {
+      registerActivity();
+    }
+  }, [isPaused, isLoading, clearInactivityTimer, registerActivity]);
+
   // WebSocket-based updates - listen for TOTP code updates from server
   useEffect(() => {
+    if (isPaused) return undefined;
+
     // Update timer immediately (client-side calculation)
     const updateTimer = () => {
       setTimeRemaining(getTimeRemaining());
@@ -326,7 +420,7 @@ const Authenticator = () => {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticators.length, trashEntries.length, viewMode]);
+  }, [isPaused, authenticators.length, trashEntries.length, viewMode]);
 
   // Removed duplicate interval - code updates are now handled in the combined timer effect above
 
@@ -437,6 +531,7 @@ const Authenticator = () => {
   };
 
   const handleCopyPassword = async (password) => {
+    registerActivity();
     try {
       await ipcRenderer.invoke('copy-to-clipboard', password);
     } catch (error) {
@@ -446,6 +541,7 @@ const Authenticator = () => {
 
   const handleOpenUrl = async (url) => {
     if (!url) return;
+    registerActivity();
     try {
       await openExternalUrl(url);
     } catch (error) {
@@ -454,6 +550,7 @@ const Authenticator = () => {
   };
 
   const handleCopyCode = async (code) => {
+    registerActivity();
     try {
       await ipcRenderer.invoke('copy-to-clipboard', code);
     } catch (error) {
@@ -546,7 +643,7 @@ const Authenticator = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div ref={panelRef} className="relative flex h-full items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-theme-primary mx-auto mb-2"></div>
           <p className="text-theme-muted text-sm">Loading authenticators...</p>
@@ -698,7 +795,32 @@ const Authenticator = () => {
   };
 
   return (
-    <div className="h-full overflow-auto p-4">
+    <div ref={panelRef} className="relative h-full overflow-auto p-4">
+      {showResumedNotice ? (
+        <div className="absolute left-1/2 top-4 z-30 -translate-x-1/2 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-sm font-medium text-green-500 shadow-sm">
+          Authenticator resumed
+        </div>
+      ) : null}
+
+      {isPaused ? (
+        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-theme-primary">
+          <div className="mx-4 max-w-sm rounded-xl border border-theme bg-theme-card px-6 py-8 text-center shadow-lg">
+            <h3 className="text-lg font-semibold text-theme-primary">Authenticator paused</h3>
+            <p className="mt-2 text-sm text-theme-muted">
+              Codes are hidden after one minute without use in this view.
+            </p>
+            <button
+              type="button"
+              onClick={handleResume}
+              className="mt-6 rounded-lg bg-red-500 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-600"
+            >
+              Resume
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className={isPaused ? 'pointer-events-none select-none blur-sm' : undefined}>
       <div className="flex items-center justify-between mb-4 gap-3">
         <h2 className="text-xl font-semibold text-theme-primary">
           {viewMode === 'trash' ? 'Trash' : 'Authenticator'}
@@ -712,7 +834,10 @@ const Authenticator = () => {
                 type="text"
                 placeholder="Search by name or URL..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  registerActivity();
+                  setSearchQuery(e.target.value);
+                }}
                 className="w-64 pl-10 pr-4 py-2 bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-muted focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
@@ -879,6 +1004,7 @@ const Authenticator = () => {
         </div>
       )}
 
+      </div>
     </div>
   );
 };
