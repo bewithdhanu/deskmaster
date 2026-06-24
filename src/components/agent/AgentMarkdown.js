@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { isExternalAppUrl, openExternalUrl } from '../utils/openExternalUrl';
+import { isExternalAppUrl, openExternalUrl } from '../../utils/openExternalUrl';
 
 const markdownComponents = {
   p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
