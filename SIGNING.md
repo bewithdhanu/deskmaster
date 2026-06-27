@@ -154,6 +154,25 @@ For automated signing in CI/CD, add these secrets to your GitHub repository:
 
 Then update your GitHub Actions workflow to import the certificate and set environment variables.
 
+### Export certificate for GitHub Actions
+
+1. In Keychain Access, export your **Developer ID Application** certificate as a `.p12` file
+2. Encode it for the `APPLE_CERTIFICATE` secret:
+
+```bash
+base64 -i Certificates.p12 | pbcopy
+```
+
+3. Add repository secrets (Settings → Secrets and variables → Actions):
+   - `APPLE_ID` — Apple ID email
+   - `APPLE_APP_SPECIFIC_PASSWORD` — app-specific password from appleid.apple.com
+   - `APPLE_TEAM_ID` — 10-character Team ID
+   - `APPLE_IDENTITY` — full identity string from `security find-identity -v -p codesigning`
+   - `APPLE_CERTIFICATE` — base64-encoded `.p12` (paste from step 2)
+   - `APPLE_CERTIFICATE_PASSWORD` — password used when exporting the `.p12` (empty string if none)
+
+Release workflows import the certificate via `.github/actions/setup-macos-signing` and fail the build if signing or notarization cannot complete.
+
 ## Benefits of Signing and Notarization
 
 ✅ **No "untrusted developer" warnings**  

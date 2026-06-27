@@ -29,10 +29,23 @@ jobs:
       - name: Build React apps
         run: npm run build-react
 
+      - name: Setup macOS code signing
+        uses: ./.github/actions/setup-macos-signing
+        with:
+          apple_certificate: ${{ secrets.APPLE_CERTIFICATE }}
+          apple_certificate_password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
       - name: Build Electron app
         run: npm run dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
+
+      - name: Verify macOS signatures
+        run: bash scripts/ci-verify-macos-signing.sh
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
