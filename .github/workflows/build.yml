@@ -35,32 +35,15 @@ jobs:
       - name: Build React applications
         run: npm run build-app
 
-      - name: Setup macOS code signing
-        uses: ./.github/actions/setup-macos-signing
-        with:
-          apple_certificate: ${{ secrets.APPLE_CERTIFICATE }}
-          apple_certificate_password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
       - name: Build for macOS (Apple Silicon)
-        run: npx electron-builder --mac --arm64 --publish=never
+        run: npm run build-mac-ci-arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
 
       - name: Build for macOS (Intel)
-        run: npx electron-builder --mac --x64 --publish=never
+        run: npm run build-mac-ci-x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
-
-      - name: Verify macOS signatures
-        run: bash scripts/ci-verify-macos-signing.sh
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -109,8 +92,10 @@ jobs:
             ### 🔧 Installation
             1. Download the appropriate DMG file for your Mac
             2. Open the DMG file and drag DeskMaster to Applications
-            3. Launch DeskMaster from Applications or Spotlight
-            4. Enjoy your desktop productivity tool!
+            3. If macOS blocks the app, run: `xattr -cr /Applications/DeskMaster.app`
+            4. Launch DeskMaster from Applications or Spotlight
+            
+            **Note:** CI builds are unsigned. Use Right-click → Open the first time, or clear quarantine with `xattr` as above.
             
             ### 🐛 Issues
             Report issues at: https://github.com/bewithdhanu/deskmaster/issues

@@ -11,12 +11,8 @@ exports.default = async function notarizing(context) {
     !process.env.APPLE_TEAM_ID
 
   if (missingCredentials) {
-    const message = 'Notarization requires APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID'
-    if (process.env.CI || process.env.GITHUB_ACTIONS) {
-      throw new Error(`❌ ${message}`)
-    }
     console.warn('⚠️  Notarization skipped: Missing credentials')
-    console.warn(`   ${message}`)
+    console.warn('   Set APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID to enable notarization')
     return
   }
 

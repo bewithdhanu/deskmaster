@@ -32,24 +32,10 @@ jobs:
       - name: Build React applications
         run: npm run build-app
 
-      - name: Setup macOS code signing
-        uses: ./.github/actions/setup-macos-signing
-        with:
-          apple_certificate: ${{ secrets.APPLE_CERTIFICATE }}
-          apple_certificate_password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
-      - name: Build macOS (Apple Silicon + Intel)
+      - name: Build macOS (Apple Silicon + Intel, unsigned)
         run: |
-          npx electron-builder --mac --arm64 --publish=never --dir
-          npx electron-builder --mac --x64 --publish=never --dir
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_IDENTITY: ${{ secrets.APPLE_IDENTITY }}
-
-      - name: Verify macOS signatures
-        run: bash scripts/ci-verify-macos-signing.sh
+          CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --arm64 --publish=never --dir --config electron-builder.ci.json
+          CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --x64 --publish=never --dir --config electron-builder.ci.json
 
       - name: Create ZIP for macOS
         run: |
