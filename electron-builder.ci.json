@@ -1,9 +1,0 @@
-{
-  "mac": {
-    "identity": null,
-    "hardenedRuntime": false,
-    "gatekeeperAssess": false,
-    "notarize": false
-  },
-  "afterSign": null
-}
