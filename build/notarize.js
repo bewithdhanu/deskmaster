@@ -6,11 +6,18 @@ exports.default = async function notarizing(context) {
     return;
   }
 
-  // Skip notarization if credentials are not provided
-  if (!process.env.APPLE_ID || !process.env.APPLE_APP_SPECIFIC_PASSWORD || !process.env.APPLE_TEAM_ID) {
-    console.warn('⚠️  Notarization skipped: Missing credentials');
-    console.warn('   Set APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID environment variables to enable notarization');
-    return;
+  const missingCredentials = !process.env.APPLE_ID ||
+    !process.env.APPLE_APP_SPECIFIC_PASSWORD ||
+    !process.env.APPLE_TEAM_ID
+
+  if (missingCredentials) {
+    const message = 'Notarization requires APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID'
+    if (process.env.CI || process.env.GITHUB_ACTIONS) {
+      throw new Error(`❌ ${message}`)
+    }
+    console.warn('⚠️  Notarization skipped: Missing credentials')
+    console.warn(`   ${message}`)
+    return
   }
 
   // Dynamic import for ES module support
