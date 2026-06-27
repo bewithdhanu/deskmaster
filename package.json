@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "3.6.5",
+  "version": "3.6.6",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -12,9 +12,9 @@
     "build-mac-arm64": "npx electron-builder --mac --arm64",
     "build-mac-x64": "npx electron-builder --mac --x64",
     "build-mac-universal": "npx electron-builder --mac --universal",
-    "build-mac-ci-arm64": "CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --arm64 --publish=never --config electron-builder.ci.json",
-    "build-mac-ci-x64": "CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --x64 --publish=never --config electron-builder.ci.json",
-    "dist-ci": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish=never --config electron-builder.ci.json",
+    "build-mac-ci-arm64": "CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --arm64 --publish=never -c.mac.identity=null -c.mac.hardenedRuntime=false -c.mac.gatekeeperAssess=false -c.afterSign=null",
+    "build-mac-ci-x64": "CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --x64 --publish=never -c.mac.identity=null -c.mac.hardenedRuntime=false -c.mac.gatekeeperAssess=false -c.afterSign=null",
+    "dist-ci": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac --publish=never -c.mac.identity=null -c.mac.hardenedRuntime=false -c.mac.gatekeeperAssess=false -c.afterSign=null",
     "install-deps": "npm install electron systeminformation --save",
     "build-react": "webpack --mode production",
     "dev-react": "webpack serve --mode development",

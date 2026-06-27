@@ -34,8 +34,8 @@ jobs:
 
       - name: Build macOS (Apple Silicon + Intel, unsigned)
         run: |
-          CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --arm64 --publish=never --dir --config electron-builder.ci.json
-          CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --x64 --publish=never --dir --config electron-builder.ci.json
+          CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --arm64 --publish=never --dir -c.mac.identity=null -c.mac.hardenedRuntime=false -c.mac.gatekeeperAssess=false -c.afterSign=null
+          CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --x64 --publish=never --dir -c.mac.identity=null -c.mac.hardenedRuntime=false -c.mac.gatekeeperAssess=false -c.afterSign=null
 
       - name: Create ZIP for macOS
         run: |
