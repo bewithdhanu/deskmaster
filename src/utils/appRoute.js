@@ -7,6 +7,7 @@ const TAB_IDS = [
   'uptime',
   'clipboard',
   'authenticator',
+  'fake-identity',
   'settings'
 ]
 

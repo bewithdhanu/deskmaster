@@ -9,6 +9,7 @@ import UptimeMonitor from './components/UptimeMonitor';
 import Settings from './components/Settings';
 import Agent from './components/Agent';
 import Navigation from './components/Navigation';
+import FakeIdentityTool from './components/tools/FakeIdentityTool';
 import { getIpcRenderer } from './utils/electron';
 import { isUptimeKumaEnabled } from './utils/uptimeKuma';
 import { navigate } from './utils/appRoute';
@@ -231,6 +232,8 @@ function App() {
         return <Agent />;
       case 'uptime':
         return uptimeKumaEnabled ? <UptimeMonitor /> : <Tools />;
+      case 'fake-identity':
+        return <FakeIdentityTool variant="page" />;
       case 'settings':
         return <Settings />;
       default:

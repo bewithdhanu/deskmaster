@@ -8,6 +8,7 @@ import PinggyTunnelTool from './tools/PinggyTunnelTool';
 import TextReformatTool from './tools/TextReformatTool';
 import PasswordGenerator from './tools/PasswordGenerator';
 import OneTimeSecretTool from './tools/OneTimeSecretTool';
+import FakeIdentityTool from './tools/FakeIdentityTool';
 import { MdAdd, MdClose } from 'react-icons/md';
 import { getIpcRenderer } from '../utils/electron';
 import { isUptimeKumaEnabled } from '../utils/uptimeKuma';
@@ -23,7 +24,8 @@ const Tools = () => {
     'pinggy': true,
     'text-reformat': true,
     'password-generator': true,
-    'onetimesecret': true
+    'onetimesecret': true,
+    'fake-identity': true
   });
   const [toolOrder, setToolOrder] = useState([]);
   const [showAddToolModal, setShowAddToolModal] = useState(false);
@@ -38,10 +40,11 @@ const Tools = () => {
     { id: 'pinggy', name: 'Pinggy Tunnel', description: 'Create secure tunnels to local ports' },
     { id: 'text-reformat', name: 'Text Reformat', description: 'Reformat and translate text using your AI Agent model' },
     { id: 'password-generator', name: 'Password Generator', description: 'Generate strong passwords with customizable options' },
-    { id: 'onetimesecret', name: 'OneTimeSecret', description: 'Create anonymous one-time shareable secrets' }
+    { id: 'onetimesecret', name: 'OneTimeSecret', description: 'Create anonymous one-time shareable secrets' },
+    { id: 'fake-identity', name: 'Fake Identity', description: 'Generate AI-based fictional identity details by country' }
   ];
 
-  const defaultToolOrder = ['bcrypt-generate', 'bcrypt-verify', 'public-ip', 'ip-location', 'pinggy', 'text-reformat', 'password-generator', 'onetimesecret'];
+  const defaultToolOrder = ['bcrypt-generate', 'bcrypt-verify', 'public-ip', 'ip-location', 'pinggy', 'text-reformat', 'password-generator', 'onetimesecret', 'fake-identity'];
 
   // Load tool order and active tools from settings on mount (persisted until tool is uninstalled)
   useEffect(() => {
@@ -54,6 +57,9 @@ const Tools = () => {
             if (id === 'bcrypt') return ['bcrypt-generate', 'bcrypt-verify'];
             return id;
           }).flat();
+          if (!migratedOrder.includes('fake-identity')) {
+            migratedOrder.push('fake-identity');
+          }
           setToolOrder(migratedOrder);
         } else {
           setToolOrder(defaultToolOrder);
@@ -65,6 +71,10 @@ const Tools = () => {
             const saved = settings.activeTools[tool.id];
             merged[tool.id] = Object.prototype.hasOwnProperty.call(settings.activeTools, tool.id) ? saved !== false : false;
           });
+          // Introduce Fake Identity on Home for installs that have never seen it
+          if (!Object.prototype.hasOwnProperty.call(settings.activeTools, 'fake-identity')) {
+            merged['fake-identity'] = true;
+          }
           setActiveTools(merged);
         }
         setUptimeKumaEnabled(isUptimeKumaEnabled(settings));
@@ -218,6 +228,17 @@ const Tools = () => {
           );
         }
         return null;
+      case 'fake-identity':
+        if (activeTools['fake-identity']) {
+          return (
+            <FakeIdentityTool
+              key="fake-identity"
+              variant="widget"
+              onClose={handleCloseTool}
+            />
+          );
+        }
+        return null;
       default:
         return null;
     }
@@ -269,6 +290,9 @@ const Tools = () => {
     }
     if (activeTools['onetimesecret'] && !processedIds.has('onetimesecret')) {
       orderedTools.push(getToolComponent('onetimesecret'));
+    }
+    if (activeTools['fake-identity'] && !processedIds.has('fake-identity')) {
+      orderedTools.push(getToolComponent('fake-identity'));
     }
 
     return orderedTools.map((component) => {

@@ -613,6 +613,20 @@ const createBrowserIpcRenderer = () => {
           }
           const error = await response.json();
           throw new Error(error.error || 'Failed to apply AI edit');
+        } else if (channel === 'generate-fake-identity') {
+          const [options] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/generate-fake-identity`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(options && typeof options === 'object' ? options : {})
+          });
+          if (response.ok) {
+            const result = await response.json();
+            return result.identity;
+          }
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to generate fake identity');
         } else if (channel === 'create-onetimesecret') {
           const [secret, ttl] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });

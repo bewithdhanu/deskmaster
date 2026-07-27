@@ -1,5 +1,5 @@
 import React from 'react';
-import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity, MdNotes, MdComputer, MdSmartToy } from 'react-icons/md';
+import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity, MdNotes, MdComputer, MdSmartToy, MdPerson } from 'react-icons/md';
 
 const Navigation = ({ activeTab, onTabChange, uptimeKumaEnabled = true }) => {
   const menuItems = [
@@ -42,6 +42,11 @@ const Navigation = ({ activeTab, onTabChange, uptimeKumaEnabled = true }) => {
       id: 'authenticator',
       label: 'Authenticator',
       icon: <MdSecurity className="w-5 h-5" />
+    },
+    {
+      id: 'fake-identity',
+      label: 'Fake Identity',
+      icon: <MdPerson className="w-5 h-5" />
     },
     {
       id: 'settings',
