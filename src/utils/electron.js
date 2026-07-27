@@ -623,10 +623,18 @@ const createBrowserIpcRenderer = () => {
           });
           if (response.ok) {
             const result = await response.json();
-            return result.identity;
+            return result;
           }
           const error = await response.json();
           throw new Error(error.error || 'Failed to generate fake identity');
+        } else if (channel === 'get-fake-identity-meta') {
+          const headers = await addApiTokenToHeaders();
+          const response = await fetch(`${API_BASE}/get-fake-identity-meta`, { headers });
+          if (response.ok) {
+            return await response.json();
+          }
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.error || 'Failed to load fake identity meta');
         } else if (channel === 'create-onetimesecret') {
           const [secret, ttl] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });

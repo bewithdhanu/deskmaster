@@ -41,7 +41,20 @@ let appSettings = {
   },
   fakeIdentity: {
     country: 'United States',
-    customFields: []
+    selectedFields: [
+      'fullName',
+      'address',
+      'phone',
+      'secondaryPhone',
+      'email',
+      'workEmail',
+      'ssn',
+      'jobRole',
+      'latitude',
+      'longitude'
+    ],
+    customFields: [],
+    recordCount: 1
   },
   notesUi: {
     mode: 'notes',
