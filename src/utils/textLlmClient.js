@@ -39,7 +39,14 @@ export async function generateFakeIdentity(options = {}) {
     const result = await getIpcRenderer().invoke('generate-fake-identity', options);
     if (Array.isArray(result)) return result;
     if (result && Array.isArray(result.records)) return result.records;
-    if (result && typeof result === 'object' && result.fullName) return [result];
+    // Backward compatibility with older single-object responses
+    if (result && typeof result === 'object' && result.identity && typeof result.identity === 'object') {
+      return [result.identity];
+    }
+    if (result && typeof result === 'object' && (result.fullName || result.email || result.address)) {
+      return [result];
+    }
+    console.warn('generate-fake-identity returned unexpected payload:', result);
     return [];
   } catch (error) {
     throw normalizeError(error);
