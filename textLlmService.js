@@ -183,11 +183,120 @@ async function aiEditText(appSettings, text, action, extra = {}) {
   return completeWithAgentProviders(appSettings, messages)
 }
 
+const DEFAULT_IDENTITY_FIELDS = [
+  { key: 'fullName', label: 'Full Name', description: 'A realistic full legal name that fits the selected country' },
+  { key: 'address', label: 'Address', description: 'A realistic street address (street, city, region/state, postal code) in that country' },
+  { key: 'phone', label: 'Phone', description: 'Primary phone number in a realistic local format for that country' },
+  { key: 'secondaryPhone', label: 'Secondary Phone', description: 'A different alternate phone number in local format' },
+  { key: 'email', label: 'Email', description: 'A realistic personal email address matching the name' },
+  { key: 'workEmail', label: 'Work Email', description: 'A realistic work email that fits the job role and name' },
+  { key: 'ssn', label: 'National ID / SSN', description: 'A fake national ID / SSN / tax ID in a plausible format for that country (must be clearly fictional)' },
+  { key: 'jobRole', label: 'Job Role', description: 'A realistic job title / role' },
+  { key: 'latitude', label: 'Latitude', description: 'Decimal latitude near the given address' },
+  { key: 'longitude', label: 'Longitude', description: 'Decimal longitude near the given address' }
+]
+
+function normalizeCustomFields(customFields) {
+  if (!Array.isArray(customFields)) return []
+  return customFields
+    .map((field, index) => {
+      const name = typeof field?.name === 'string' ? field.name.trim() : ''
+      const description = typeof field?.description === 'string' ? field.description.trim() : ''
+      if (!name) return null
+      const key = typeof field?.key === 'string' && field.key.trim()
+        ? field.key.trim()
+        : `custom_${name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || index}`
+      return { key, name, description: description || name }
+    })
+    .filter(Boolean)
+}
+
+function parseJsonObjectFromModel(text) {
+  const raw = String(text || '').trim()
+  if (!raw) throw new Error('Empty response from model')
+
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  const candidate = (fenced ? fenced[1] : raw).trim()
+
+  try {
+    const parsed = JSON.parse(candidate)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+  } catch (_) {}
+
+  const start = candidate.indexOf('{')
+  const end = candidate.lastIndexOf('}')
+  if (start !== -1 && end > start) {
+    const sliced = candidate.slice(start, end + 1)
+    const parsed = JSON.parse(sliced)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed
+  }
+
+  throw new Error('Model did not return valid JSON identity data')
+}
+
+function getFakeIdentityMessages(country, customFields = []) {
+  const countryName = typeof country === 'string' && country.trim() ? country.trim() : 'United States'
+  const extras = normalizeCustomFields(customFields)
+
+  const fieldLines = [
+    ...DEFAULT_IDENTITY_FIELDS.map((f) => `- "${f.key}": ${f.description}`),
+    ...extras.map((f) => `- "${f.key}": ${f.description}`)
+  ].join('\n')
+
+  const keys = [
+    ...DEFAULT_IDENTITY_FIELDS.map((f) => f.key),
+    ...extras.map((f) => f.key)
+  ]
+
+  const systemPrompt = `You generate fictional identity profiles for software testing and UI demos only.
+Rules:
+1. All data must be fake and randomly generated — never use real people.
+2. Names, addresses, phones, and IDs must match the conventions of the selected country.
+3. Coordinates must be plausible for the address location.
+4. Output a single JSON object only. No markdown, no commentary.
+5. Use exactly these keys: ${keys.join(', ')}
+6. Every value must be a string (including latitude/longitude).`
+
+  const userPrompt = `Generate one random fake identity for country: ${countryName}.
+
+Fields:
+${fieldLines}
+
+Return only the JSON object.`
+
+  return [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt }
+  ]
+}
+
+async function generateFakeIdentity(appSettings, options = {}) {
+  const country = typeof options.country === 'string' ? options.country : 'United States'
+  const customFields = normalizeCustomFields(options.customFields)
+  const messages = getFakeIdentityMessages(country, customFields)
+  const text = await completeWithAgentProviders(appSettings, messages)
+  const identity = parseJsonObjectFromModel(text)
+
+  const result = { country }
+  for (const field of DEFAULT_IDENTITY_FIELDS) {
+    const value = identity[field.key]
+    result[field.key] = value == null ? '' : String(value)
+  }
+  for (const field of customFields) {
+    const value = identity[field.key]
+    result[field.key] = value == null ? '' : String(value)
+  }
+  return result
+}
+
 module.exports = {
   translateText,
   reformatText,
   aiEditText,
+  generateFakeIdentity,
   getReformatMessages,
   getAiSelectionMessages,
+  getFakeIdentityMessages,
+  DEFAULT_IDENTITY_FIELDS,
   completeWithAgentProviders
 }

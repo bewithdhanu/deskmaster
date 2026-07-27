@@ -33,3 +33,11 @@ export async function translateText(text, targetLanguage) {
     throw normalizeError(error);
   }
 }
+
+export async function generateFakeIdentity(options = {}) {
+  try {
+    return await getIpcRenderer().invoke('generate-fake-identity', options);
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}

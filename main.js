@@ -1864,7 +1864,12 @@ function startBrowserApiServers() {
               'pinggy': true,
               'text-reformat': true,
               'password-generator': true,
-              'onetimesecret': true
+              'onetimesecret': true,
+              'fake-identity': true
+            },
+            fakeIdentity: {
+              country: 'United States',
+              customFields: []
             },
             notesUi: {
               mode: 'notes',
@@ -2199,6 +2204,19 @@ function startBrowserApiServers() {
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message || 'Failed to apply AI edit' }));
+        }
+      } else if (req.url === '/api/generate-fake-identity') {
+        const bodyData = JSON.parse(body || '{}');
+        try {
+          const identity = await textLlmService.generateFakeIdentity(appSettings, {
+            country: typeof bodyData.country === 'string' ? bodyData.country : 'United States',
+            customFields: Array.isArray(bodyData.customFields) ? bodyData.customFields : []
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ identity }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message || 'Failed to generate fake identity' }));
         }
       } else if (req.url === '/api/get-pinggy-instances') {
         try {
@@ -3805,7 +3823,12 @@ ipcMain.handle('reset-all-data', async (event) => {
         'pinggy': true,
         'text-reformat': true,
         'password-generator': true,
-        'onetimesecret': true
+        'onetimesecret': true,
+        'fake-identity': true
+      },
+      fakeIdentity: {
+        country: 'United States',
+        customFields: []
       },
       notesUi: {
         mode: 'notes',
@@ -3872,6 +3895,15 @@ ipcMain.handle('reformat-text', async (event, text, tones) => {
     return await textLlmService.reformatText(appSettings, text, tones);
   } catch (error) {
     console.error('Error reformatting text:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('generate-fake-identity', async (event, options = {}) => {
+  try {
+    return await textLlmService.generateFakeIdentity(appSettings, options || {});
+  } catch (error) {
+    console.error('Error generating fake identity:', error);
     throw error;
   }
 });
@@ -4756,6 +4788,7 @@ function setupAgentModule() {
     translateText: (text, targetLanguage) => textLlmService.translateText(appSettings, text, targetLanguage),
     reformatText: (text, tones) => textLlmService.reformatText(appSettings, text, tones),
     aiEditText: (text, action, extra) => textLlmService.aiEditText(appSettings, text, action, extra),
+    generateFakeIdentity: (options) => textLlmService.generateFakeIdentity(appSettings, options || {}),
     uptimeListMonitors: async () => {
       if (appSettings.uptimeKuma?.enabled === false) return { enabled: false, monitors: [] }
       return uptimeMonitor.getMonitorResponse({ force: false })

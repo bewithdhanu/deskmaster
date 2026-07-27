@@ -36,7 +36,12 @@ let appSettings = {
     'pinggy': true,
     'text-reformat': true,
     'password-generator': true,
-    'onetimesecret': true
+    'onetimesecret': true,
+    'fake-identity': true
+  },
+  fakeIdentity: {
+    country: 'United States',
+    customFields: []
   },
   notesUi: {
     mode: 'notes',
