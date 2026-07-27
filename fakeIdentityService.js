@@ -2,22 +2,47 @@ const https = require('https')
 const { URL } = require('url')
 const textLlmService = require('./textLlmService')
 
-// @faker-js/faker v9+ is ESM-only — load via dynamic import from this CJS module.
-let fakerModulePromise = null
-
-function loadFakerModule() {
-  if (!fakerModulePromise) {
-    fakerModulePromise = import('@faker-js/faker')
-  }
-  return fakerModulePromise
-}
-
-async function getFakerForCountry(country) {
-  const mod = await loadFakerModule()
-  const config = getCountryConfig(country)
-  const key = config.localeKey || 'fakerEN_US'
-  return mod[key] || mod.fakerEN_US || mod.faker
-}
+// Use CJS-compatible @faker-js/faker@8 (v9+/v10 are ESM-only and break inside Electron asar).
+const {
+  fakerEN_US,
+  fakerEN_GB,
+  fakerEN_CA,
+  fakerEN_AU,
+  fakerEN_IN,
+  fakerEN_IE,
+  fakerEN_ZA,
+  fakerEN_NG,
+  fakerDE,
+  fakerDE_AT,
+  fakerDE_CH,
+  fakerFR,
+  fakerFR_BE,
+  fakerES,
+  fakerES_MX,
+  fakerIT,
+  fakerNL,
+  fakerSV,
+  fakerNB_NO,
+  fakerDA,
+  fakerFI,
+  fakerPT_BR,
+  fakerPT_PT,
+  fakerPL,
+  fakerJA,
+  fakerKO,
+  fakerZH_CN,
+  fakerTR,
+  fakerRU,
+  fakerHE,
+  fakerHU,
+  fakerCS_CZ,
+  fakerRO,
+  fakerTH,
+  fakerVI,
+  fakerID_ID,
+  fakerAR,
+  fakerEN
+} = require('@faker-js/faker')
 
 const BUILTIN_FIELDS = [
   { key: 'fullName', label: 'Full Name', source: 'faker' },
@@ -58,59 +83,63 @@ const DEFAULT_SELECTED_FIELDS = [
 ]
 
 const COUNTRY_CONFIG = {
-  'United States': { localeKey: 'fakerEN_US', bbox: [-124.8, 24.5, -66.9, 49.4], countryCodes: ['us'] },
-  'United Kingdom': { localeKey: 'fakerEN_GB', bbox: [-8.2, 49.9, 1.8, 58.7], countryCodes: ['gb'] },
-  Canada: { localeKey: 'fakerEN_CA', bbox: [-141.0, 41.7, -52.6, 83.1], countryCodes: ['ca'] },
-  Australia: { localeKey: 'fakerEN_AU', bbox: [113.0, -43.7, 153.7, -10.7], countryCodes: ['au'] },
-  India: { localeKey: 'fakerEN_IN', bbox: [68.1, 6.7, 97.4, 35.5], countryCodes: ['in'] },
-  Germany: { localeKey: 'fakerDE', bbox: [5.9, 47.3, 15.0, 55.1], countryCodes: ['de'] },
-  France: { localeKey: 'fakerFR', bbox: [-5.1, 41.3, 9.6, 51.1], countryCodes: ['fr'] },
-  Spain: { localeKey: 'fakerES', bbox: [-9.3, 36.0, 3.3, 43.8], countryCodes: ['es'] },
-  Italy: { localeKey: 'fakerIT', bbox: [6.6, 36.6, 18.5, 47.1], countryCodes: ['it'] },
-  Netherlands: { localeKey: 'fakerNL', bbox: [3.3, 50.8, 7.2, 53.5], countryCodes: ['nl'] },
-  Sweden: { localeKey: 'fakerSV', bbox: [11.0, 55.3, 24.2, 69.1], countryCodes: ['se'] },
-  Norway: { localeKey: 'fakerNB_NO', bbox: [4.5, 57.9, 31.1, 71.2], countryCodes: ['no'] },
-  Denmark: { localeKey: 'fakerDA', bbox: [8.0, 54.6, 15.2, 57.8], countryCodes: ['dk'] },
-  Finland: { localeKey: 'fakerFI', bbox: [20.5, 59.8, 31.6, 70.1], countryCodes: ['fi'] },
-  Ireland: { localeKey: 'fakerEN_IE', bbox: [-10.5, 51.4, -5.9, 55.4], countryCodes: ['ie'] },
-  Switzerland: { localeKey: 'fakerDE_CH', bbox: [5.9, 45.8, 10.5, 47.8], countryCodes: ['ch'] },
-  Austria: { localeKey: 'fakerDE_AT', bbox: [9.5, 46.4, 17.2, 49.0], countryCodes: ['at'] },
-  Belgium: { localeKey: 'fakerFR_BE', bbox: [2.5, 49.5, 6.4, 51.5], countryCodes: ['be'] },
-  Portugal: { localeKey: 'fakerPT_PT', bbox: [-9.5, 36.9, -6.2, 42.2], countryCodes: ['pt'] },
-  Poland: { localeKey: 'fakerPL', bbox: [14.1, 49.0, 24.1, 54.8], countryCodes: ['pl'] },
-  Brazil: { localeKey: 'fakerPT_BR', bbox: [-74.0, -33.8, -34.8, 5.3], countryCodes: ['br'] },
-  Mexico: { localeKey: 'fakerES_MX', bbox: [-118.4, 14.5, -86.7, 32.7], countryCodes: ['mx'] },
-  Argentina: { localeKey: 'fakerES', bbox: [-73.6, -55.1, -53.6, -21.8], countryCodes: ['ar'] },
-  Chile: { localeKey: 'fakerES', bbox: [-75.7, -55.9, -66.4, -17.5], countryCodes: ['cl'] },
-  Colombia: { localeKey: 'fakerES', bbox: [-79.0, -4.2, -66.9, 12.5], countryCodes: ['co'] },
-  Japan: { localeKey: 'fakerJA', bbox: [129.3, 31.0, 145.8, 45.5], countryCodes: ['jp'] },
-  'South Korea': { localeKey: 'fakerKO', bbox: [126.1, 33.1, 129.6, 38.6], countryCodes: ['kr'] },
-  China: { localeKey: 'fakerZH_CN', bbox: [73.5, 18.1, 134.8, 53.6], countryCodes: ['cn'] },
-  Singapore: { localeKey: 'fakerEN', bbox: [103.6, 1.2, 104.1, 1.5], countryCodes: ['sg'] },
-  Malaysia: { localeKey: 'fakerEN', bbox: [99.6, 0.9, 119.3, 7.4], countryCodes: ['my'] },
-  Indonesia: { localeKey: 'fakerID_ID', bbox: [95.0, -11.0, 141.0, 6.1], countryCodes: ['id'] },
-  Philippines: { localeKey: 'fakerEN', bbox: [116.9, 4.6, 126.6, 21.1], countryCodes: ['ph'] },
-  Thailand: { localeKey: 'fakerTH', bbox: [97.3, 5.6, 105.6, 20.5], countryCodes: ['th'] },
-  Vietnam: { localeKey: 'fakerVI', bbox: [102.1, 8.4, 109.5, 23.4], countryCodes: ['vn'] },
-  'United Arab Emirates': { localeKey: 'fakerAR', bbox: [51.5, 22.6, 56.4, 26.1], countryCodes: ['ae'] },
-  'Saudi Arabia': { localeKey: 'fakerAR', bbox: [34.5, 16.3, 55.7, 32.2], countryCodes: ['sa'] },
-  'South Africa': { localeKey: 'fakerEN_ZA', bbox: [16.5, -34.8, 32.9, -22.1], countryCodes: ['za'] },
-  Nigeria: { localeKey: 'fakerEN_NG', bbox: [2.7, 4.3, 14.7, 13.9], countryCodes: ['ng'] },
-  Kenya: { localeKey: 'fakerEN', bbox: [33.9, -4.7, 41.9, 5.0], countryCodes: ['ke'] },
-  Egypt: { localeKey: 'fakerAR', bbox: [24.7, 22.0, 36.9, 31.7], countryCodes: ['eg'] },
-  'New Zealand': { localeKey: 'fakerEN_AU', bbox: [166.3, -47.3, 178.6, -34.0], countryCodes: ['nz'] },
-  Israel: { localeKey: 'fakerHE', bbox: [34.2, 29.5, 35.9, 33.3], countryCodes: ['il'] },
-  Turkey: { localeKey: 'fakerTR', bbox: [26.0, 36.0, 45.0, 42.1], countryCodes: ['tr'] },
-  Russia: { localeKey: 'fakerRU', bbox: [27.3, 41.2, 180.0, 81.9], countryCodes: ['ru'] },
-  Hungary: { localeKey: 'fakerHU', bbox: [16.1, 45.7, 22.9, 48.6], countryCodes: ['hu'] },
-  'Czech Republic': { localeKey: 'fakerCS_CZ', bbox: [12.1, 48.5, 18.9, 51.1], countryCodes: ['cz'] },
-  Romania: { localeKey: 'fakerRO', bbox: [20.3, 43.6, 29.7, 48.3], countryCodes: ['ro'] }
+  'United States': { faker: fakerEN_US, bbox: [-124.8, 24.5, -66.9, 49.4], countryCodes: ['us'] },
+  'United Kingdom': { faker: fakerEN_GB, bbox: [-8.2, 49.9, 1.8, 58.7], countryCodes: ['gb'] },
+  Canada: { faker: fakerEN_CA, bbox: [-141.0, 41.7, -52.6, 83.1], countryCodes: ['ca'] },
+  Australia: { faker: fakerEN_AU, bbox: [113.0, -43.7, 153.7, -10.7], countryCodes: ['au'] },
+  India: { faker: fakerEN_IN, bbox: [68.1, 6.7, 97.4, 35.5], countryCodes: ['in'] },
+  Germany: { faker: fakerDE, bbox: [5.9, 47.3, 15.0, 55.1], countryCodes: ['de'] },
+  France: { faker: fakerFR, bbox: [-5.1, 41.3, 9.6, 51.1], countryCodes: ['fr'] },
+  Spain: { faker: fakerES, bbox: [-9.3, 36.0, 3.3, 43.8], countryCodes: ['es'] },
+  Italy: { faker: fakerIT, bbox: [6.6, 36.6, 18.5, 47.1], countryCodes: ['it'] },
+  Netherlands: { faker: fakerNL, bbox: [3.3, 50.8, 7.2, 53.5], countryCodes: ['nl'] },
+  Sweden: { faker: fakerSV, bbox: [11.0, 55.3, 24.2, 69.1], countryCodes: ['se'] },
+  Norway: { faker: fakerNB_NO, bbox: [4.5, 57.9, 31.1, 71.2], countryCodes: ['no'] },
+  Denmark: { faker: fakerDA, bbox: [8.0, 54.6, 15.2, 57.8], countryCodes: ['dk'] },
+  Finland: { faker: fakerFI, bbox: [20.5, 59.8, 31.6, 70.1], countryCodes: ['fi'] },
+  Ireland: { faker: fakerEN_IE, bbox: [-10.5, 51.4, -5.9, 55.4], countryCodes: ['ie'] },
+  Switzerland: { faker: fakerDE_CH, bbox: [5.9, 45.8, 10.5, 47.8], countryCodes: ['ch'] },
+  Austria: { faker: fakerDE_AT, bbox: [9.5, 46.4, 17.2, 49.0], countryCodes: ['at'] },
+  Belgium: { faker: fakerFR_BE, bbox: [2.5, 49.5, 6.4, 51.5], countryCodes: ['be'] },
+  Portugal: { faker: fakerPT_PT, bbox: [-9.5, 36.9, -6.2, 42.2], countryCodes: ['pt'] },
+  Poland: { faker: fakerPL, bbox: [14.1, 49.0, 24.1, 54.8], countryCodes: ['pl'] },
+  Brazil: { faker: fakerPT_BR, bbox: [-74.0, -33.8, -34.8, 5.3], countryCodes: ['br'] },
+  Mexico: { faker: fakerES_MX, bbox: [-118.4, 14.5, -86.7, 32.7], countryCodes: ['mx'] },
+  Argentina: { faker: fakerES, bbox: [-73.6, -55.1, -53.6, -21.8], countryCodes: ['ar'] },
+  Chile: { faker: fakerES, bbox: [-75.7, -55.9, -66.4, -17.5], countryCodes: ['cl'] },
+  Colombia: { faker: fakerES, bbox: [-79.0, -4.2, -66.9, 12.5], countryCodes: ['co'] },
+  Japan: { faker: fakerJA, bbox: [129.3, 31.0, 145.8, 45.5], countryCodes: ['jp'] },
+  'South Korea': { faker: fakerKO, bbox: [126.1, 33.1, 129.6, 38.6], countryCodes: ['kr'] },
+  China: { faker: fakerZH_CN, bbox: [73.5, 18.1, 134.8, 53.6], countryCodes: ['cn'] },
+  Singapore: { faker: fakerEN, bbox: [103.6, 1.2, 104.1, 1.5], countryCodes: ['sg'] },
+  Malaysia: { faker: fakerEN, bbox: [99.6, 0.9, 119.3, 7.4], countryCodes: ['my'] },
+  Indonesia: { faker: fakerID_ID, bbox: [95.0, -11.0, 141.0, 6.1], countryCodes: ['id'] },
+  Philippines: { faker: fakerEN, bbox: [116.9, 4.6, 126.6, 21.1], countryCodes: ['ph'] },
+  Thailand: { faker: fakerTH, bbox: [97.3, 5.6, 105.6, 20.5], countryCodes: ['th'] },
+  Vietnam: { faker: fakerVI, bbox: [102.1, 8.4, 109.5, 23.4], countryCodes: ['vn'] },
+  'United Arab Emirates': { faker: fakerAR, bbox: [51.5, 22.6, 56.4, 26.1], countryCodes: ['ae'] },
+  'Saudi Arabia': { faker: fakerAR, bbox: [34.5, 16.3, 55.7, 32.2], countryCodes: ['sa'] },
+  'South Africa': { faker: fakerEN_ZA, bbox: [16.5, -34.8, 32.9, -22.1], countryCodes: ['za'] },
+  Nigeria: { faker: fakerEN_NG, bbox: [2.7, 4.3, 14.7, 13.9], countryCodes: ['ng'] },
+  Kenya: { faker: fakerEN, bbox: [33.9, -4.7, 41.9, 5.0], countryCodes: ['ke'] },
+  Egypt: { faker: fakerAR, bbox: [24.7, 22.0, 36.9, 31.7], countryCodes: ['eg'] },
+  'New Zealand': { faker: fakerEN_AU, bbox: [166.3, -47.3, 178.6, -34.0], countryCodes: ['nz'] },
+  Israel: { faker: fakerHE, bbox: [34.2, 29.5, 35.9, 33.3], countryCodes: ['il'] },
+  Turkey: { faker: fakerTR, bbox: [26.0, 36.0, 45.0, 42.1], countryCodes: ['tr'] },
+  Russia: { faker: fakerRU, bbox: [27.3, 41.2, 180.0, 81.9], countryCodes: ['ru'] },
+  Hungary: { faker: fakerHU, bbox: [16.1, 45.7, 22.9, 48.6], countryCodes: ['hu'] },
+  'Czech Republic': { faker: fakerCS_CZ, bbox: [12.1, 48.5, 18.9, 51.1], countryCodes: ['cz'] },
+  Romania: { faker: fakerRO, bbox: [20.3, 43.6, 29.7, 48.3], countryCodes: ['ro'] }
 }
 
 const COUNTRIES = Object.keys(COUNTRY_CONFIG)
 
 function getCountryConfig(country) {
   return COUNTRY_CONFIG[country] || COUNTRY_CONFIG['United States']
+}
+
+function getFaker(country) {
+  return getCountryConfig(country).faker || fakerEN_US
 }
 
 function normalizeCustomFields(customFields) {
@@ -281,7 +310,10 @@ function buildFakerRecord(faker, selectedFields, usedEmails) {
     company,
     dateOfBirth: faker.date.birthdate({ min: 18, max: 70, mode: 'age' }).toISOString().slice(0, 10),
     gender: sex,
-    username: faker.internet.username({ firstName, lastName }).toLowerCase(),
+    username: (typeof faker.internet.userName === 'function'
+      ? faker.internet.userName()
+      : faker.internet.username({ firstName, lastName })
+    ).toLowerCase(),
     website: faker.internet.url()
   }
 
@@ -415,7 +447,7 @@ async function generateIdentities(appSettings, options = {}) {
   const selectedFields = normalizeSelectedFields(options.selectedFields)
   const customFields = options.libraryOnly ? [] : normalizeCustomFields(options.customFields)
   const libraryOnly = Boolean(options.libraryOnly)
-  const faker = await getFakerForCountry(country)
+  const faker = getFaker(country)
   const usedEmails = new Set()
   const records = []
 

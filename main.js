@@ -3947,6 +3947,7 @@ ipcMain.handle('generate-fake-identity', async (event, options = {}) => {
   try {
     const fakeIdentityService = require('./fakeIdentityService')
     const records = await fakeIdentityService.generateIdentities(appSettings, options || {})
+    console.log(`Fake identity generated: ${records.length} record(s) for ${options?.country || 'default'}`)
     return { records }
   } catch (error) {
     console.error('Error generating fake identity:', error);
