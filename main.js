@@ -1869,7 +1869,20 @@ function startBrowserApiServers() {
             },
             fakeIdentity: {
               country: 'United States',
-              customFields: []
+              selectedFields: [
+                'fullName',
+                'address',
+                'phone',
+                'secondaryPhone',
+                'email',
+                'workEmail',
+                'ssn',
+                'jobRole',
+                'latitude',
+                'longitude'
+              ],
+              customFields: [],
+              recordCount: 1
             },
             notesUi: {
               mode: 'notes',
@@ -2208,15 +2221,33 @@ function startBrowserApiServers() {
       } else if (req.url === '/api/generate-fake-identity') {
         const bodyData = JSON.parse(body || '{}');
         try {
-          const identity = await textLlmService.generateFakeIdentity(appSettings, {
+          const fakeIdentityService = require('./fakeIdentityService')
+          const records = await fakeIdentityService.generateIdentities(appSettings, {
             country: typeof bodyData.country === 'string' ? bodyData.country : 'United States',
-            customFields: Array.isArray(bodyData.customFields) ? bodyData.customFields : []
+            count: bodyData.count,
+            selectedFields: bodyData.selectedFields,
+            customFields: Array.isArray(bodyData.customFields) ? bodyData.customFields : [],
+            libraryOnly: Boolean(bodyData.libraryOnly)
           });
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ identity }));
+          res.end(JSON.stringify({ records }));
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message || 'Failed to generate fake identity' }));
+        }
+      } else if (req.url === '/api/get-fake-identity-meta') {
+        try {
+          const fakeIdentityService = require('./fakeIdentityService')
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            countries: fakeIdentityService.COUNTRIES,
+            builtinFields: fakeIdentityService.BUILTIN_FIELDS,
+            widgetFields: fakeIdentityService.WIDGET_FIELDS,
+            defaultSelectedFields: fakeIdentityService.DEFAULT_SELECTED_FIELDS
+          }));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message || 'Failed to load fake identity meta' }));
         }
       } else if (req.url === '/api/get-pinggy-instances') {
         try {
@@ -3828,7 +3859,20 @@ ipcMain.handle('reset-all-data', async (event) => {
       },
       fakeIdentity: {
         country: 'United States',
-        customFields: []
+        selectedFields: [
+          'fullName',
+          'address',
+          'phone',
+          'secondaryPhone',
+          'email',
+          'workEmail',
+          'ssn',
+          'jobRole',
+          'latitude',
+          'longitude'
+        ],
+        customFields: [],
+        recordCount: 1
       },
       notesUi: {
         mode: 'notes',
@@ -3901,9 +3945,26 @@ ipcMain.handle('reformat-text', async (event, text, tones) => {
 
 ipcMain.handle('generate-fake-identity', async (event, options = {}) => {
   try {
-    return await textLlmService.generateFakeIdentity(appSettings, options || {});
+    const fakeIdentityService = require('./fakeIdentityService')
+    const records = await fakeIdentityService.generateIdentities(appSettings, options || {})
+    return { records }
   } catch (error) {
     console.error('Error generating fake identity:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('get-fake-identity-meta', async () => {
+  try {
+    const fakeIdentityService = require('./fakeIdentityService')
+    return {
+      countries: fakeIdentityService.COUNTRIES,
+      builtinFields: fakeIdentityService.BUILTIN_FIELDS,
+      widgetFields: fakeIdentityService.WIDGET_FIELDS,
+      defaultSelectedFields: fakeIdentityService.DEFAULT_SELECTED_FIELDS
+    }
+  } catch (error) {
+    console.error('Error loading fake identity meta:', error);
     throw error;
   }
 });
@@ -4788,7 +4849,10 @@ function setupAgentModule() {
     translateText: (text, targetLanguage) => textLlmService.translateText(appSettings, text, targetLanguage),
     reformatText: (text, tones) => textLlmService.reformatText(appSettings, text, tones),
     aiEditText: (text, action, extra) => textLlmService.aiEditText(appSettings, text, action, extra),
-    generateFakeIdentity: (options) => textLlmService.generateFakeIdentity(appSettings, options || {}),
+    generateFakeIdentity: (options) => {
+      const fakeIdentityService = require('./fakeIdentityService')
+      return fakeIdentityService.generateIdentities(appSettings, options || {}).then((records) => ({ records }))
+    },
     uptimeListMonitors: async () => {
       if (appSettings.uptimeKuma?.enabled === false) return { enabled: false, monitors: [] }
       return uptimeMonitor.getMonitorResponse({ force: false })

@@ -36,7 +36,19 @@ export async function translateText(text, targetLanguage) {
 
 export async function generateFakeIdentity(options = {}) {
   try {
-    return await getIpcRenderer().invoke('generate-fake-identity', options);
+    const result = await getIpcRenderer().invoke('generate-fake-identity', options);
+    if (Array.isArray(result)) return result;
+    if (result && Array.isArray(result.records)) return result.records;
+    if (result && typeof result === 'object' && result.fullName) return [result];
+    return [];
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+export async function getFakeIdentityMeta() {
+  try {
+    return await getIpcRenderer().invoke('get-fake-identity-meta');
   } catch (error) {
     throw normalizeError(error);
   }
