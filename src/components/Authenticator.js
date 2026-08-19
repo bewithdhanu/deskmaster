@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MdAdd, MdEdit, MdDelete, MdContentCopy, MdOpenInNew, MdSearch, MdDeleteForever, MdRestore } from 'react-icons/md';
+import { MdAdd, MdEdit, MdDelete, MdContentCopy, MdOpenInNew, MdSearch, MdDeleteForever, MdRestore, MdCheck } from 'react-icons/md';
 import { getIpcRenderer } from '../utils/electron';
 import { getCachedAuthenticatorLogo, getFaviconUrl, loadAuthenticatorLogo } from '../utils/authenticatorLogoCache';
 import { openExternalUrl } from '../utils/openExternalUrl';
@@ -80,6 +80,35 @@ function getCardSubtitle(item) {
   const accountId = getAwsAccountId(item);
   if (accountId) return accountId;
   return getDomainFromUrl(item.url);
+}
+
+function buildAwsSignInUrl(item) {
+  const rawUrl = String(item.url || '').trim();
+  if (rawUrl) {
+    return rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+  }
+
+  const accountId = getAwsAccountId(item);
+  if (accountId) {
+    return `https://${accountId}.signin.aws.amazon.com/console`;
+  }
+
+  return '';
+}
+
+function formatAwsCredentialsForCopy(item) {
+  const url = buildAwsSignInUrl(item);
+  const username = String(item.username || '').trim();
+  const password = String(item.password || '').trim();
+  const mfa = String(item.currentCode || '').replace(/\s/g, '').trim();
+
+  const lines = [];
+  if (url) lines.push(`URL: ${url}`);
+  if (username) lines.push(`Username: ${username}`);
+  if (password) lines.push(`Password: ${password}`);
+  if (mfa && mfa !== '---') lines.push(`MFA: ${mfa}`);
+
+  return lines.join('\n');
 }
 
 function getCardInitial(name) {
@@ -194,6 +223,7 @@ const Authenticator = () => {
   const [filteredTrashEntries, setFilteredTrashEntries] = useState([]);
   const [isPaused, setIsPaused] = useState(false);
   const [showResumedNotice, setShowResumedNotice] = useState(false);
+  const [copiedAwsId, setCopiedAwsId] = useState(null);
   const timerIntervalRef = useRef(null);
   const previousRemainingRef = useRef(30);
   const lastActivityRef = useRef(Date.now());
@@ -558,6 +588,20 @@ const Authenticator = () => {
     }
   };
 
+  const handleCopyAwsCredentials = async (item) => {
+    const payload = formatAwsCredentialsForCopy(item);
+    if (!payload) return;
+
+    registerActivity();
+    try {
+      await ipcRenderer.invoke('copy-to-clipboard', payload);
+      setCopiedAwsId(item.id);
+      setTimeout(() => setCopiedAwsId(null), 2000);
+    } catch (error) {
+      console.error('Error copying AWS credentials:', error);
+    }
+  };
+
   // Load trash entries
   const loadTrashEntries = async () => {
     try {
@@ -657,6 +701,7 @@ const Authenticator = () => {
 
   const renderAuthenticatorCard = (item) => {
     const subtitle = getCardSubtitle(item);
+    const awsAccountId = getAwsAccountId(item);
     const progressPct = Math.max(0, Math.min(100, (timeRemaining / TOTP_PERIOD) * 100));
 
     return (
@@ -681,7 +726,23 @@ const Authenticator = () => {
                 {item.name}
               </h3>
               {subtitle ? (
-                <p className="mt-0.5 truncate text-xs text-theme-muted">{subtitle}</p>
+                <div className="mt-0.5 flex min-w-0 items-center gap-1">
+                  <p className="truncate text-xs text-theme-muted">{subtitle}</p>
+                  {awsAccountId ? (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyAwsCredentials(item)}
+                      className="inline-flex shrink-0 items-center rounded p-0.5 text-theme-muted transition-colors hover:bg-theme-secondary hover:text-theme-primary"
+                      title="Copy AWS URL, username, password, and MFA"
+                    >
+                      {copiedAwsId === item.id ? (
+                        <MdCheck className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <MdContentCopy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
             <AuthenticatorCardLogo item={item} />
