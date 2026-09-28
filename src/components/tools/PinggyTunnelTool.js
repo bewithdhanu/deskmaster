@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { MdClose, MdPlayArrow, MdStop, MdSettings, MdContentCopy, MdCheck, MdAdd } from 'react-icons/md';
+import { MdClose, MdPlayArrow, MdStop, MdSettings, MdContentCopy, MdCheck } from 'react-icons/md';
 import { getIpcRenderer } from '../../utils/electron';
 
 const ipcRenderer = getIpcRenderer();
 
 const PinggyTunnelTool = ({ onClose }) => {
   const [port, setPort] = useState('');
+  const [provider, setProvider] = useState('pinggy');
   const [instances, setInstances] = useState([]);
   const [showOptions, setShowOptions] = useState(false);
   const [options, setOptions] = useState({
@@ -15,39 +16,35 @@ const PinggyTunnelTool = ({ onClose }) => {
     tcp: false
   });
   const [isStarting, setIsStarting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
   const [currentTime, setCurrentTime] = useState(Date.now());
 
   useEffect(() => {
-    // Load existing instances on mount
     loadInstances();
-    
-    // Listen for instance updates
+
     const handleUpdate = () => {
       loadInstances();
     };
-    
-    // Check if ipcRenderer has 'on' method (Electron) or use WebSocket (browser)
+
     if (ipcRenderer && typeof ipcRenderer.on === 'function') {
       ipcRenderer.on('pinggy-instance-updated', handleUpdate);
-      
+
       return () => {
         if (ipcRenderer && typeof ipcRenderer.removeListener === 'function') {
           ipcRenderer.removeListener('pinggy-instance-updated', handleUpdate);
         }
       };
     }
-    
-    // For browser mode, poll for updates
+
     const interval = setInterval(() => {
       loadInstances();
     }, 2000);
-    
+
     return () => {
       clearInterval(interval);
     };
   }, []);
 
-  // Timer countdown effect - update every second
   useEffect(() => {
     const timerInterval = setInterval(() => {
       setCurrentTime(Date.now());
@@ -62,12 +59,6 @@ const PinggyTunnelTool = ({ onClose }) => {
     const secs = seconds % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
-
-  const getRemainingTime = React.useCallback((startTime) => {
-    if (!startTime) return 3600;
-    const elapsed = Math.floor((currentTime - startTime) / 1000);
-    return Math.max(0, 3600 - elapsed); // 60 minutes = 3600 seconds
-  }, [currentTime]);
 
   const loadInstances = async () => {
     try {
@@ -85,17 +76,30 @@ const PinggyTunnelTool = ({ onClose }) => {
     }
 
     setIsStarting(true);
+    setStatusMessage(
+      provider === 'cloudflared'
+        ? 'Starting Cloudflare tunnel (may download cloudflared once)…'
+        : 'Starting Pinggy tunnel…'
+    );
     try {
-      const instance = await ipcRenderer.invoke('start-pinggy-tunnel', {
-        port: parseInt(port),
-        options
-      });
+      if (provider === 'cloudflared') {
+        await ipcRenderer.invoke('start-cloudflared-tunnel', {
+          port: parseInt(port, 10)
+        });
+      } else {
+        await ipcRenderer.invoke('start-pinggy-tunnel', {
+          port: parseInt(port, 10),
+          options
+        });
+      }
       setPort('');
       setShowOptions(false);
+      setStatusMessage('');
       await loadInstances();
     } catch (error) {
       console.error('Error starting tunnel:', error);
       alert(error.message || 'Failed to start tunnel');
+      setStatusMessage('');
     } finally {
       setIsStarting(false);
     }
@@ -111,22 +115,6 @@ const PinggyTunnelTool = ({ onClose }) => {
     }
   };
 
-  const handleCopy = async (text) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (error) {
-      console.error('Error copying to clipboard:', error);
-      const textArea = document.createElement('textarea');
-      textArea.value = text;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      return true;
-    }
-  };
-
   return (
     <div className="bg-theme-card border border-theme rounded-lg p-4 relative break-inside-avoid mb-4">
       {onClose && (
@@ -138,10 +126,34 @@ const PinggyTunnelTool = ({ onClose }) => {
           <MdClose className="w-4 h-4" />
         </button>
       )}
-      <h3 className="text-sm font-semibold text-theme-primary mb-3 pr-6">Pinggy Tunnel</h3>
-      
+      <h3 className="text-sm font-semibold text-theme-primary mb-3 pr-6">Tunnel</h3>
+
       <div className="space-y-3">
-        {/* Start New Tunnel */}
+        <div className="flex gap-1 p-0.5 bg-theme-secondary border border-theme rounded-lg">
+          <button
+            type="button"
+            onClick={() => setProvider('pinggy')}
+            className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              provider === 'pinggy'
+                ? 'bg-red-500 text-white'
+                : 'text-theme-muted hover:text-theme-primary'
+            }`}
+          >
+            Pinggy
+          </button>
+          <button
+            type="button"
+            onClick={() => setProvider('cloudflared')}
+            className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              provider === 'cloudflared'
+                ? 'bg-red-500 text-white'
+                : 'text-theme-muted hover:text-theme-primary'
+            }`}
+          >
+            Cloudflare
+          </button>
+        </div>
+
         <div>
           <label className="block text-xs font-medium text-theme-primary mb-1">
             Local Port
@@ -154,13 +166,15 @@ const PinggyTunnelTool = ({ onClose }) => {
               placeholder="e.g., 3000, 8080"
               className="flex-1 px-3 py-2 h-[38px] bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-muted focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm"
             />
-            <button
-              onClick={() => setShowOptions(!showOptions)}
-              className="px-3 py-2 h-[38px] bg-theme-secondary border border-theme rounded-lg text-theme-primary hover:bg-theme-card-hover transition-colors duration-200"
-              title="Options"
-            >
-              <MdSettings className="w-4 h-4" />
-            </button>
+            {provider === 'pinggy' && (
+              <button
+                onClick={() => setShowOptions(!showOptions)}
+                className="px-3 py-2 h-[38px] bg-theme-secondary border border-theme rounded-lg text-theme-primary hover:bg-theme-card-hover transition-colors duration-200"
+                title="Options"
+              >
+                <MdSettings className="w-4 h-4" />
+              </button>
+            )}
             <button
               onClick={handleStart}
               disabled={!port.trim() || isStarting}
@@ -169,10 +183,12 @@ const PinggyTunnelTool = ({ onClose }) => {
               {isStarting ? 'Starting...' : <><MdPlayArrow className="w-4 h-4 inline mr-1" />Start</>}
             </button>
           </div>
+          {statusMessage ? (
+            <p className="mt-1.5 text-[11px] text-theme-muted">{statusMessage}</p>
+          ) : null}
         </div>
 
-        {/* Options Panel */}
-        {showOptions && (
+        {provider === 'pinggy' && showOptions && (
           <div className="p-3 bg-theme-secondary border border-theme rounded-lg space-y-2">
             <div className="text-xs font-medium text-theme-primary mb-2">Tunnel Options</div>
             <label className="flex items-center gap-2 text-xs text-theme-muted cursor-pointer">
@@ -214,34 +230,38 @@ const PinggyTunnelTool = ({ onClose }) => {
           </div>
         )}
 
-        {/* Running Instances */}
         {instances.length > 0 && (
           <div className="space-y-2">
             <div className="text-xs font-medium text-theme-primary">Running Tunnels</div>
             {instances.map((instance) => {
-              // Calculate remaining time directly using currentTime to ensure it updates
-              const remaining = instance.startTime 
+              const isCloudflare = instance.provider === 'cloudflared';
+              const remaining = !isCloudflare && instance.startTime
                 ? Math.max(0, 3600 - Math.floor((currentTime - instance.startTime) / 1000))
-                : 3600;
-              const isExpiring = remaining < 300; // Less than 5 minutes
+                : null;
+              const isExpiring = remaining !== null && remaining < 300;
               const isExpired = remaining === 0;
-              
+
               return (
                 <div key={instance.id} className="p-3 bg-theme-secondary border border-theme rounded-lg space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <div className="text-xs font-semibold text-theme-primary">
                         Port {instance.port}
                       </div>
-                      <div className={`text-xs font-mono px-2 py-0.5 rounded ${
-                        isExpired
-                          ? 'bg-red-500/30 text-red-500 border border-red-500'
-                          : isExpiring 
-                            ? 'bg-red-500/20 text-red-500 border border-red-500/50' 
-                            : 'bg-theme-primary/10 text-theme-muted border border-theme'
-                      }`}>
-                        {formatTime(remaining)}
-                      </div>
+                      <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border border-theme text-theme-muted">
+                        {isCloudflare ? 'Cloudflare' : 'Pinggy'}
+                      </span>
+                      {remaining !== null && (
+                        <div className={`text-xs font-mono px-2 py-0.5 rounded ${
+                          isExpired
+                            ? 'bg-red-500/30 text-red-500 border border-red-500'
+                            : isExpiring
+                              ? 'bg-red-500/20 text-red-500 border border-red-500/50'
+                              : 'bg-theme-primary/10 text-theme-muted border border-theme'
+                        }`}>
+                          {formatTime(remaining)}
+                        </div>
+                      )}
                     </div>
                     <button
                       onClick={() => handleStop(instance.id)}
@@ -251,46 +271,46 @@ const PinggyTunnelTool = ({ onClose }) => {
                       Stop
                     </button>
                   </div>
-                
-                <div className="space-y-1">
-                  {instance.urls?.http && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-theme-muted w-12">HTTP:</span>
-                      <input
-                        type="text"
-                        value={instance.urls.http}
-                        readOnly
-                        className="flex-1 px-2 py-1 bg-theme-primary border border-theme rounded text-xs font-mono text-theme-primary"
-                      />
-                      <CopyButton text={instance.urls.http} />
-                    </div>
-                  )}
-                  {instance.urls?.https && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-theme-muted w-12">HTTPS:</span>
-                      <input
-                        type="text"
-                        value={instance.urls.https}
-                        readOnly
-                        className="flex-1 px-2 py-1 bg-theme-primary border border-theme rounded text-xs font-mono text-theme-primary"
-                      />
-                      <CopyButton text={instance.urls.https} />
-                    </div>
-                  )}
-                  {instance.urls?.debug && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-theme-muted w-12">Debug:</span>
-                      <input
-                        type="text"
-                        value={instance.urls.debug}
-                        readOnly
-                        className="flex-1 px-2 py-1 bg-theme-primary border border-theme rounded text-xs font-mono text-theme-primary"
-                      />
-                      <CopyButton text={instance.urls.debug} />
-                    </div>
-                  )}
+
+                  <div className="space-y-1">
+                    {instance.urls?.https && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-theme-muted w-12">HTTPS:</span>
+                        <input
+                          type="text"
+                          value={instance.urls.https}
+                          readOnly
+                          className="flex-1 px-2 py-1 bg-theme-primary border border-theme rounded text-xs font-mono text-theme-primary"
+                        />
+                        <CopyButton text={instance.urls.https} />
+                      </div>
+                    )}
+                    {instance.urls?.http && instance.urls.http !== instance.urls.https && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-theme-muted w-12">HTTP:</span>
+                        <input
+                          type="text"
+                          value={instance.urls.http}
+                          readOnly
+                          className="flex-1 px-2 py-1 bg-theme-primary border border-theme rounded text-xs font-mono text-theme-primary"
+                        />
+                        <CopyButton text={instance.urls.http} />
+                      </div>
+                    )}
+                    {instance.urls?.debug && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-theme-muted w-12">Debug:</span>
+                        <input
+                          type="text"
+                          value={instance.urls.debug}
+                          readOnly
+                          className="flex-1 px-2 py-1 bg-theme-primary border border-theme rounded text-xs font-mono text-theme-primary"
+                        />
+                        <CopyButton text={instance.urls.debug} />
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
               );
             })}
           </div>
@@ -300,7 +320,6 @@ const PinggyTunnelTool = ({ onClose }) => {
   );
 };
 
-// Copy Button Component
 const CopyButton = ({ text }) => {
   const [copied, setCopied] = useState(false);
 
@@ -338,4 +357,3 @@ const CopyButton = ({ text }) => {
 };
 
 export default PinggyTunnelTool;
-

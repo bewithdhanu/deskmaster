@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "3.8.0",
+  "version": "3.9.0",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -166,6 +166,7 @@
       "agentDocumentGenerator.js",
       "agentFileAttach.js",
       "appDataExport.js",
+      "cloudflaredBinary.js",
       "package.json",
       "assets/**/*"
     ],

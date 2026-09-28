@@ -148,11 +148,15 @@ export function navigate(route, { replace = false } = {}) {
   notifyListeners()
 }
 
+const PROTECTED_TABS_FOR_RESTORE = ['clipboard', 'authenticator', 'settings']
+
 function initDefaultRoute() {
   const hash = window.location.hash
   if (!hash || hash === '#') {
-    const lastTab = localStorage.getItem('lastActiveTab') || 'home'
-    navigate({ tab: normalizeTab(lastTab) }, { replace: true })
+    const lastTab = normalizeTab(localStorage.getItem('lastActiveTab') || 'home')
+    // Never restore protected tabs on cold start — unlock only when user opens them
+    const safeTab = PROTECTED_TABS_FOR_RESTORE.includes(lastTab) ? 'home' : lastTab
+    navigate({ tab: safeTab }, { replace: true })
   }
 }
 

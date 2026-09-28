@@ -108,8 +108,13 @@ const FakeIdentityTool = ({ onClose, variant = 'widget' }) => {
   useEffect(() => {
     const load = async () => {
       try {
+        // Avoid loading @faker-js/faker on Home widget mount — meta only needed on full page
+        const metaPromise = isPage
+          ? getFakeIdentityMeta().catch(() => null)
+          : Promise.resolve(null);
+
         const [meta, settings] = await Promise.all([
-          getFakeIdentityMeta().catch(() => null),
+          metaPromise,
           ipcRenderer.invoke('get-settings')
         ]);
 
@@ -145,7 +150,7 @@ const FakeIdentityTool = ({ onClose, variant = 'widget' }) => {
       }
     };
     load();
-  }, []);
+  }, [isPage]);
 
   const persistPrefs = async (patch) => {
     try {

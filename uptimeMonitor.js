@@ -562,20 +562,16 @@ async function getMonitorResponse({ force = false } = {}) {
     return withCacheMetadata(cached, Date.now() >= monitorCache.expiresAt)
   }
 
-  try {
-    const payload = await refreshMonitorCache()
-    return withCacheMetadata(payload, false)
-  } catch (error) {
-    const emptyPayload = normalizePayload({
-      source: kumaUrl(),
-      generatedAt: new Date().toISOString(),
-      authSource: 'local',
-      monitors: []
-    })
-    persistPayload(emptyPayload)
-    console.error('Initial Uptime Kuma cache refresh failed:', error.message)
-    return withCacheMetadata(emptyPayload, true)
-  }
+  // Cold cache: return empty immediately so Home/UI never waits on socket (8–22s).
+  // Background refresh fills monitors shortly after.
+  refreshMonitorCacheInBackground()
+  const emptyPayload = normalizePayload({
+    source: kumaUrl(),
+    generatedAt: new Date().toISOString(),
+    authSource: 'local',
+    monitors: []
+  })
+  return withCacheMetadata(emptyPayload, true)
 }
 
 function refreshMonitorCacheInBackground() {
