@@ -1,8 +1,9 @@
 name: Release Build and Distribution
 
+# Disabled: duplicate of "Build and Release DeskMaster" (build.yml).
+# Multiple release:published workflows raced uploading the same DMGs (422 already_exists).
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -42,7 +43,7 @@ jobs:
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-builds-${{ github.event.release.tag_name }}
+          name: macos-builds-${{ github.event.release.tag_name || github.ref_name }}
           path: |
             dist/*.dmg
             dist/*.dmg.blockmap
@@ -64,9 +65,9 @@ jobs:
           path: ./artifacts
 
       - name: Attach files to existing release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: |
             artifacts/**/*.dmg
             artifacts/**/*.dmg.blockmap
