@@ -125,7 +125,10 @@ function App() {
   }, [uptimeKumaEnabled, activeTab]);
 
   useEffect(() => {
-    localStorage.setItem('lastActiveTab', activeTab);
+    // Do not persist protected tabs — reboot must land on a safe tab without Touch ID
+    if (!PROTECTED_TABS.includes(activeTab)) {
+      localStorage.setItem('lastActiveTab', activeTab);
+    }
   }, [activeTab]);
 
   useEffect(() => {
@@ -214,10 +217,24 @@ function App() {
     navigate(nextRoute);
   };
 
-  const renderContent = () => {
+  const isHomeVisible =
+    activeTab === 'home' ||
+    (activeTab === 'uptime' && !uptimeKumaEnabled) ||
+    ![
+      'home',
+      'world-clocks',
+      'system-performance',
+      'clipboard',
+      'authenticator',
+      'notes',
+      'agent',
+      'uptime',
+      'fake-identity',
+      'settings'
+    ].includes(activeTab);
+
+  const renderOtherContent = () => {
     switch (activeTab) {
-      case 'home':
-        return <Tools />;
       case 'world-clocks':
         return <TimezoneManager />;
       case 'system-performance':
@@ -231,13 +248,13 @@ function App() {
       case 'agent':
         return <Agent />;
       case 'uptime':
-        return uptimeKumaEnabled ? <UptimeMonitor /> : <Tools />;
+        return uptimeKumaEnabled ? <UptimeMonitor /> : null;
       case 'fake-identity':
         return <FakeIdentityTool variant="page" />;
       case 'settings':
         return <Settings />;
       default:
-        return <Tools />;
+        return null;
     }
   };
 
@@ -245,7 +262,10 @@ function App() {
     <div className="h-screen flex flex-col bg-theme-primary text-theme-primary">
       <Navigation activeTab={activeTab} onTabChange={handleTabChange} uptimeKumaEnabled={uptimeKumaEnabled} />
       <div className="flex-1 overflow-hidden">
-        {renderContent()}
+        <div className={isHomeVisible ? 'h-full' : 'hidden'}>
+          <Tools />
+        </div>
+        {!isHomeVisible ? renderOtherContent() : null}
       </div>
     </div>
   );

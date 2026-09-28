@@ -25,6 +25,7 @@ const { randomUUID } = require("crypto")
 const gdriveBackup = require('./gdriveBackup')
 const archiver = require('archiver')
 const appDataExport = require('./appDataExport')
+const cloudflaredBinary = require('./cloudflaredBinary')
 
 // Only load auto-launch in production
 let AutoLaunch = null
@@ -1376,6 +1377,7 @@ function startBrowserApiServers() {
             port: instance.port,
             urls: instance.urls,
             options: instance.options,
+            provider: instance.provider || 'pinggy',
             startTime: instance.startTime
           }));
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1991,6 +1993,16 @@ function startBrowserApiServers() {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: error.message }));
         }
+      } else if (req.url === '/api/start-cloudflared-tunnel') {
+        const { port } = JSON.parse(body);
+        try {
+          const instance = await startCloudflaredTunnel({ port: Number(port) });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(instance));
+        } catch (error) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
       } else if (req.url === '/api/stop-pinggy-tunnel') {
         const { instanceId } = JSON.parse(body);
         try {
@@ -2256,6 +2268,7 @@ function startBrowserApiServers() {
             port: instance.port,
             urls: instance.urls,
             options: instance.options,
+            provider: instance.provider || 'pinggy',
             startTime: instance.startTime
           }));
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -4443,6 +4456,7 @@ async function startPinggyTunnel({ port, options }) {
       process: pinggyProcess,
       urls,
       options,
+      provider: 'pinggy',
       startTime: Date.now()
     };
     
@@ -4456,11 +4470,104 @@ async function startPinggyTunnel({ port, options }) {
     return {
       id: instanceId,
       port,
-      urls
+      urls,
+      provider: 'pinggy'
     };
   } catch (error) {
     console.error('Error starting Pinggy tunnel:', error);
     throw error;
+  }
+}
+
+const TRYCLOUDFLARE_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/i
+
+async function startCloudflaredTunnel({ port }) {
+  try {
+    const instanceId = randomUUID()
+    const { path: binaryPath } = await cloudflaredBinary.ensureCloudflared()
+
+    console.log(`[Cloudflared] Starting quick tunnel for localhost:${port} using ${binaryPath}`)
+
+    const child = spawn(binaryPath, ['tunnel', '--url', `http://localhost:${port}`], {
+      detached: false,
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+
+    let publicUrl = null
+    let outputBuf = ''
+
+    const tryParseUrl = (text) => {
+      outputBuf += text
+      const match = outputBuf.match(TRYCLOUDFLARE_URL_RE)
+      if (match) publicUrl = match[0]
+    }
+
+    child.stdout.on('data', (data) => {
+      const text = data.toString()
+      if (text.trim()) console.log('[Cloudflared]', text.trim())
+      tryParseUrl(text)
+    })
+
+    child.stderr.on('data', (data) => {
+      const text = data.toString()
+      if (text.trim()) console.log('[Cloudflared]', text.trim())
+      tryParseUrl(text)
+    })
+
+    // Wait up to 45s for trycloudflare.com URL (includes possible binary download already done)
+    const maxWaitMs = 45000
+    const startedAt = Date.now()
+    while (!publicUrl && Date.now() - startedAt < maxWaitMs) {
+      if (child.killed || child.exitCode !== null) {
+        throw new Error('cloudflared exited before publishing a public URL')
+      }
+      await new Promise((resolve) => setTimeout(resolve, 400))
+    }
+
+    if (!publicUrl) {
+      try { child.kill() } catch {}
+      throw new Error('Timed out waiting for Cloudflare tunnel URL')
+    }
+
+    child.on('exit', () => {
+      if (pinggyInstances.has(instanceId)) {
+        pinggyInstances.delete(instanceId)
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('pinggy-instance-updated')
+        }
+      }
+    })
+
+    const urls = {
+      https: publicUrl,
+      http: publicUrl
+    }
+
+    const instance = {
+      id: instanceId,
+      port,
+      process: child,
+      urls,
+      options: {},
+      provider: 'cloudflared',
+      startTime: Date.now()
+    }
+
+    pinggyInstances.set(instanceId, instance)
+
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('pinggy-instance-updated')
+    }
+
+    return {
+      id: instanceId,
+      port,
+      urls,
+      provider: 'cloudflared'
+    }
+  } catch (error) {
+    console.error('Error starting Cloudflare tunnel:', error)
+    throw error
   }
 }
 
@@ -4528,6 +4635,10 @@ ipcMain.handle('start-pinggy-tunnel', async (event, { port, options }) => {
   return await startPinggyTunnel({ port, options });
 });
 
+ipcMain.handle('start-cloudflared-tunnel', async (event, { port }) => {
+  return await startCloudflaredTunnel({ port: Number(port) });
+});
+
 ipcMain.handle('stop-pinggy-tunnel', async (event, instanceId) => {
   return await stopPinggyTunnel(instanceId);
 });
@@ -4539,6 +4650,7 @@ ipcMain.handle('get-pinggy-instances', async (event) => {
       port: instance.port,
       urls: instance.urls,
       options: instance.options,
+      provider: instance.provider || 'pinggy',
       startTime: instance.startTime
     }));
     return instances;

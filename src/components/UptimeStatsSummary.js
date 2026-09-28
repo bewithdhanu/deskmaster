@@ -23,23 +23,42 @@ const UptimeStatsSummary = ({ monitors: providedMonitors, summary: providedSumma
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const loadUptimeStats = async () => {
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const response = await ipcRenderer.invoke('uptime:get-monitors', { refresh: false });
-      setData({ monitors: response?.monitors || [], summary: response?.summary || null });
-    } catch (err) {
-      setError(err?.message || 'Unable to load uptime stats');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    if (usesProvidedData) return;
-    loadUptimeStats();
+    if (usesProvidedData) return undefined;
+
+    let cancelled = false;
+    let retryTimer = null;
+
+    const load = async (isRetry = false) => {
+      if (!isRetry) {
+        setIsLoading(true);
+        setError('');
+      }
+
+      try {
+        const response = await ipcRenderer.invoke('uptime:get-monitors', { refresh: false });
+        if (cancelled) return;
+
+        const monitors = response?.monitors || [];
+        setData({ monitors, summary: response?.summary || null });
+
+        // Cold cache returns empty + stale while background refresh runs — retry once shortly
+        if (!isRetry && response?.cache?.stale && monitors.length === 0) {
+          retryTimer = setTimeout(() => load(true), 2500);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err?.message || 'Unable to load uptime stats');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [usesProvidedData]);
 
   const summary = useMemo(() => {

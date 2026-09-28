@@ -545,6 +545,19 @@ const createBrowserIpcRenderer = () => {
           }
           const error = await response.json();
           throw new Error(error.error || 'Failed to start Pinggy tunnel');
+        } else if (channel === 'start-cloudflared-tunnel') {
+          const [{ port }] = args;
+          const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });
+          const response = await fetch(`${API_BASE}/start-cloudflared-tunnel`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ port })
+          });
+          if (response.ok) {
+            return await response.json();
+          }
+          const error = await response.json().catch(() => ({}));
+          throw new Error(error.error || 'Failed to start Cloudflare tunnel');
         } else if (channel === 'stop-pinggy-tunnel') {
           const [instanceId] = args;
           const headers = await addApiTokenToHeaders({ 'Content-Type': 'application/json' });

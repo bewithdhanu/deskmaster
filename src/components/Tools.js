@@ -37,7 +37,7 @@ const Tools = () => {
     { id: 'bcrypt-verify', name: 'Verify Hash', description: 'Verify text against bcrypt hash' },
     { id: 'public-ip', name: 'Public IP', description: 'Show your public IP address' },
     { id: 'ip-location', name: 'IP Location', description: 'Get location details from IP address(es)' },
-    { id: 'pinggy', name: 'Pinggy Tunnel', description: 'Create secure tunnels to local ports' },
+    { id: 'pinggy', name: 'Tunnel', description: 'Create secure tunnels to local ports (Pinggy or Cloudflare)' },
     { id: 'text-reformat', name: 'Text Reformat', description: 'Reformat and translate text using your AI Agent model' },
     { id: 'password-generator', name: 'Password Generator', description: 'Generate strong passwords with customizable options' },
     { id: 'onetimesecret', name: 'OneTimeSecret', description: 'Create anonymous one-time shareable secrets' },
