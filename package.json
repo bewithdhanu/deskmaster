@@ -1,6 +1,6 @@
 {
   "name": "deskmaster",
-  "version": "3.9.0",
+  "version": "3.10.0",
   "description": "DeskMaster - Master your desktop experience with system monitoring, world clocks, and productivity tools.",
   "main": "main.js",
   "scripts": {
@@ -26,7 +26,13 @@
     "serve:build": "npm run build-app && node server.js",
     "test:e2e": "playwright test",
     "test:e2e:agent": "playwright test tests/e2e/agent.spec.js",
-    "test:unit:agent": "node tests/unit/agentChatStore.test.js"
+    "test:unit:agent": "node tests/unit/agentChatStore.test.js",
+    "test:unit:tray": "node tests/unit/trayHelper.test.js",
+    "test:unit:backup": "node tests/unit/backupCrypto.test.js",
+    "web:dev": "npm --prefix web run dev",
+    "web:test": "npm --prefix web test",
+    "web:build": "npm --prefix web run build",
+    "web:deploy": "npm --prefix web run deploy"
   },
   "keywords": [
     "desktop-productivity",
@@ -120,14 +126,21 @@
       "**/node_modules/sqlite3/**",
       "**/node_modules/@faker-js/faker/**"
     ],
+    "extraResources": [
+      {
+        "from": "native/bin",
+        "to": "bin",
+        "filter": [
+          "deskmaster-tray"
+        ]
+      }
+    ],
     "files": [
       "main.js",
       "dist/main.bundle.js",
-      "dist/tray.bundle.js",
       "dist/about.bundle.js",
       "dist/*.bundle.js",
       "dist/index.html",
-      "dist/tray-icon.html",
       "dist/about.html",
       "dist/*.woff",
       "dist/*.woff2",
@@ -166,6 +179,9 @@
       "agentDocumentGenerator.js",
       "agentFileAttach.js",
       "appDataExport.js",
+      "backupCrypto.js",
+      "trayHelper.js",
+      "src/utils/clockFormat.js",
       "cloudflaredBinary.js",
       "package.json",
       "assets/**/*"

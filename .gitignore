@@ -286,3 +286,6 @@ data/
 .playwright-user-data/Session Storage/MANIFEST-000001
 playwright-report/index.html
 test-results/.last-run.json
+
+# Native tray helper build output
+native/bin/

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DeskMaster tray — system stats layout options</title>
+<link rel="icon" href="../assets/icons/app-icon-128.png" />
+<style>
+  :root { color-scheme: dark; --bg: #0f0f13; --card: #17171d; --border: #2a2a33; --muted: #8b8b98; --accent: #3b82f6;
+    --hot: #ff453a; --warm: #ff9f0a; --ok: #30d158; --cpu: #ff4757; --ram: #5b6cff; --disk: #2ec4b6; --net: #ffb340; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: #ececf1; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { max-width: 1100px; margin: 0 auto; padding: 40px 24px 8px; display: flex; gap: 16px; align-items: center; }
+  header img { width: 48px; height: 48px; }
+  h1 { margin: 0; font-size: 22px; }
+  header p { margin: 2px 0 0; color: var(--muted); }
+  .controls { max-width: 1100px; margin: 0 auto; padding: 12px 24px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
+  .controls button { background: var(--card); color: #ececf1; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font: inherit; cursor: pointer; }
+  .controls button.on { border-color: var(--accent); background: #3b82f622; }
+  main { max-width: 1100px; margin: 0 auto; padding: 8px 24px 64px; display: grid; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: grid; gap: 12px; cursor: pointer; }
+  .card:hover { border-color: #3a3a46; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card.baseline { cursor: default; opacity: .9; }
+  .head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .num { font-weight: 700; color: var(--accent); min-width: 28px; }
+  .title { font-weight: 600; font-size: 15px; }
+  .width { margin-left: auto; font: 600 12px ui-monospace, monospace; color: var(--muted); }
+  .desc { color: var(--muted); margin: -6px 0 0 38px; font-size: 13px; }
+  .bars { display: flex; flex-wrap: wrap; gap: 10px; margin-left: 38px; }
+  .menubar { border-radius: 8px; padding: 6px 10px; display: flex; align-items: center; }
+  .menubar.dark { background: #1f1f24; color: #f2f2f2; --rb: #1f1f24; }
+  .menubar.light { background: #e9e9ec; color: #1c1c1e; --rb: #e9e9ec; }
+
+  /* Tray proportions from native/tray/main.swift, shown at 2x */
+  .tray { zoom: 2; display: inline-flex; align-items: center; height: 24px; padding: 0 5px; gap: 8px; white-space: nowrap; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; }
+  .cell { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+  .l { font-size: 9px; font-weight: 600; height: 10px; opacity: .72; }
+  .v { font-size: 10.4px; font-weight: 700; height: 11px; margin-top: -2px; }
+  .row { display: inline-flex; align-items: center; gap: 3px; }
+  .ctx { opacity: .4; display: inline-flex; align-items: center; gap: 8px; }
+  .hot { color: var(--hot); } .warm { color: var(--warm); }
+  .vbar { width: 4px; height: 17px; border-radius: 1.5px; background: color-mix(in srgb, currentColor 16%, transparent); position: relative; overflow: hidden; }
+  .vbar i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 1.5px; }
+  .under { width: 100%; height: 1.6px; border-radius: 1px; background: color-mix(in srgb, currentColor 18%, transparent); margin-top: 1px; position: relative; overflow: hidden; }
+  .under i { position: absolute; inset: 0 auto 0 0; border-radius: 1px; }
+  .ring { display: flex; flex-direction: column; align-items: center; gap: 0; line-height: 1; }
+  .ring small { font-size: 5.5px; font-weight: 700; opacity: .7; margin-top: .5px; }
+  .ic { display: inline-flex; align-items: center; gap: 2px; font-size: 10.4px; font-weight: 700; }
+  .ic svg { opacity: .8; }
+  .netsplit { display: grid; grid-template-columns: auto auto; column-gap: 2px; font-size: 8.4px; font-weight: 700; line-height: 9.5px; }
+  .netsplit span:nth-child(odd) { opacity: .65; font-size: 7px; }
+  .cluster { display: inline-flex; gap: 2px; align-items: flex-end; }
+  .cluster .col { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .cluster .col .vbar { height: 14px; width: 4.5px; }
+  .cluster small { font-size: 5.5px; font-weight: 700; opacity: .7; }
+  .tile { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 23px; height: 19px; border-radius: 4px; line-height: 1; }
+  .tile small { font-size: 5.5px; font-weight: 800; opacity: .75; }
+  .tile b { font-size: 9.5px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); display: inline-block; }
+  .pickbar { position: sticky; bottom: 16px; margin: 0 auto; width: fit-content; background: var(--accent); color: white; padding: 8px 16px; border-radius: 999px; font-weight: 600; display: none; box-shadow: 0 8px 24px #0008; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding-bottom: 40px; }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <img src="../assets/icons/app-icon-256.png" alt="" />
+  <div>
+    <h1>System stats in the tray — pick one</h1>
+    <p>Live simulation at 2× with the tray's real fonts and spacing. Values move every second so graphs and history designs behave like the real thing. Ideas taken from the Stats app, iStat Menus and MenuMeters.</p>
+  </div>
+</header>
+<div class="controls" id="scenarios">Scenario:</div>
+<main id="list"></main>
+<div class="pickbar" id="pickbar"></div>
+<footer>DeskMaster by <a href="mailto:bewithdhanu@gmail.com">Dhanu K</a> · <a href="https://github.com/bewithdhanu/deskmaster" target="_blank" rel="noopener">github.com/bewithdhanu/deskmaster</a></footer>
+
+<script>
+const SCENARIOS = [
+  { id: 'calm', label: 'Calm', target: { cpu: 9, ram: 58, disk: 71, bat: 84, rx: 18e3, tx: 4e3 }, charging: true },
+  { id: 'busy', label: 'Busy (build running)', target: { cpu: 88, ram: 91, disk: 93, bat: 62, rx: 6.5e6, tx: 1.2e6 }, charging: false },
+  { id: 'lowbat', label: 'Low battery', target: { cpu: 22, ram: 64, disk: 71, bat: 12, rx: 240e3, tx: 30e3 }, charging: false }
+]
+const H = 30
+let scenario = localStorage.getItem('trayStatsScenario') || 'calm'
+const live = { cpu: 10, ram: 58, disk: 71, bat: 84, rx: 2e4, tx: 4e3 }
+const hist = { cpu: [], ram: [], rx: [], tx: [] }
+
+function step() {
+  const sc = SCENARIOS.find((s) => s.id === scenario)
+  const t = sc.target
+  const walk = (k, spread, min, max) => { live[k] = Math.min(max, Math.max(min, live[k] + (t[k] - live[k]) * 0.35 + (Math.random() - 0.5) * spread)) }
+  walk('cpu', 18, 1, 100); walk('ram', 2, 1, 100); walk('disk', 0.2, 1, 100); walk('bat', 0.3, 1, 100)
+  live.rx = Math.max(0, t.rx * (0.3 + Math.random() * 1.4)); live.tx = Math.max(0, t.tx * (0.3 + Math.random() * 1.4))
+  for (const k of Object.keys(hist)) { hist[k].push(live[k]); if (hist[k].length > H) hist[k].shift() }
+  live.charging = sc.charging
+}
+for (let i = 0; i < H; i++) step()
+
+function bytes(b) {
+  if (!Number.isFinite(b) || b < 1) return '0 B'
+  const u = ['B', 'KB', 'MB', 'GB'], i = Math.min(u.length - 1, Math.floor(Math.log(b) / Math.log(1024)))
+  return `${Math.round(b / 1024 ** i)} ${u[i]}`
+}
+const load = (p, warn = 70, hot = 88) => p >= hot ? 'hot' : p >= warn ? 'warm' : ''
+const batLoad = (p, charging) => charging ? '' : p <= 15 ? 'hot' : p <= 25 ? 'warm' : ''
+const COLOR = { cpu: 'var(--cpu)', ram: 'var(--ram)', disk: 'var(--disk)', bat: 'var(--ok)' }
+const fill = (p, color) => p >= 88 ? 'var(--hot)' : p >= 70 ? 'var(--warm)' : color
+const cell = (l, v, cls = '') => `<div class="cell ${cls}"><div class="l">${l}</div><div class="v">${v}</div></div>`
+const pct = (k) => `${Math.round(live[k])}%`
+const batText = () => `${live.charging ? '⚡' : ''}${Math.round(live.bat)}%`
+const net = () => bytes(live.rx + live.tx)
+
+const ICON = {
+  cpu: '<svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2.5" y="2.5" width="7" height="7" rx="1.2"/><rect x="4.6" y="4.6" width="2.8" height="2.8" fill="currentColor" stroke="none"/><path d="M4 .5v2M8 .5v2M4 9.5v2M8 9.5v2M.5 4h2M.5 8h2M9.5 4h2M9.5 8h2"/></svg>',
+  ram: '<svg width="11" height="8" viewBox="0 0 14 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x=".6" y="1.5" width="12.8" height="5.5" rx="1"/><path d="M3 7v2.4M5.5 7v2.4M8.5 7v2.4M11 7v2.4M3.3 3.4v1.6M6 3.4v1.6M8.5 3.4v1.6M11 3.4v1.6"/></svg>',
+  disk: '<svg width="10" height="8" viewBox="0 0 13 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x=".6" y="1" width="11.8" height="8" rx="2"/><circle cx="9.6" cy="5" r=".9" fill="currentColor"/><path d="M2.6 5h4"/></svg>',
+  up: '<svg width="6" height="6" viewBox="0 0 8 8"><path d="M4 .5 7.5 5h-7z" fill="currentColor"/></svg>',
+  down: '<svg width="6" height="6" viewBox="0 0 8 8"><path d="M4 7.5 .5 3h7z" fill="currentColor"/></svg>'
+}
+function battery(p, charging, withText = true) {
+  const w = 18, color = charging ? 'var(--ok)' : p <= 15 ? 'var(--hot)' : p <= 25 ? 'var(--warm)' : 'currentColor'
+  return `<svg width="${w + 3}" height="10" viewBox="0 0 ${w + 3} 10"><rect x=".6" y=".6" width="${w}" height="8.8" rx="2.3" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="1"/>` +
+    `<rect x="2" y="2" width="${(w - 2.8) * p / 100}" height="6" rx="1.2" fill="${color}"/><rect x="${w + 1.2}" y="3.3" width="1.4" height="3.4" rx=".6" fill="currentColor" fill-opacity=".5"/>` +
+    (withText ? `<text x="${w / 2 + .6}" y="7.4" font-size="6.2" font-weight="800" text-anchor="middle" fill="currentColor" stroke="var(--rb)" stroke-width="1.8" paint-order="stroke">${Math.round(p)}</text>` : '') +
+    '</svg>' + (charging ? '<span style="font-size:7px;margin-left:-1px">⚡</span>' : '')
+}
+function spark(data, color, w = 26, h = 11, max) {
+  const m = max ?? Math.max(1, ...data)
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / m) * (h - 1) - .5}`).join(' ')
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polygon points="0,${h} ${pts} ${w},${h}" fill="${color}" fill-opacity=".25"/><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1" stroke-linejoin="round"/></svg>`
+}
+function histo(data, color, w = 30, h = 15) {
+  const bw = w / data.length
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${data.map((v, i) => `<rect x="${i * bw}" y="${h - (v / 100) * h}" width="${bw - .35}" height="${(v / 100) * h}" fill="${fill(v, color)}"/>`).join('')}</svg>`
+}
+function ring(p, color, label, size = 15) {
+  const r = size / 2 - 1.6, c = 2 * Math.PI * r
+  return `<span class="ring"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="currentColor" stroke-opacity=".16" stroke-width="2.2"/>` +
+    `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${fill(p, color)}" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="${c * p / 100} ${c}" transform="rotate(-90 ${size / 2} ${size / 2})"/>` +
+    `<text x="${size / 2}" y="${size / 2 + 2.1}" font-size="5.6" font-weight="800" text-anchor="middle" fill="currentColor">${Math.round(p)}</text></svg><small>${label}</small></span>`
+}
+const vbar = (p, color) => `<span class="vbar"><i style="height:${p}%;background:${fill(p, color)}"></i></span>`
+const under = (p, color) => `<div class="under"><i style="width:${p}%;background:${fill(p, color)}"></i></div>`
+const netSplit = () => `<span class="netsplit"><span>${ICON.up}</span><span>${bytes(live.tx)}</span><span>${ICON.down}</span><span>${bytes(live.rx)}</span></span>`
+
+const OPTIONS = [
+  {
+    id: 0, baseline: true, title: 'Today', desc: 'Label on top, value below, all the same colour.',
+    render: () => cell('CPU', pct('cpu')) + cell('RAM', pct('ram')) + cell('DISK', pct('disk')) + cell('BAT', batText()) + cell('NET', net())
+  },
+  {
+    id: 1, title: 'Fill bars beside each value (Stats app)', desc: 'A thin vertical bar fills with load next to every percentage. Turns amber at 70%, red at 88%.',
+    render: () => ['cpu', 'ram', 'disk'].map((k) => `<span class="row">${vbar(live[k], COLOR[k])}${cell(k.toUpperCase(), pct(k))}</span>`).join('') +
+      `<span class="row">${vbar(live.bat, 'var(--ok)')}${cell('BAT', batText())}</span>` + cell('NET', net())
+  },
+  {
+    id: 2, title: 'Sparklines: last 30 seconds', desc: 'Value moves into the label row; the value row becomes a tiny live graph. NET graphs download speed.',
+    render: () => cell(`CPU ${pct('cpu')}`, spark(hist.cpu, COLOR.cpu, 30, 11, 100)) + cell(`RAM ${pct('ram')}`, spark(hist.ram, COLOR.ram, 30, 11, 100)) +
+      cell('DISK', pct('disk')) + cell('BAT', batText()) + cell(`NET ${net()}`, spark(hist.rx, 'var(--net)', 34, 11))
+  },
+  {
+    id: 3, title: 'Ring gauges', desc: 'Each percentage is a small ring with the number inside and a tiny label under it. Compact and very scannable.',
+    render: () => ring(live.cpu, COLOR.cpu, 'CPU') + ring(live.ram, COLOR.ram, 'RAM') + ring(live.disk, COLOR.disk, 'DISK') +
+      `<span class="row">${battery(live.bat, live.charging)}</span>` + cell('NET', net())
+  },
+  {
+    id: 4, title: 'Progress underline', desc: 'Keeps today\'s look, adds a hairline under each value that fills with load. Smallest change from today.',
+    render: () => ['cpu', 'ram', 'disk'].map((k) => `<div class="cell"><div class="l">${k.toUpperCase()}</div><div class="v">${pct(k)}</div>${under(live[k], COLOR[k])}</div>`).join('') +
+      `<div class="cell"><div class="l">BAT</div><div class="v">${batText()}</div>${under(live.bat, 'var(--ok)')}</div>` +
+      `<div class="cell"><div class="l">NET</div><div class="v">${net()}</div><div class="under" style="visibility:hidden"></div></div>`
+  },
+  {
+    id: 5, title: 'Icons instead of labels, colour only when it matters', desc: 'One row: chip, memory, drive, a real battery shape. Numbers stay neutral and turn amber or red only under load.',
+    render: () => ['cpu', 'ram', 'disk'].map((k) => `<span class="ic ${load(live[k])}">${ICON[k]}${pct(k)}</span>`).join('') +
+      `<span class="ic">${battery(live.bat, live.charging)}</span><span class="ic">${ICON.down}${net()}</span>`
+  },
+  {
+    id: 6, title: 'Upload and download split (iStat Menus)', desc: 'Network becomes two tiny rows, ▲ up and ▼ down, so you can see which way the traffic flows.',
+    render: () => cell('CPU', pct('cpu')) + cell('RAM', pct('ram')) + cell('DISK', pct('disk')) + cell('BAT', batText()) + netSplit()
+  },
+  {
+    id: 7, title: 'One bar cluster for CPU / RAM / DISK', desc: 'Three bars side by side in one block (C R D), then battery shape and split network. Narrowest graphical option.',
+    render: () => `<span class="cluster">${['cpu', 'ram', 'disk'].map((k) => `<span class="col">${vbar(live[k], COLOR[k])}<small>${k[0].toUpperCase()}</small></span>`).join('')}</span>` +
+      `<span class="row">${battery(live.bat, live.charging)}</span>` + netSplit()
+  },
+  {
+    id: 8, title: 'CPU history bars (MenuMeters)', desc: 'CPU as a scrolling 30-second bar graph with the current % beside it; everything else stays as text.',
+    render: () => `<span class="row">${histo(hist.cpu, COLOR.cpu)}${cell('CPU', pct('cpu'))}</span>` + cell('RAM', pct('ram')) + cell('DISK', pct('disk')) + cell('BAT', batText()) + cell('NET', net())
+  },
+  {
+    id: 9, title: 'Heat tiles', desc: 'Each stat is a small rounded tile tinted by load: calm tiles are almost invisible, busy ones glow amber or red.',
+    render: () => {
+      const tile = (l, v, p, kind) => {
+        const tint = kind === 'bat' ? (batLoad(p, live.charging) === 'hot' ? '#ff453a' : batLoad(p, live.charging) === 'warm' ? '#ff9f0a' : null) : p >= 88 ? '#ff453a' : p >= 70 ? '#ff9f0a' : null
+        return `<span class="tile" style="background:${tint ? tint + '38' : 'color-mix(in srgb, currentColor 9%, transparent)'};${tint ? `box-shadow: inset 0 0 0 .7px ${tint}` : ''}"><small>${l}</small><b>${v}</b></span>`
+      }
+      return tile('CPU', Math.round(live.cpu), live.cpu) + tile('RAM', Math.round(live.ram), live.ram) + tile('DISK', Math.round(live.disk), live.disk) +
+        tile('BAT', `${live.charging ? '⚡' : ''}${Math.round(live.bat)}`, live.bat, 'bat') + cell('NET', net())
+    }
+  },
+  {
+    id: 10, title: 'Only when it matters', desc: 'Normal stats are hidden; a stat appears (red or amber) only when CPU ≥ 70%, RAM ≥ 85%, DISK ≥ 90% or battery ≤ 20%. Otherwise one green dot.',
+    render: () => {
+      const alerts = [
+        live.cpu >= 70 && cell('CPU', `<span class="${load(live.cpu)}">${pct('cpu')}</span>`),
+        live.ram >= 85 && cell('RAM', `<span class="${load(live.ram, 85, 92)}">${pct('ram')}</span>`),
+        live.disk >= 90 && cell('DISK', `<span class="${load(live.disk, 90, 95)}">${pct('disk')}</span>`),
+        !live.charging && live.bat <= 20 && `<span class="row">${battery(live.bat, false)}</span>`
+      ].filter(Boolean)
+      return alerts.length ? alerts.join('') : '<span class="dot" title="All good"></span>'
+    }
+  }
+]
+
+const context = `<span class="ctx"><span style="display:inline-flex;flex-direction:column;width:17px;border-radius:3px;overflow:hidden;box-shadow:inset 0 0 0 1px currentColor;text-align:center;line-height:1"><b style="background:#ff453a;color:#fff;font-size:5.5px;height:6.5px;line-height:6.5px">OCT</b><b style="font-size:10px;height:11px;line-height:11.5px">17</b></span>${cell('IST', '11:05 PM')}</span>`
+let picked = Number(localStorage.getItem('trayStatsPick') || 0)
+const list = document.getElementById('list')
+const pickbar = document.getElementById('pickbar')
+
+document.getElementById('scenarios').insertAdjacentHTML('beforeend', SCENARIOS.map((s) => `<button data-s="${s.id}">${s.label}</button>`).join(''))
+document.getElementById('scenarios').addEventListener('click', (e) => {
+  const b = e.target.closest('button')
+  if (!b) return
+  scenario = b.dataset.s
+  localStorage.setItem('trayStatsScenario', scenario)
+  render()
+})
+
+list.innerHTML = OPTIONS.map((o) => `
+  <section class="card${o.baseline ? ' baseline' : ''}" data-id="${o.id}">
+    <div class="head"><span class="num">${o.baseline ? '—' : '#' + o.id}</span><span class="title">${o.title}</span><span class="width"></span></div>
+    <div class="desc">${o.desc}</div>
+    <div class="bars">
+      <div class="menubar dark"><div class="tray"></div></div>
+      <div class="menubar light"><div class="tray"></div></div>
+    </div>
+  </section>`).join('')
+
+list.addEventListener('click', (e) => {
+  const card = e.target.closest('.card')
+  if (!card || card.classList.contains('baseline')) return
+  picked = Number(card.dataset.id)
+  localStorage.setItem('trayStatsPick', picked)
+  paintPick()
+})
+
+function paintPick() {
+  document.querySelectorAll('.card:not(.baseline)').forEach((c) => c.classList.toggle('picked', Number(c.dataset.id) === picked))
+  const o = OPTIONS.find((x) => x.id === picked && !x.baseline)
+  pickbar.style.display = o ? 'block' : 'none'
+  if (o) pickbar.textContent = `Picked #${o.id} — ${o.title}. Tell me "stats option ${o.id}".`
+}
+
+function render() {
+  document.querySelectorAll('#scenarios button').forEach((b) => b.classList.toggle('on', b.dataset.s === scenario))
+  let base = 0
+  OPTIONS.forEach((o) => {
+    const card = list.querySelector(`[data-id="${o.id}"]`)
+    const html = o.render()
+    card.querySelectorAll('.tray').forEach((t) => { t.innerHTML = html + context })
+    const w = Math.round((card.querySelector('.tray').getBoundingClientRect().width - card.querySelector('.ctx').getBoundingClientRect().width) / 2)
+    if (o.baseline) base = w
+    card.querySelector('.width').textContent = o.baseline ? `${w} pt` : `${w} pt (${w <= base ? '−' : '+'}${Math.abs(w - base)})`
+  })
+}
+
+paintPick()
+step(); render()
+setInterval(() => { step(); render() }, 1000)
+</script>
+</body>
+</html>

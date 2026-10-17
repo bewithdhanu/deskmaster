@@ -1,7 +1,7 @@
 // Load environment variables
 require('dotenv').config()
 
-const { app, BrowserWindow, Tray, nativeImage, ipcMain, Menu, nativeTheme, systemPreferences, dialog, shell } = require("electron")
+const { app, BrowserWindow, Tray, ipcMain, Menu, nativeTheme, systemPreferences, dialog, shell } = require("electron")
 const path = require("path")
 const fs = require("fs")
 const http = require("http")
@@ -23,8 +23,9 @@ const bcrypt = require("bcryptjs")
 const { spawn } = require("child_process")
 const { randomUUID } = require("crypto")
 const gdriveBackup = require('./gdriveBackup')
-const archiver = require('archiver')
 const appDataExport = require('./appDataExport')
+const backupCrypto = require('./backupCrypto')
+const trayHelper = require('./trayHelper')
 const cloudflaredBinary = require('./cloudflaredBinary')
 
 // Only load auto-launch in production
@@ -50,8 +51,8 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 let tray = null
+let nativeTray = null
 let win = null
-let trayIconWindow = null
 let aboutWindow = null
 let statsInterval = null
 let trayUpdateInterval = null
@@ -208,15 +209,20 @@ async function uploadBackupToDrive() {
     if (!refreshToken) throw new Error('Google Drive not connected')
 
     const { clientId, clientSecret } = getGdriveOAuthCredentialsForRefresh()
-    const { zipPath, baseName } = await createBackupZipToTemp()
+    const { filePath, baseName } = await createEncryptedBackupToTemp()
 
-    const file = await gdriveBackup.uploadBackup({
-      clientId,
-      clientSecret,
-      refreshToken,
-      zipPath,
-      fileName: baseName
-    })
+    let file
+    try {
+      file = await gdriveBackup.uploadBackup({
+        clientId,
+        clientSecret,
+        refreshToken,
+        filePath,
+        fileName: baseName
+      })
+    } finally {
+      fs.rm(filePath, { force: true }, () => {})
+    }
 
     setCloudBackupSettings({ lastBackupAt: new Date().toISOString(), lastBackupStatus: 'success', lastBackupError: null })
     return { success: true, file }
@@ -232,7 +238,13 @@ async function uploadBackupToDrive() {
 }
 async function getAppExportDeps() {
   return {
-    getAppSettings: () => config.getAppSettings(),
+    getAppSettings: () => {
+      // Never write the backup passphrase into an export (manual exports may be unencrypted)
+      const settings = config.getAppSettings()
+      if (!settings?.cloudBackup?.encryptionPassphrase) return settings
+      const { encryptionPassphrase, ...cloudBackup } = settings.cloudBackup
+      return { ...settings, cloudBackup }
+    },
     getAllAuthenticators: () => authenticator.getAllAuthenticators(),
     getClipboardHistory: (limit) => clipboardTracker.getClipboardHistory(limit),
     getHistory: (from, to) => history.getHistory(from, to),
@@ -266,27 +278,24 @@ function getAppImportDeps() {
   }
 }
 
-async function createBackupZipToTemp() {
+// Cloud backups are always encrypted (never upload plaintext secrets to Drive).
+async function createEncryptedBackupToTemp() {
+  const passphrase = getCloudBackupSettings()?.encryptionPassphrase
+  if (!passphrase || !String(passphrase).trim()) {
+    throw new Error('Set a backup passphrase in Settings > Cloud Backup before backing up to Google Drive')
+  }
+
   const backupData = await appDataExport.buildExportPayload(await getAppExportDeps())
+  const envelope = backupCrypto.encryptBackup(backupData, passphrase)
 
   const ts = new Date().toISOString().replace(/[:.]/g, '-')
-  const baseName = `deskmaster-backup-${ts}.zip`
+  const baseName = `deskmaster-backup-${ts}.enc.json`
   const tmpDir = path.join(app.getPath('userData'), 'tmp')
   fs.mkdirSync(tmpDir, { recursive: true })
-  const zipPath = path.join(tmpDir, baseName)
+  const filePath = path.join(tmpDir, baseName)
+  fs.writeFileSync(filePath, JSON.stringify(envelope), { mode: 0o600 })
 
-  await new Promise((resolve, reject) => {
-    const output = fs.createWriteStream(zipPath)
-    const archive = archiver('zip', { zlib: { level: 9 } })
-    output.on('close', resolve)
-    output.on('error', reject)
-    archive.on('error', reject)
-    archive.pipe(output)
-    archive.append(JSON.stringify(backupData, null, 2), { name: 'deskmaster-backup.json' })
-    archive.finalize()
-  })
-
-  return { zipPath, baseName }
+  return { filePath, baseName }
 }
 
 function clearGdriveBackupTimer() {
@@ -372,33 +381,6 @@ if (AutoLaunch) {
   })
 }
 
-
-function createTrayIconWindow() {
-  trayIconWindow = new BrowserWindow({
-    width: 200,
-    height: 120,
-    show: false,
-    frame: false,
-    transparent: true,
-    skipTaskbar: true,
-    icon: path.join(__dirname, 'assets/icons/app-icon-256.png'),
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      offscreen: true,
-      devTools: process.env.NODE_ENV === 'development', // Enable DevTools only in development
-    },
-  })
-
-  const distPath = app.isPackaged ? app.getAppPath() : __dirname;
-  trayIconWindow.loadFile(path.join(distPath, "dist", "tray-icon.html"))
-  
-  trayIconWindow.webContents.on('did-finish-load', () => {
-    // Open DevTools for tray window debugging
-    // trayIconWindow.webContents.openDevTools()
-    updateTrayIcon()
-  })
-}
 
 function createAboutWindow() {
   if (aboutWindow) {
@@ -693,75 +675,30 @@ function createWindow() {
   })
 }
 
+// Push fresh stats to the native menu bar item (no-op while the static fallback icon is in use).
 async function updateTrayIcon() {
-  if (!trayIconWindow || !tray) return
-
+  if (!nativeTray) return
   try {
-    const currentStats = await stats.updateTrayStats();
-    const allTimezones = config.getTimezones();
-    
-    // Filter timezones to only show those with showInTray: true (default to true if not set)
-    const timezones = allTimezones.filter(tz => tz.showInTray !== false);
-
-    // Debug: Log timezone data
-
-    // Get effective theme based on user preference
-    const effectiveTheme = getEffectiveTheme();
+    const currentStats = await stats.updateTrayStats()
+    const timezones = config.getTimezones().filter(tz => tz.showInTray !== false)
     const uptimeEnabled = appSettings?.uptimeKuma?.enabled !== false
-    const uptimeTraySummary = uptimeEnabled ? uptimeMonitor.getTraySummary() : { down: 0, sslAttention: 0, domainAttention: 0 };
-    
-    // Send current stats to tray icon window
-    trayIconWindow.webContents.send('update-tray-stats', {
-      ...currentStats,
-      timezones: timezones,
-      uptime: uptimeTraySummary,
-      theme: effectiveTheme,
-      settings: appSettings
+    nativeTray.send({
+      ...trayHelper.buildTrayState({
+        stats: currentStats,
+        timezones,
+        settings: appSettings,
+        uptime: uptimeEnabled ? uptimeMonitor.getTraySummary() : {},
+        uptimeEnabled
+      }),
+      // Left click opens the helper's native time-converter popover
+      converter: {
+        clocks: config.getTimezones().filter(tz => tz?.timezone).map(({ timezone, label }) => ({ tz: timezone, label: label || null })),
+        twelveHour: !/HH/.test(appSettings?.datetimeFormat || 'HH:mm:ss'),
+        theme: appSettings?.theme || 'system'
+      }
     })
-    // log all html contents of trayIconWindow
-    // console.log(await trayIconWindow.webContents.executeJavaScript('document.documentElement.outerHTML'))
-
-    // Calculate dynamic width based on enabled stats
-    let enabledStatsCount = 0;
-    if (appSettings.stats.cpu) enabledStatsCount++;
-    if (appSettings.stats.ram) enabledStatsCount++;
-    if (appSettings.stats.disk) enabledStatsCount++;
-    if (appSettings.stats.network) enabledStatsCount++;
-    if (appSettings.stats.battery && currentStats.battery) enabledStatsCount++;
-    
-    // Base width for stats + timezones + padding
-    const baseWidth = 20; // Base padding
-    const statWidth = enabledStatsCount * 18; // Each stat takes ~18px
-    const timezoneWidth = timezones.length * 72; // Each timezone takes ~72px (only those shown in tray)
-    const hasUptimeNotification = uptimeEnabled && (uptimeTraySummary.down > 0 || uptimeTraySummary.sslAttention > 0 || uptimeTraySummary.domainAttention > 0);
-    const uptimeWidth = hasUptimeNotification ? 50 : 0;
-    const padding = (enabledStatsCount + timezones.length + (hasUptimeNotification ? 1 : 0)) * 4; // 4px padding between items
-    
-    const width = baseWidth + statWidth + timezoneWidth + uptimeWidth + padding;
-    const height = 17;
-    
-    // Resize the tray window to accommodate all content
-    trayIconWindow.setSize(Math.ceil(width), height)
-    
-    const image = await trayIconWindow.webContents.capturePage({
-      x: 0,
-      y: 0,
-      width: width,
-      height: height
-    })
-    
-    if (image && !image.isEmpty()) {
-      // Resize the image to appropriate tray icon size
-      const resizedImage = image.resize({ 
-        width: process.platform === 'darwin' ? 22*width/height : 32*width/height,
-        height: process.platform === 'darwin' ? 22 : 32,
-        quality: 'best'
-      })
-      tray.setImage(resizedImage)
-    }
   } catch (error) {
-    console.error('Error updating tray icon:', error)
-    tray.setTitle("")
+    console.error('Error updating tray:', error)
   }
 }
 
@@ -1247,6 +1184,7 @@ function startBrowserApiServers() {
             intervalHours: Number(s?.intervalHours) || 4,
             keepLast: Number(s?.keepLast) || 10,
             oauthConfigured: hasGdriveOAuthCredentials(),
+            passphraseConfigured: Boolean(String(s?.encryptionPassphrase || '').trim()),
             lastBackupAt: s?.lastBackupAt || null,
             lastBackupStatus: s?.lastBackupStatus || null,
             lastBackupError: s?.lastBackupError || null,
@@ -2459,6 +2397,66 @@ function scheduleTrayOnlyBlurHide() {
   }, 300)
 }
 
+// Fallback tray: static icon only, used when the native menu bar helper is unavailable.
+function createElectronTray() {
+  const trayIconPath = path.join(__dirname, 'assets/icons/tray-icon-22.png')
+  tray = new Tray(trayIconPath)
+
+  // Set tooltip based on environment
+  const tooltip = process.env.NODE_ENV === 'development'
+    ? "DeskMaster - Desktop Productivity Tool (Development Mode)"
+    : "DeskMaster - Desktop Productivity Tool"
+  tray.setToolTip(tooltip)
+
+  // Set up context menu with auto-start status
+  updateContextMenu()
+  tray.setIgnoreDoubleClickEvents(true)
+
+  tray.on("click", () => {
+    tray.setContextMenu(null)
+    showWindow()
+  })
+
+  tray.on("right-click", () => {
+    tray.setContextMenu(createContextMenu())
+    tray.popUpContextMenu()
+  })
+}
+
+// Native macOS menu bar item (native/tray/main.swift). Draws and ticks clocks itself;
+// we only push stats. Returns false when unavailable so the caller uses the Electron tray.
+function startNativeTray() {
+  if (process.platform !== 'darwin') return false
+  const binaryPath = trayHelper.resolveHelperPath(process.resourcesPath, __dirname)
+  if (!binaryPath) return false
+
+  nativeTray = trayHelper.createTrayHelper({
+    binaryPath,
+    onEvent: handleNativeTrayEvent,
+    onUnavailable: () => {
+      console.warn('Native tray helper unavailable, falling back to Electron tray')
+      nativeTray = null
+      createElectronTray()
+    }
+  })
+  return true
+}
+
+function handleNativeTrayEvent(event) {
+  if (event.type === 'open-app') {
+    showWindow()
+  } else if (event.type === 'right-click') {
+    // popup() coordinates are relative to the focused window when there is one
+    const target = BrowserWindow.getFocusedWindow()
+    const origin = target ? target.getContentBounds() : { x: 0, y: 0 }
+    createContextMenu().popup({
+      window: target || undefined,
+      x: Math.round(event.x - origin.x),
+      y: Math.round(event.y + event.height - origin.y)
+    })
+  }
+}
+
 function showWindow() {
   // If window is destroyed, recreate it
   if (!win || win.isDestroyed()) {
@@ -2595,7 +2593,8 @@ app.whenReady().then(async () => {
   }
 
   createWindow()
-  createTrayIconWindow()
+  // Native menu bar helper on macOS; a static icon tray is the fallback.
+  if (!startNativeTray()) createElectronTray()
 
   // Start stats updates immediately (for WebSocket clients and tray, not just window)
   // Stats should run continuously regardless of window state
@@ -2604,55 +2603,9 @@ app.whenReady().then(async () => {
     statsInterval = setInterval(() => {sendDetailedStatsToRenderer()}, 1000)
   }
 
-  // Create tray with our custom icon
-  const trayIconPath = path.join(__dirname, 'assets/icons/tray-icon-22.png')
-  tray = new Tray(trayIconPath)
-  
-  // Set tooltip based on environment
-  const tooltip = process.env.NODE_ENV === 'development' 
-    ? "DeskMaster - Desktop Productivity Tool (Development Mode)"
-    : "DeskMaster - Desktop Productivity Tool"
-  tray.setToolTip(tooltip)
-  
-  // Set up context menu with auto-start status
-  updateContextMenu()
-  tray.setIgnoreDoubleClickEvents(true)
-
   // Initial stats update
   updateTrayIcon()
   trayUpdateInterval = setInterval(updateTrayIcon, 2000)
-
-  tray.on("click", (event, bounds) => {
-    tray.setContextMenu(null)
-    
-    // Prevent rapid clicking
-    if (tray._isProcessing) return
-    tray._isProcessing = true
-    
-    setTimeout(() => {
-      tray._isProcessing = false
-    }, 100)
-    
-    // Check if window exists and is not destroyed
-    if (win && !win.isDestroyed()) {
-    if (win.isVisible()) {
-        // Window is visible, hide it
-      win.hide()
-    } else {
-        // Window exists but not visible, show it
-        showWindow()
-      }
-    } else {
-      // Window doesn't exist or is destroyed, create and show it
-      showWindow()
-    }
-  })
-
-  tray.on("right-click", (event, bounds) => {
-    tray.setContextMenu(createContextMenu())
-    console.log("Tray right-clicked", event, bounds)
-    tray.popUpContextMenu()
-  })
 
   nativeTheme.on("updated", () => {
     const effectiveTheme = getEffectiveTheme()
@@ -2661,8 +2614,6 @@ app.whenReady().then(async () => {
     if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
       win.webContents.send("theme-changed", effectiveTheme)
     }
-    // Update tray icon with new theme
-    updateTrayIcon()
   })
 })
 
@@ -2804,6 +2755,7 @@ ipcMain.handle('gdrive:status', async () => {
     intervalHours: Number(s?.intervalHours) || 4,
     keepLast: Number(s?.keepLast) || 10,
     oauthConfigured: hasGdriveOAuthCredentials(),
+            passphraseConfigured: Boolean(String(s?.encryptionPassphrase || '').trim()),
     lastBackupAt: s?.lastBackupAt || null,
     lastBackupStatus: s?.lastBackupStatus || null,
     lastBackupError: s?.lastBackupError || null,
@@ -2865,9 +2817,6 @@ ipcMain.handle('update-settings', (event, newSettings) => {
     if (newSettings.theme !== undefined) {
       win.webContents.send('theme-changed', effectiveTheme)
   }
-  }
-  if (trayIconWindow && !trayIconWindow.isDestroyed() && trayIconWindow.webContents && !trayIconWindow.webContents.isDestroyed()) {
-    trayIconWindow.webContents.send('settings-updated', appSettings)
   }
   
   // Update tray icon if theme changed
@@ -3782,7 +3731,18 @@ ipcMain.handle('import-all-data', async (event) => {
 
     // Check if file is encrypted
     let importData;
-    if (parsedContent.encrypted) {
+    if (backupCrypto.isBackupEnvelope(parsedContent)) {
+      // Cloud backup (.enc.json) - passphrase-protected, same format the web app reads
+      const passphrase = await promptEncryptionKey('Import Cloud Backup', 'Enter your backup passphrase:');
+      if (!passphrase || !passphrase.trim()) {
+        return { success: false, needsPassword: true, error: 'Backup passphrase is required.' };
+      }
+      try {
+        importData = backupCrypto.decryptBackup(parsedContent, passphrase);
+      } catch (error) {
+        return { success: false, needsPassword: true, error: error.message };
+      }
+    } else if (parsedContent.encrypted) {
       // Prompt for encryption key
       let encryptionKey = await promptEncryptionKey('Import Encryption Key', 'This file is encrypted. Enter encryption key:');
       
@@ -4759,6 +4719,7 @@ app.on("before-quit", async () => {
   }
   if (statsInterval) clearInterval(statsInterval)
   if (trayUpdateInterval) clearInterval(trayUpdateInterval)
+  nativeTray?.stop()
   
   // Close database connections
   try {
@@ -5008,21 +4969,3 @@ function setupAgentModule() {
   })
 }
 
-// Add IPC handler for tray icon screenshot from renderer
-ipcMain.on('tray-icon-screenshot', (event, dataUrl) => {
-  try {
-    // Convert base64 data URL to nativeImage
-    const image = nativeImage.createFromDataURL(dataUrl)
-    // Resize to tray icon size
-    const resizedImage = image.resize({
-      width: process.platform === 'darwin' ? 22 : 32,
-      height: process.platform === 'darwin' ? 22 : 32,
-      quality: 'best'
-    })
-    if (tray) {
-      tray.setImage(resizedImage)
-    }
-  } catch (err) {
-    console.error('Failed to set tray icon from html2canvas:', err)
-  }
-})

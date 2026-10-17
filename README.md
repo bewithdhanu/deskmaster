@@ -7,7 +7,7 @@
   
   [![macOS](https://img.shields.io/badge/macOS-10.12+-blue.svg)](https://www.apple.com/macos/)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-  [![Version](https://img.shields.io/badge/version-3.3.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
+  [![Version](https://img.shields.io/badge/version-3.10.0-orange.svg)](https://github.com/bewithdhanu/deskmaster/releases)
 </div>
 
 ## ✨ Features
@@ -16,7 +16,8 @@
 - **Nine main tabs**: Home, World Clocks, Performance, Notes, Agent, Uptime, Clipboard, Authenticator, and Settings
 - **Hash-based URLs** for bookmarking and browser back/forward — e.g. `#/agent/chat/{id}`, `#/settings/agent`, `#/notes/note/{id}`
 - **Persistent tab memory** with URL as the source of truth when a hash is present
-- **System tray** quick access with live stats and theme-aware tray icon
+- **Native menu bar item** drawn by a small Swift helper: CPU/RAM/disk/battery rings, upload/download speeds, a calendar-page date and live clocks
+- **Time converter popover** on tray click — pick a date, time and zone and see it in all your clocks
 
 ---
 
@@ -27,7 +28,7 @@
 - **Network activity** with upload/download speeds
 - **Battery status** on laptops
 - **Configurable visibility** per metric (Settings → System Stats)
-- **Live tray updates** every second
+- **Live tray updates** — rings colour amber/red as load rises; the network cell has a fixed width so the menu bar doesn't shift
 - **Home dashboard** with system stat cards and Uptime Kuma summary widgets
 
 ### 📈 **Performance History**
@@ -45,7 +46,7 @@
 - **Optimistic create/edit/delete/pause/resume** with queued background sync
 - **Automatic retry and rollback** if a queued action fails twice
 - **SSL and domain expiry attention** tracking alongside down monitor counts
-- **Tray status indicator** for Down | SSL Attention | Domain Attention counts
+- **Tray status indicator** — icons with counts for down monitors, SSL attention and domain attention (hidden when all is well)
 - **Settings-managed credentials** (URL, username, password)
 - **Optional disable** of the Uptime tab from Settings → Uptime Kuma
 
@@ -102,6 +103,7 @@ Clipboard and Authenticator data are **never** exposed to the agent.
 - **Flexible formats** — 12/24 hour with optional date display
 - **Automatic DST handling**
 - **Per-timezone tray visibility** toggle
+- **Compact tray dates** — with a date format, the date is shown once as a calendar icon and other clocks get a +1/−1 marker when they're on a different day
 - **Real-time synchronization** across all clocks
 
 ### 🛠️ **Home Utility Tools**
@@ -183,6 +185,11 @@ Sidebar sections (each has its own URL under `#/settings/...`):
 - **Localhost only** by default with API token authentication
 - **Desktop app must be running** — the browser connects to the Electron backend
 
+### 📱 **Phone Web App**
+- **Read-only access** to your Google Drive backup at [deskmaster-web.pages.dev](https://deskmaster-web.pages.dev): authenticator codes, notes and clipboard history
+- **Decrypted in the browser** with your Cloud Backup passphrase; nothing is sent to a server, and it locks after 3 minutes in the background
+- Source lives in [`web/`](web/README.md)
+
 ---
 
 ## 🚀 Installation
@@ -199,7 +206,7 @@ Sidebar sections (each has its own URL under `#/settings/...`):
 1. Download the DMG for your Mac architecture
 2. Open the DMG and drag DeskMaster to Applications
 3. Launch from Applications or Spotlight
-4. Click the menu bar tray icon to open the main window
+4. Click the menu bar item for the time converter, or right-click → **Show Monitor** for the main window
 
 ---
 
@@ -207,14 +214,14 @@ Sidebar sections (each has its own URL under `#/settings/...`):
 
 ### First launch
 1. DeskMaster appears in the system tray (menu bar)
-2. Click the tray icon to open or hide the main window
+2. Click it to open the time converter; use **Open DeskMaster** there for the main window
 3. Explore tabs from the top navigation bar
 4. Configure LLM providers in **Settings → AI Agent** to use the Agent and Text Reformat tools
 
 ### System tray
-- **Click** — show/hide main window
-- **Right-click** — context menu
-- **Hover** — quick system stats (when enabled)
+- **Click** — native time converter popover: set a date, time and source zone; every clock shows the converted time
+- **Right-click** — context menu (Show Monitor, auto-start, quit)
+- **Settings → System Stats / World Clocks** — choose which rings, speeds and clocks appear
 
 ### World Clocks
 1. Open the **World Clocks** tab

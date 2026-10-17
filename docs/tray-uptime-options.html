@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DeskMaster tray — Uptime Kuma layout options</title>
+<link rel="icon" href="../assets/icons/app-icon-128.png" />
+<style>
+  :root { color-scheme: dark; --bg: #0f0f13; --card: #17171d; --border: #2a2a33; --muted: #8b8b98; --accent: #3b82f6;
+    --down: #ff453a; --warn: #ff9f0a; --soon: #ffd60a; --ok: #30d158; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: #ececf1; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { max-width: 1100px; margin: 0 auto; padding: 40px 24px 8px; display: flex; gap: 16px; align-items: center; }
+  header img { width: 48px; height: 48px; }
+  h1 { margin: 0; font-size: 22px; }
+  header p { margin: 2px 0 0; color: var(--muted); }
+  .controls { max-width: 1100px; margin: 0 auto; padding: 12px 24px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
+  .controls button { background: var(--card); color: #ececf1; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font: inherit; cursor: pointer; }
+  .controls button.on { border-color: var(--accent); background: #3b82f622; }
+  .scenario { max-width: 1100px; margin: 0 auto; padding: 0 24px; color: var(--muted); font-size: 12.5px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 8px 24px 64px; display: grid; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: grid; gap: 12px; cursor: pointer; }
+  .card:hover { border-color: #3a3a46; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card.baseline { cursor: default; opacity: .9; }
+  .head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .num { font-weight: 700; color: var(--accent); min-width: 28px; }
+  .title { font-weight: 600; font-size: 15px; }
+  .width { margin-left: auto; font: 600 12px ui-monospace, monospace; color: var(--muted); }
+  .desc { color: var(--muted); margin: -6px 0 0 38px; font-size: 13px; }
+  .bars { display: flex; flex-wrap: wrap; gap: 10px; margin-left: 38px; }
+  .menubar { border-radius: 8px; padding: 6px 10px; display: flex; align-items: center; }
+  .menubar.dark { background: #1f1f24; color: #f2f2f2; --rb: #1f1f24; }
+  .menubar.light { background: #e9e9ec; color: #1c1c1e; --rb: #e9e9ec; }
+
+  /* Tray proportions from native/tray/main.swift, shown at 2x */
+  .tray { zoom: 2; display: inline-flex; align-items: center; height: 24px; padding: 0 5px; gap: 8px; white-space: nowrap; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; }
+  .cell { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+  .l { font-size: 9px; font-weight: 600; height: 10px; opacity: .72; }
+  .v { font-size: 10.4px; font-weight: 700; height: 11px; margin-top: -2px; display: inline-flex; gap: 3px; align-items: center; }
+  .ctx { opacity: .45; }
+  .down { color: var(--down); } .warn { color: var(--warn); } .soon { color: #d4a800; } .ok { color: var(--ok); }
+  .menubar.dark .soon { color: var(--soon); }
+  .pill { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; color: #fff; }
+  .pill.down { background: var(--down); color: #fff; } .pill.warn { background: var(--warn); color: #fff; } .pill.soon { background: var(--soon); color: #111; }
+  .pill.ok { background: transparent; color: var(--ok); box-shadow: inset 0 0 0 .8px var(--ok); }
+  .dots { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, 3.4px); gap: 1.6px; }
+  .dots i { width: 3.4px; height: 3.4px; border-radius: 50%; background: var(--ok); }
+  .dots i.down { background: var(--down); } .dots i.warn { background: var(--warn); } .dots i.soon { background: var(--soon); } .dots i.paused { background: currentColor; opacity: .3; }
+  .badge { position: relative; display: inline-flex; }
+  .badge b { position: absolute; top: -3px; right: -6px; min-width: 9px; height: 9px; padding: 0 2px; border-radius: 5px; background: var(--down); color: #fff; font-size: 6.5px; line-height: 9px; text-align: center; box-shadow: 0 0 0 1px var(--rb); }
+  .badge b.warn { background: var(--warn); }
+  .seg { display: inline-flex; border-radius: 5px; overflow: hidden; height: 13px; font-size: 9px; font-weight: 800; }
+  .seg span { padding: 0 4px; display: inline-flex; align-items: center; gap: 2px; color: #fff; }
+  .seg .down { background: var(--down); color: #fff; } .seg .warn { background: var(--warn); color: #fff; } .seg .soon { background: var(--soon); color: #111; }
+  .fade { animation: fade .35s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(1px); } }
+  .pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .note { max-width: 1100px; margin: 0 auto 4px; padding: 12px 16px; border: 1px solid #ff9f0a55; background: #ff9f0a12; border-radius: 12px; font-size: 13px; }
+  .note b { color: var(--warn); }
+  .pickbar { position: sticky; bottom: 16px; margin: 0 auto; width: fit-content; background: var(--accent); color: white; padding: 8px 16px; border-radius: 999px; font-weight: 600; display: none; box-shadow: 0 8px 24px #0008; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding-bottom: 40px; }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<header>
+  <img src="../assets/icons/app-icon-256.png" alt="" />
+  <div>
+    <h1>Uptime Kuma in the tray — pick one</h1>
+    <p>Live mockups at 2× using the tray's real fonts and spacing. Switch the scenario to see how each handles good days and bad days.</p>
+  </div>
+</header>
+<div style="padding: 0 24px"><div class="note"><b>Before any design:</b> uptime data refreshes once an hour today, so a site that goes down can take up to an hour to show here. Down status should refresh every minute or so; SSL and domain expiry can stay hourly.</div></div>
+<div class="controls" id="scenarios">Scenario:</div>
+<div class="scenario" id="scenarioDesc"></div>
+<main id="list"></main>
+<div class="pickbar" id="pickbar"></div>
+<footer>DeskMaster by <a href="mailto:bewithdhanu@gmail.com">Dhanu K</a> · <a href="https://github.com/bewithdhanu/deskmaster" target="_blank" rel="noopener">github.com/bewithdhanu/deskmaster</a></footer>
+
+<script>
+const site = (name, status = 'UP', ssl = 90, domain = 200) => ({ name, status, ssl, domain })
+const healthy = () => Array.from({ length: 24 }, (_, i) => site(`site${i + 1}.com`))
+const SCENARIOS = [
+  { id: 'ok', label: 'All good', desc: '24 monitors, all up, nothing expiring soon.', monitors: healthy() },
+  { id: 'down1', label: '1 site down', desc: 'api.cepoch.com is down; everything else is fine.', monitors: [site('api.cepoch.com', 'DOWN'), ...healthy().slice(1)] },
+  { id: 'ssl', label: 'SSL expiring in 3 days', desc: 'Nothing down; shop.cepoch.com SSL expires in 3 days.', monitors: [site('shop.cepoch.com', 'UP', 3), ...healthy().slice(1)] },
+  { id: 'domain', label: 'Domain in 18 days', desc: 'Nothing down; dhanu.dev domain renews in 18 days.', monitors: [site('dhanu.dev', 'UP', 90, 18), ...healthy().slice(1)] },
+  { id: 'mess', label: 'Bad day', desc: '2 down, an SSL expiring in 5 days, a domain in 12 days, 1 paused.',
+    monitors: [site('api.cepoch.com', 'DOWN'), site('admin.cepoch.com', 'DOWN'), site('shop.cepoch.com', 'UP', 5), site('dhanu.dev', 'UP', 90, 12), site('old.site', 'PAUSED'), ...healthy().slice(5)] }
+]
+
+function summarize(monitors) {
+  const down = monitors.filter((m) => m.status === 'DOWN')
+  const ssl = monitors.filter((m) => m.status !== 'PAUSED' && m.ssl <= 21).sort((a, b) => a.ssl - b.ssl)
+  const domain = monitors.filter((m) => m.status !== 'PAUSED' && m.domain <= 21).sort((a, b) => a.domain - b.domain)
+  const active = monitors.filter((m) => m.status !== 'PAUSED')
+  const expiring = [...ssl.map((m) => ({ kind: 'SSL', name: m.name, days: m.ssl })), ...domain.map((m) => ({ kind: 'DOMAIN', name: m.name, days: m.domain }))].sort((a, b) => a.days - b.days)
+  return { monitors, down, ssl, domain, expiring, total: active.length, up: active.length - down.length }
+}
+const tone = (days) => days <= 7 ? 'warn' : days <= 14 ? 'warn' : 'soon'
+const short = (name) => name.replace(/\.(com|dev|in|io|site|net|org)$/, '')
+const cell = (l, v, cls = '') => `<div class="cell ${cls}"><div class="l">${l}</div><div class="v">${v}</div></div>`
+const ICON = {
+  down: '<svg width="8" height="8" viewBox="0 0 10 10"><path d="M5 9 1 3h8z" fill="currentColor"/></svg>',
+  lock: '<svg width="7" height="8" viewBox="0 0 10 12"><rect x="1" y="5" width="8" height="6.5" rx="1.5" fill="currentColor"/><path d="M3 5V3.5a2 2 0 0 1 4 0V5" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>',
+  globe: '<svg width="8" height="8" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6" cy="6" r="5"/><path d="M1 6h10M6 1c-3 3-3 7 0 10M6 1c3 3 3 7 0 10"/></svg>',
+  pulse: '<svg width="14" height="10" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6h3l2-4 3 8 2-4h4"/></svg>'
+}
+
+// Each option: render(summary, now) -> HTML for the uptime part only ('' = hidden).
+const OPTIONS = [
+  {
+    id: 0, baseline: true, title: 'Today', desc: 'down | SSL | domain counts, only when something needs attention.',
+    render: (s) => (s.down.length || s.ssl.length || s.domain.length)
+      ? cell('UPT', `<span class="down">${s.down.length}</span>|<span class="warn">${s.ssl.length}</span>|<span class="warn">${s.domain.length}</span>`) : ''
+  },
+  {
+    id: 1, title: 'Icons instead of a code', desc: 'Same counts, but each has its own icon (▼ down, lock SSL, globe domain) and zeros are hidden.',
+    render: (s) => {
+      const parts = [
+        s.down.length && `<span class="down">${ICON.down}${s.down.length}</span>`,
+        s.ssl.length && `<span class="warn">${ICON.lock}${s.ssl.length}</span>`,
+        s.domain.length && `<span class="warn">${ICON.globe}${s.domain.length}</span>`
+      ].filter(Boolean)
+      return parts.length ? cell('UPTIME', parts.join(' ')) : ''
+    }
+  },
+  {
+    id: 2, title: 'Up / total, always visible', desc: '"24/24" in green on a good day, so you know monitoring is alive; turns red with the down count.',
+    render: (s) => s.down.length
+      ? cell('SITES', `<span class="down">${ICON.down}${s.down.length} DOWN</span>`)
+      : cell('SITES', `<span class="${s.expiring.length ? 'warn' : 'ok'}">●</span>${s.up}/${s.total}`)
+  },
+  {
+    id: 3, title: 'Name the problem', desc: 'Shows the actual site. One issue: its name; several: the worst one plus "+N".',
+    render: (s) => {
+      if (s.down.length) return cell(`<span class="down">DOWN${s.down.length > 1 ? ' +' + (s.down.length - 1) : ''}</span>`, `<span class="down">${short(s.down[0].name)}</span>`)
+      const e = s.expiring[0]
+      return e ? cell(`<span class="${tone(e.days)}">${e.kind} ${e.days}D${s.expiring.length > 1 ? ' +' + (s.expiring.length - 1) : ''}</span>`, short(e.name)) : ''
+    }
+  },
+  {
+    id: 4, title: 'Countdown to the next expiry', desc: 'Down count when something is down; otherwise the soonest expiry as a countdown, coloured by urgency.',
+    render: (s) => {
+      if (s.down.length) return cell('DOWN', `<span class="down">${s.down.length}</span>`)
+      const e = s.expiring[0]
+      return e ? cell(e.kind, `<span class="${tone(e.days)}">${e.kind === 'SSL' ? ICON.lock : ICON.globe}${e.days}d</span>`) : ''
+    }
+  },
+  {
+    id: 5, title: 'One status pill', desc: 'A single coloured pill for the most serious thing. Red "1 DOWN" beats amber "SSL 3d". Hidden when all is well.',
+    render: (s) => {
+      if (s.down.length) return `<span class="pill down">${ICON.down}${s.down.length} DOWN</span>`
+      const e = s.expiring[0]
+      return e ? `<span class="pill ${tone(e.days)}">${e.kind === 'SSL' ? ICON.lock : ICON.globe}${e.kind} ${e.days}d</span>` : ''
+    }
+  },
+  {
+    id: 6, title: 'Status board of dots', desc: 'One tiny dot per monitor in two rows: green up, red down, amber expiring, grey paused. You see the whole fleet at a glance.',
+    render: (s) => `<div class="dots">${s.monitors.map((m) => `<i class="${m.status === 'DOWN' ? 'down' : m.status === 'PAUSED' ? 'paused' : Math.min(m.ssl, m.domain) <= 21 ? tone(Math.min(m.ssl, m.domain)) : ''}"></i>`).join('')}</div>`
+  },
+  {
+    id: 7, title: 'Health ring', desc: 'A small ring filled by up/total, with the down count in the middle. Full green ring = all good.',
+    render: (s) => {
+      const r = 7.5, c = 2 * Math.PI * r, pct = s.total ? s.up / s.total : 1
+      const color = s.down.length ? 'var(--down)' : s.expiring.length ? 'var(--warn)' : 'var(--ok)'
+      return `<svg width="19" height="19" viewBox="0 0 20 20"><circle cx="10" cy="10" r="${r}" fill="none" stroke="currentColor" stroke-opacity=".18" stroke-width="2.4"/>` +
+        `<circle cx="10" cy="10" r="${r}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="${c * pct} ${c}" transform="rotate(-90 10 10)"/>` +
+        `<text x="10" y="13" font-size="8" font-weight="800" text-anchor="middle" fill="${s.down.length ? 'var(--down)' : 'currentColor'}">${s.down.length || '✓'}</text></svg>`
+    }
+  },
+  {
+    id: 8, title: 'Rotating issue ticker', desc: 'One slot cycles through every issue every 3 seconds: "api.cepoch DOWN" → "shop.cepoch SSL 5d" → … Hidden when all is well.',
+    render: (s, now) => {
+      const items = [...s.down.map((m) => ({ cls: 'down', l: 'DOWN', v: short(m.name) })), ...s.expiring.map((e) => ({ cls: tone(e.days), l: `${e.kind} ${e.days}D`, v: short(e.name) }))]
+      if (!items.length) return ''
+      const i = Math.floor(now / 3000) % items.length, it = items[i]
+      return `<div class="cell" style="min-width:64px"><div class="l"><span class="fade ${it.cls}" data-k="${i}">${it.l}${items.length > 1 ? ` · ${i + 1}/${items.length}` : ''}</span></div><div class="v"><span class="fade" data-k="${i}">${it.v}</span></div></div>`
+    }
+  },
+  {
+    id: 9, title: 'Heartbeat icon with a badge', desc: 'Like an app badge: a heartbeat icon that is always there, with a red count for down or amber for expiring. Narrowest option.',
+    render: (s) => {
+      const n = s.down.length || s.expiring.length
+      const icon = `<span class="${s.down.length ? 'down pulse' : ''}" style="display:inline-flex">${ICON.pulse}</span>`
+      return `<span class="badge">${icon}${n ? `<b class="${s.down.length ? '' : 'warn'}">${n}</b>` : ''}</span>`
+    }
+  },
+  {
+    id: 10, title: 'Segmented severity bar', desc: 'A compact coloured strip with one segment per kind of problem: down count, then days to the soonest SSL and domain expiry. Red = down, orange = 14 days or less, yellow = 21 days or less.',
+    render: (s) => {
+      const segs = [
+        s.down.length && `<span class="down">${ICON.down}${s.down.length}</span>`,
+        s.ssl.length && `<span class="${tone(s.ssl[0].ssl)}">${ICON.lock}${s.ssl[0].ssl}d</span>`,
+        s.domain.length && `<span class="${tone(s.domain[0].domain)}">${ICON.globe}${s.domain[0].domain}d</span>`
+      ].filter(Boolean)
+      return segs.length ? `<span class="seg">${segs.join('')}</span>` : ''
+    }
+  }
+]
+
+const context = cell('CPU', '12%') + cell('NET', '1 MB') + `<span class="ctx">${cell('IST', '10:56 PM')}</span>`
+let scenario = localStorage.getItem('trayUptimeScenario') || 'mess'
+let picked = Number(localStorage.getItem('trayUptimePick') || 0)
+const list = document.getElementById('list')
+const pickbar = document.getElementById('pickbar')
+
+document.getElementById('scenarios').insertAdjacentHTML('beforeend', SCENARIOS.map((s) => `<button data-s="${s.id}">${s.label}</button>`).join(''))
+document.getElementById('scenarios').addEventListener('click', (e) => {
+  const b = e.target.closest('button')
+  if (!b) return
+  scenario = b.dataset.s
+  localStorage.setItem('trayUptimeScenario', scenario)
+  tick()
+})
+
+list.innerHTML = OPTIONS.map((o) => `
+  <section class="card${o.baseline ? ' baseline' : ''}" data-id="${o.id}">
+    <div class="head"><span class="num">${o.baseline ? '—' : '#' + o.id}</span><span class="title">${o.title}</span><span class="width"></span></div>
+    <div class="desc">${o.desc}</div>
+    <div class="bars">
+      <div class="menubar dark"><div class="tray"></div></div>
+      <div class="menubar light"><div class="tray"></div></div>
+    </div>
+  </section>`).join('')
+
+list.addEventListener('click', (e) => {
+  const card = e.target.closest('.card')
+  if (!card || card.classList.contains('baseline')) return
+  picked = Number(card.dataset.id)
+  localStorage.setItem('trayUptimePick', picked)
+  paintPick()
+})
+
+function paintPick() {
+  document.querySelectorAll('.card:not(.baseline)').forEach((c) => c.classList.toggle('picked', Number(c.dataset.id) === picked))
+  const o = OPTIONS.find((x) => x.id === picked && !x.baseline)
+  pickbar.style.display = o ? 'block' : 'none'
+  if (o) pickbar.textContent = `Picked #${o.id} — ${o.title}. Tell me "uptime option ${o.id}".`
+}
+
+function tick() {
+  const sc = SCENARIOS.find((s) => s.id === scenario) || SCENARIOS[0]
+  document.querySelectorAll('#scenarios button').forEach((b) => b.classList.toggle('on', b.dataset.s === sc.id))
+  document.getElementById('scenarioDesc').textContent = sc.desc
+  const s = summarize(sc.monitors), now = Date.now()
+  OPTIONS.forEach((o) => {
+    const card = list.querySelector(`[data-id="${o.id}"]`)
+    const part = o.render(s, now)
+    card.querySelectorAll('.tray').forEach((t) => {
+      const prev = [...t.querySelectorAll('[data-k]')].map((f) => f.dataset.k)
+      t.innerHTML = context + (part || '<span class="ctx" style="font-size:7px;font-weight:600">(hidden)</span>')
+      t.querySelectorAll('[data-k]').forEach((f, i) => { if (prev[i] === f.dataset.k) f.classList.remove('fade') })
+    })
+    card.querySelector('.width').textContent = part ? 'shown' : 'hidden on this scenario'
+  })
+}
+
+paintPick()
+tick()
+setInterval(tick, 1000)
+</script>
+</body>
+</html>

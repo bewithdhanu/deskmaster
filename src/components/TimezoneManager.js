@@ -3,6 +3,7 @@ import moment from 'moment-timezone';
 import TimeZoneClock from './TimeZoneClock';
 import HorizontalTimeline from './HorizontalTimeline';
 import { getIpcRenderer } from '../utils/electron';
+import clockFormat from '../utils/clockFormat';
 
 const ipcRenderer = getIpcRenderer();
 
@@ -152,13 +153,18 @@ const TimezoneManager = () => {
             </div>
           ) : (
             <div className="space-y-1">
-              {displayTimezones.map((zone) => (
+              {displayTimezones.map((zone, index) => (
                 <TimeZoneClock
                   key={zone.city}
                   city={zone.city}
                   timezone={zone.timezone}
                   offsetMinutes={zone.baseOffset + timeOffset}
-                  datetimeFormat={settings.datetimeFormat}
+                  datetimeFormat={clockFormat.formatForClock(
+                    settings.datetimeFormat,
+                    index,
+                    timezones,
+                    Intl.DateTimeFormat().resolvedOptions().timeZone
+                  )}
                   onDateTimeChange={handleDateTimeChange}
                 />
               ))}

@@ -47,7 +47,7 @@
 ### 🧭 **Tray Integration**
 
 * Live system tray stats
-* Theme-aware tray icons via `html2canvas`
+* Native menu bar item drawn by a Swift helper (`native/tray/main.swift`), theme-aware, live 1s clocks
 * Show/hide toggle on click, context menu support
 
 ### 🎨 **User Interface**
@@ -82,7 +82,7 @@ dhanu-tools/
 | `main.js`            | Electron lifecycle, window/tray control, IPC |
 | `stats.js`           | Collects & formats system info               |
 | `config.js`          | Settings persistence (JSON)                  |
-| `TrayIcon.js`        | Dynamic tray rendering                       |
+| `trayHelper.js`      | Native tray helper supervisor + state builder |
 | `Settings.js`        | UI for user preferences                      |
 | `TimezoneManager.js` | Timezone list & timeline integration         |
 

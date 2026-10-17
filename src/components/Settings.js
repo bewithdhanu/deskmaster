@@ -162,6 +162,7 @@ const Settings = () => {
   const [showIPLocationKey, setShowIPLocationKey] = useState(false);
   const [showUptimePassword, setShowUptimePassword] = useState(false);
   const [showDriveClientSecret, setShowDriveClientSecret] = useState(false);
+  const [showBackupPassphrase, setShowBackupPassphrase] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -213,8 +214,8 @@ const Settings = () => {
     { value: 'h:mm:ss A', label: '12-hour (2:30:25 PM)' },
     { value: 'HH:mm', label: '24-hour short (14:30)' },
     { value: 'h:mm A', label: '12-hour short (2:30 PM)' },
-    { value: 'MMM DD, HH:mm', label: 'Date + Time (Jan 15, 14:30)' },
-    { value: 'MMM DD, h:mm A', label: 'Date + Time (Jan 15, 2:30 PM)' }
+    { value: 'MMM DD, HH:mm', label: 'Date + Time (Jan 15, 14:30, seconds on the local clock)' },
+    { value: 'MMM DD, h:mm A', label: 'Date + Time (Jan 15, 2:30 PM, seconds on the local clock)' }
   ];
 
   useEffect(() => {
@@ -1397,11 +1398,26 @@ const Settings = () => {
                   description="Runs in background when DeskMaster is open"
                 />
                 </SettingsPanel>
+                <SettingsPanel>
+                  <FieldLabel>Backup passphrase</FieldLabel>
+                  <SecretInput
+                    value={settings.cloudBackup?.encryptionPassphrase || ''}
+                    onChange={(e) => updateBackupSettings({ encryptionPassphrase: e.target.value })}
+                    placeholder="Required - encrypts every Drive backup"
+                    show={showBackupPassphrase}
+                    onToggleShow={() => setShowBackupPassphrase(!showBackupPassphrase)}
+                  />
+                  <div className="text-theme-muted text-xs mt-1">
+                    Backups are encrypted (AES-256) before upload, so Google cannot read them. You need this passphrase to restore or to open them on your phone. If you lose it, the backups cannot be recovered. Changing it only affects new backups.
+                  </div>
+                </SettingsPanel>
+
                 <SettingsPanel className="flex items-center justify-center">
                   <button
                     type="button"
                     className="w-full px-3 py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white text-xs disabled:opacity-60"
-                    disabled={!backupStatus.connected || isBackingUpNow}
+                    disabled={!backupStatus.connected || !backupStatus.passphraseConfigured || isBackingUpNow}
+                    title={!backupStatus.passphraseConfigured ? 'Set a backup passphrase first' : ''}
                     onClick={async () => {
                       setIsBackingUpNow(true);
                       try {

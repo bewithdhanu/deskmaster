@@ -7,7 +7,6 @@ const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 module.exports = {
   entry: {
     main: './src/index.js',
-    tray: './src/tray.js',
     about: './src/about.js'
   },
   devtool: false,
@@ -21,12 +20,6 @@ module.exports = {
       template: './src/templates/index.html',
       filename: 'index.html',
       chunks: ['main'],
-      inject: 'body'
-    }),
-    new HtmlWebpackPlugin({
-      template: './src/templates/tray-icon.html',
-      filename: 'tray-icon.html',
-      chunks: ['tray'],
       inject: 'body'
     }),
     new HtmlWebpackPlugin({

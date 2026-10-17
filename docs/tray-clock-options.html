@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DeskMaster tray — clock layout options</title>
+<link rel="icon" href="../assets/icons/app-icon-128.png" />
+<style>
+  :root { color-scheme: dark; --bg: #0f0f13; --card: #17171d; --border: #2a2a33; --muted: #8b8b98; --accent: #3b82f6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: #ececf1; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { max-width: 1100px; margin: 0 auto; padding: 40px 24px 8px; display: flex; gap: 16px; align-items: center; }
+  header img { width: 48px; height: 48px; }
+  h1 { margin: 0; font-size: 22px; }
+  header p { margin: 2px 0 0; color: var(--muted); }
+  .controls { max-width: 1100px; margin: 0 auto; padding: 12px 24px; display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: 13px; }
+  .controls label { display: flex; gap: 6px; align-items: center; }
+  main { max-width: 1100px; margin: 0 auto; padding: 8px 24px 64px; display: grid; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: grid; gap: 12px; cursor: pointer; transition: border-color .15s; }
+  .card:hover { border-color: #3a3a46; }
+  .card.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card.baseline { cursor: default; opacity: .9; }
+  .head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .num { font-weight: 700; color: var(--accent); min-width: 28px; }
+  .title { font-weight: 600; font-size: 15px; }
+  .width { margin-left: auto; font: 600 12px ui-monospace, monospace; color: var(--muted); }
+  .width .saved { color: #4ade80; }
+  .width .grew { color: #f87171; }
+  .desc { color: var(--muted); margin: -6px 0 0 38px; font-size: 13px; }
+  .bars { display: flex; flex-wrap: wrap; gap: 10px; margin-left: 38px; }
+  .menubar { border-radius: 8px; padding: 6px 10px; display: flex; align-items: center; overflow-x: auto; max-width: 100%; }
+  .menubar.dark { background: #1f1f24; color: #f2f2f2; --rb: #1f1f24; }
+  .menubar.light { background: #e9e9ec; color: #1c1c1e; --rb: #e9e9ec; }
+
+  /* Tray proportions from native/tray/main.swift, shown at 2x */
+  .tray { zoom: 2; display: inline-flex; align-items: center; height: 24px; padding: 0 5px; gap: 8px; white-space: nowrap; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-variant-numeric: tabular-nums; }
+  .cell { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+  .l { font-size: 9px; font-weight: 600; height: 10px; opacity: .72; letter-spacing: .01em; }
+  .v { font-size: 10.4px; font-weight: 700; height: 11px; margin-top: -2px; }
+  .mini { display: inline-flex; flex-direction: column; font-size: 5.6px; line-height: 5.6px; font-weight: 700; margin-left: 1px; vertical-align: top; text-align: left; }
+  .sup { font-size: 6.5px; font-weight: 700; vertical-align: 3px; margin-left: 1px; opacity: .8; }
+  .prog { height: 1.5px; border-radius: 1px; background: currentColor; opacity: .25; margin-top: 1px; width: 100%; position: relative; }
+  .prog i { position: absolute; inset: 0 auto 0 0; background: currentColor; border-radius: 1px; opacity: 1; }
+  .one { font-size: 11.5px; font-weight: 700; display: inline-flex; gap: 3px; align-items: baseline; }
+  .one small { font-size: 8.5px; font-weight: 600; opacity: .65; }
+  .dim { opacity: .55; }
+  .group { margin: 22px 0 0; font-size: 17px; }
+  .group + p { margin: -8px 0 4px; color: var(--muted); font-size: 13px; }
+  .cal { display: inline-flex; flex-direction: column; width: 17px; border-radius: 3px; overflow: hidden; box-shadow: inset 0 0 0 1px currentColor; text-align: center; line-height: 1; }
+  .cal b:first-child { background: #ff453a; color: #fff; font-size: 5.5px; height: 6.5px; line-height: 6.5px; letter-spacing: .02em; }
+  .cal b:last-child { font-size: 10px; height: 11px; line-height: 11.5px; }
+  .ana { display: inline-flex; align-items: center; gap: 2px; font-size: 8px; font-weight: 700; }
+  .pill { display: inline-flex; align-items: baseline; gap: 3px; padding: 2px 5px; border-radius: 6px; font-size: 10.4px; font-weight: 700; }
+  .pill small { font-size: 7.5px; font-weight: 700; opacity: .7; }
+  .pill.day { background: #ffb3401f; box-shadow: inset 0 0 0 .6px #ffb34088; }
+  .pill.night { background: #6b7cff1f; box-shadow: inset 0 0 0 .6px #6b7cff88; }
+  .stack { display: grid; grid-template-columns: auto auto; column-gap: 3px; font-size: 9.2px; font-weight: 700; line-height: 10px; }
+  .stack small { font-size: 7px; font-weight: 600; opacity: .65; text-align: right; line-height: 10px; }
+  .lcd { display: inline-grid; grid-template-columns: 1fr auto; padding: 1px 4px; border-radius: 3px; box-shadow: inset 0 0 0 .7px currentColor; line-height: 1; }
+  .lcd small { font-size: 6px; font-weight: 700; opacity: .75; height: 7px; }
+  .lcd b { grid-column: 1 / -1; font-size: 10.4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: -.02em; }
+  .dots { display: flex; gap: 2px; justify-content: center; margin-top: 1px; }
+  .dots i { width: 2.5px; height: 2.5px; border-radius: 50%; background: currentColor; opacity: .3; }
+  .dots i.on { opacity: 1; }
+  .blink { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: .15; } }
+  .fade { animation: fade .35s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(1px); } }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding-bottom: 40px; }
+  footer a { color: var(--accent); text-decoration: none; }
+  .pickbar { position: sticky; bottom: 16px; margin: 0 auto; width: fit-content; background: var(--accent); color: white; padding: 8px 16px; border-radius: 999px; font-weight: 600; display: none; box-shadow: 0 8px 24px #0008; }
+</style>
+</head>
+<body>
+<header>
+  <img src="../assets/icons/app-icon-256.png" alt="" />
+  <div>
+    <h1>Tray clock layouts — pick one</h1>
+    <p>Live mockups at 2× using the tray's real fonts and spacing. Each shows the same time: month, date, hours, minutes, seconds and AM/PM.</p>
+  </div>
+</header>
+<div class="controls">
+  <label>Zones
+    <select id="zones">
+      <option value="3">IST · UTC · NYC</option>
+      <option value="2">IST · UTC</option>
+      <option value="4" selected>IST · UTC · NYC · SYD</option>
+    </select>
+  </label>
+  <label>Shift time <input type="range" id="shift" min="-24" max="24" step="1" value="0" /> <b id="shiftv">now</b></label>
+  <label><input type="checkbox" id="stats" checked /> Show CPU / NET cells</label>
+  <label><input type="checkbox" id="light" checked /> Show light menu bar</label>
+</div>
+<main id="list"></main>
+<div class="pickbar" id="pickbar"></div>
+<footer>DeskMaster by <a href="mailto:bewithdhanu@gmail.com">Dhanu K</a> · <a href="https://github.com/bewithdhanu/deskmaster" target="_blank" rel="noopener">github.com/bewithdhanu/deskmaster</a></footer>
+
+<script>
+const ALL_ZONES = [
+  { label: 'IST', tz: 'Asia/Kolkata', local: true, flag: '🇮🇳' },
+  { label: 'UTC', tz: 'UTC', flag: '🌐' },
+  { label: 'NYC', tz: 'America/New_York', flag: '🇺🇸' },
+  { label: 'SYD', tz: 'Australia/Sydney', flag: '🇦🇺' }
+]
+
+const isDay = (p) => +p.h24 >= 6 && +p.h24 < 18
+const relDay = (p, local) => p.ymd === local.ymd ? '' : p.ymd > local.ymd ? 'TMRW' : 'YDAY'
+
+function face(p, withSeconds) {
+  const h = +p.h24 % 12, m = +p.mm, s = +p.ss, day = isDay(p)
+  const ink = day ? '#111' : '#f2f2f2'
+  const hand = (len, deg, w, color) => {
+    const r = deg * Math.PI / 180
+    return `<line x1="9" y1="9" x2="${9 + len * Math.sin(r)}" y2="${9 - len * Math.cos(r)}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`
+  }
+  return `<svg width="17" height="17" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8.2" fill="${day ? '#f6f6f6' : '#25252c'}" stroke="currentColor" stroke-opacity=".5" stroke-width=".8"/>` +
+    hand(4.3, (h + m / 60) * 30, 1.6, ink) + hand(6.4, (m + s / 60) * 6, 1.1, ink) +
+    (withSeconds ? hand(6.8, s * 6, .5, '#ff453a') : '') + `<circle cx="9" cy="9" r=".9" fill="${ink}"/></svg>`
+}
+
+function ruler(zones, local) {
+  const mark = (p) => p.ymd === local.ymd ? '' : p.ymd > local.ymd ? ' +1' : ' −1'
+  const W = 100
+  const x = (p) => ((+p.h24 + +p.mm / 60) / 24) * W
+  const marks = zones.map((z) => `<circle cx="${x(z.p)}" cy="14.5" r="2.3" fill="${z.local ? '#3b82f6' : 'currentColor'}" stroke="var(--rb)" stroke-width=".8"/>` +
+    `<text x="${Math.min(Math.max(x(z.p), 7), W - 7)}" y="6.5" font-size="5.6" font-weight="700" text-anchor="middle" fill="currentColor">${z.label}${mark(z.p)}</text>`).join('')
+  return `<svg width="${W}" height="20" viewBox="0 0 ${W} 20" style="overflow:visible">
+    <defs><linearGradient id="dn" x1="0" x2="1"><stop offset="0" stop-color="#3949ab"/><stop offset=".25" stop-color="#3949ab"/><stop offset=".3" stop-color="#ffb340"/><stop offset=".7" stop-color="#ffb340"/><stop offset=".75" stop-color="#3949ab"/><stop offset="1" stop-color="#3949ab"/></linearGradient></defs>
+    <rect x="0" y="12.5" width="${W}" height="4" rx="2" fill="url(#dn)" opacity=".55"/>${marks}</svg>`
+}
+
+function parts(tz, now) {
+  const get = (opts) => new Intl.DateTimeFormat('en-US', { timeZone: tz, ...opts }).formatToParts(now)
+    .reduce((o, p) => (o[p.type] = p.value, o), {})
+  const a = get({ month: 'short', day: 'numeric', weekday: 'short', hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })
+  const b = get({ hour: '2-digit', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit' })
+  return {
+    mon: a.month, day: a.day, wd: a.weekday, h12: a.hour, mm: a.minute, ss: a.second, ap: a.dayPeriod,
+    h24: b.hour, mon2: b.month, ymd: `${b.year}${b.month}${b.day.padStart(2, '0')}`
+  }
+}
+
+const cell = (l, v) => `<div class="cell"><div class="l">${l}</div><div class="v">${v}</div></div>`
+const dayShift = (p, local) => p.ymd === local.ymd ? '' : `<span class="sup">${p.ymd > local.ymd ? '+1' : '−1'}</span>`
+
+// Each option returns the clock cells as HTML; `ctx.zones` already carries parts for each zone.
+const OPTIONS = [
+  {
+    id: 0, baseline: true, title: 'Today', desc: 'Every clock repeats the full date; only the local clock has seconds.',
+    render: ({ zones }) => zones.map((z) => cell(z.label, `${z.p.mon} ${z.p.day.padStart(2, '0')} ${z.p.h12.padStart(2, '0')}:${z.p.mm}${z.local ? ':' + z.p.ss : ''} ${z.p.ap}`)).join('')
+  },
+  {
+    id: 1, title: 'Date moves up to the label row', desc: 'The label row is mostly empty, so "IST · OCT 17" goes there and the value is only the time.',
+    render: ({ zones }) => zones.map((z) => cell(`${z.label} · ${z.p.mon.toUpperCase()} ${z.p.day}`, `${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''} ${z.p.ap}`)).join('')
+  },
+  {
+    id: 2, title: 'One shared date, times only', desc: 'The date is shown once. A zone already on another day gets a small +1 / −1.',
+    render: ({ zones, local }) => cell(local.wd.toUpperCase(), `${local.day} ${local.mon}`) +
+      zones.map((z) => cell(z.label, `${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''} ${z.p.ap}${dayShift(z.p, local)}`)).join('')
+  },
+  {
+    id: 3, title: '24-hour, no AM/PM', desc: 'Drops the AM/PM column entirely, with the date on the label row as in 1.',
+    render: ({ zones }) => zones.map((z) => cell(`${z.label} · ${z.p.day} ${z.p.mon.toUpperCase()}`, `${z.p.h24}:${z.p.mm}${z.local ? ':' + z.p.ss : ''}`)).join('')
+  },
+  {
+    id: 4, title: 'Tiny stacked seconds + AM/PM', desc: 'Hours and minutes stay big; seconds and AM/PM are stacked in a tiny column, like a watch face.',
+    render: ({ zones }) => zones.map((z) => cell(`${z.label} · ${z.p.mon.toUpperCase()} ${z.p.day}`,
+      `${z.p.h12}:${z.p.mm}<span class="mini"><span>${z.local ? z.p.ss : '&nbsp;'}</span><span>${z.p.ap}</span></span>`)).join('')
+  },
+  {
+    id: 5, title: 'AM/PM rides in the label', desc: 'Label "IST · PM", value is just the clock. Shared date cell up front.',
+    render: ({ zones, local }) => cell(local.mon.toUpperCase(), local.day) +
+      zones.map((z) => cell(`${z.label} · ${z.p.ap}`, `${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''}${dayShift(z.p, local)}`)).join('')
+  },
+  {
+    id: 6, title: 'Compact: numeric date + a/p', desc: 'Shortest text: "17/10" in the label and a lowercase a/p suffix.',
+    render: ({ zones }) => zones.map((z) => cell(`${z.label} ${z.p.day}/${z.p.mon2}`, `${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''}${z.p.ap[0].toLowerCase()}`)).join('')
+  },
+  {
+    id: 7, title: 'Seconds as a progress line', desc: 'No seconds digits. A thin line under the local time fills up over each minute, so it still feels live.',
+    render: ({ zones, now }) => zones.map((z) => {
+      const v = `${z.p.h12}:${z.p.mm} ${z.p.ap}`
+      const bar = z.local ? `<div class="prog"><i style="width:${(now.getSeconds() + 1) / 60 * 100}%"></i></div>` : ''
+      return `<div class="cell"><div class="l">${z.label} · ${z.p.mon.toUpperCase()} ${z.p.day}</div><div class="v">${v}</div>${bar}</div>`
+    }).join('')
+  },
+  {
+    id: 8, title: 'Label alternates zone ↔ date', desc: 'The label row swaps between "IST" and "SAT 17 OCT" every 4 seconds. The tray would reserve the wider label so nothing shifts.',
+    render: ({ zones, now }) => {
+      const showDate = Math.floor(now.getTime() / 4000) % 2 === 1
+      return zones.map((z) => cell(`<span class="fade" data-k="${showDate}">${showDate ? `${z.p.wd.toUpperCase()} ${z.p.day} ${z.p.mon.toUpperCase()}` : z.label}</span>`,
+        `${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''} ${z.p.ap}`)).join('')
+    }
+  },
+  {
+    id: 9, title: 'Single row, bigger text', desc: 'Like the macOS clock: one line, slightly larger, with the zone as a small prefix and the date once.',
+    render: ({ zones, local }) => `<span class="one"><small>${local.wd}</small>${local.day} ${local.mon}</span>` +
+      zones.map((z) => `<span class="one"><small>${z.label}</small>${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''}<small>${z.p.ap}</small></span>`).join('')
+  },
+  {
+    id: 10, title: 'Local hero, others dimmed', desc: 'Local clock gets the date and seconds; other zones are 24-hour HH:mm in a softer colour.',
+    render: ({ zones }) => zones.map((z) => z.local
+      ? cell(`${z.label} · ${z.p.wd.toUpperCase()} ${z.p.day} ${z.p.mon.toUpperCase()}`, `${z.p.h12}:${z.p.mm}:${z.p.ss} ${z.p.ap}`)
+      : `<div class="cell dim"><div class="l">${z.label}</div><div class="v">${z.p.h24}:${z.p.mm}</div></div>`).join('')
+  },
+  {
+    id: 11, group: 'Round 2 — ideas taken from other menu bar apps',
+    groupNote: 'Itsycal and Dato (calendar icon, collapsed summary row), MultiTimeBar (flags, two-row stacking, day-difference marks), There (people, not zones), Clocker (Today / Tomorrow), the macOS analog clock, and classic digital watches.',
+    title: 'Calendar-page icon (Itsycal / Dato)', desc: 'The date becomes a tiny tear-off calendar icon that everyone reads at a glance; clocks show only time.',
+    render: ({ zones, local }) => `<span class="cal"><b>${local.mon.toUpperCase()}</b><b>${local.day}</b></span>` +
+      zones.map((z) => cell(z.label, `${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''} ${z.p.ap}${dayShift(z.p, local)}`)).join('')
+  },
+  {
+    id: 12, title: 'Flags instead of names (MultiTimeBar)', desc: 'One row; a flag replaces the zone label, and +1 / −1 marks a zone already on another day.',
+    render: ({ zones, local }) => `<span class="cal"><b>${local.mon.toUpperCase()}</b><b>${local.day}</b></span>` +
+      zones.map((z) => `<span class="one">${z.flag} ${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''}<small>${z.p.ap}</small>${dayShift(z.p, local)}</span>`).join('')
+  },
+  {
+    id: 13, title: 'Mini analog faces', desc: 'Each zone is a 17pt clock face. White face = daytime, dark face = night, so AM/PM is implied. Red second hand on the local clock only.',
+    render: ({ zones, local }) => `<span class="cal"><b>${local.mon.toUpperCase()}</b><b>${local.day}</b></span>` +
+      zones.map((z) => `<span class="ana">${face(z.p, z.local)}${z.label}${dayShift(z.p, local)}</span>`).join('')
+  },
+  {
+    id: 14, title: 'Day / night pills', desc: 'Each zone sits in a pill tinted amber in daytime and blue at night, with a sun or moon instead of AM/PM. Other days say TMRW / YDAY, like Clocker.',
+    render: ({ zones, local }) => `<span class="one"><small>${local.wd}</small>${local.day} ${local.mon}</span>` +
+      zones.map((z) => `<span class="pill ${isDay(z.p) ? 'day' : 'night'}"><small>${z.label}</small>${isDay(z.p) ? '☀︎' : '☾'} ${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''}${relDay(z.p, local) ? `<small>${relDay(z.p, local)}</small>` : ''}</span>`).join('')
+  },
+  {
+    id: 15, title: 'Two clocks per column (MultiTimeBar stacking)', desc: 'Uses both rows for data: zones are stacked in pairs, so 4 clocks take the width of 2.',
+    render: ({ zones, local }) => {
+      const line = (z) => `<small>${z.label}</small><span>${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''} ${z.p.ap}${dayShift(z.p, local)}</span>`
+      const cols = [`<span class="cal"><b>${local.mon.toUpperCase()}</b><b>${local.day}</b></span>`]
+      for (let i = 0; i < zones.length; i += 2) cols.push(`<div class="stack">${line(zones[i])}${zones[i + 1] ? line(zones[i + 1]) : ''}</div>`)
+      return cols.join('')
+    }
+  },
+  {
+    id: 16, title: 'Collapsed summary row (Dato)', desc: 'Local clock in full; all other zones squeeze into one cell, to the hour ("5p · 1p"). Click the tray for exact times.',
+    render: ({ zones, local }) => {
+      const [me, ...rest] = zones
+      return cell(`${me.label} · ${local.wd.toUpperCase()} ${local.day} ${local.mon.toUpperCase()}`, `${me.p.h12}:${me.p.mm}:${me.p.ss} ${me.p.ap}`) +
+        (rest.length ? cell(rest.map((z) => z.label).join(' · '), rest.map((z) => `${z.p.h12}${z.p.ap[0].toLowerCase()}${dayShift(z.p, local)}`).join(' · ')) : '')
+    }
+  },
+  {
+    id: 17, title: '24-hour ruler (like the DeskMaster timeline)', desc: 'A tiny day/night strip with a dot per zone at its current hour; the blue dot is you. Exact local time next to it.',
+    render: ({ zones, local }) => cell(`${local.wd.toUpperCase()} ${local.day} ${local.mon.toUpperCase()}`, `${zones[0].p.h12}:${zones[0].p.mm}:${zones[0].p.ss} ${zones[0].p.ap}`) + ruler(zones, local)
+  },
+  {
+    id: 18, title: 'Digital-watch LCD boxes', desc: 'Casio-style framed readouts: zone and date in the tiny top row, AM/PM in the corner, big digits underneath.',
+    render: ({ zones, local }) => zones.map((z) => `<span class="lcd"><small>${z.label}${z.local ? ' ' + local.wd.slice(0, 2).toUpperCase() + ' ' + local.day : relDay(z.p, local) ? ' ' + (z.p.ymd > local.ymd ? '+1' : '−1') : ''}</small><small>${z.p.ap}</small><b>${z.p.h12.padStart(2, '0')}:${z.p.mm}${z.local ? ':' + z.p.ss : ''}</b></span>`).join('')
+  },
+  {
+    id: 19, title: 'Rotating ticker, one slot', desc: 'One clock-sized slot cycles through the zones every 3 seconds with dots showing which one. Fixed width no matter how many zones.',
+    render: ({ zones, local, now }) => {
+      const i = Math.floor(now.getTime() / 3000) % zones.length, z = zones[i]
+      return `<div class="cell" style="min-width:68px"><div class="l"><span class="fade" data-k="${i}">${z.label} · ${z.p.wd.toUpperCase()} ${z.p.day} ${z.p.mon.toUpperCase()}</span></div>` +
+        `<div class="v"><span class="fade" data-k="${i}">${z.p.h12}:${z.p.mm}${z.local ? ':' + z.p.ss : ''} ${z.p.ap}</span></div><div class="dots">${zones.map((_, j) => `<i class="${j === i ? 'on' : ''}"></i>`).join('')}</div></div>`
+    }
+  },
+  {
+    id: 20, title: 'Blinking colon, relative days', desc: 'No seconds digits; the colon blinks each second like a bedside clock. Other zones say TMRW / YDAY only when the day differs.',
+    render: ({ zones, local }) => zones.map((z) => cell(z.local ? `${z.label} · ${local.wd.toUpperCase()} ${local.day}` : `${z.label}${relDay(z.p, local) ? ' · ' + relDay(z.p, local) : ''}`,
+      `${z.p.h12}<span class="${z.local ? 'blink' : ''}">:</span>${z.p.mm} ${z.p.ap}`)).join('')
+  }
+]
+
+const statCells = cell('CPU', '12%') + cell('NET', '<span style="display:inline-block;min-width:7ch;text-align:center">1023 MB</span>')
+const list = document.getElementById('list')
+const pickbar = document.getElementById('pickbar')
+let picked = Number(localStorage.getItem('trayClockPick') || 0)
+
+list.innerHTML = OPTIONS.map((o) => `${o.group ? `<h2 class="group">${o.group}</h2><p>${o.groupNote}</p>` : ''}
+  <section class="card${o.baseline ? ' baseline' : ''}" data-id="${o.id}">
+    <div class="head"><span class="num">${o.baseline ? '—' : '#' + o.id}</span><span class="title">${o.title}</span><span class="width"></span></div>
+    <div class="desc">${o.desc}</div>
+    <div class="bars">
+      <div class="menubar dark"><div class="tray"></div></div>
+      <div class="menubar light"><div class="tray"></div></div>
+    </div>
+  </section>`).join('')
+
+list.addEventListener('click', (e) => {
+  const card = e.target.closest('.card')
+  if (!card || card.classList.contains('baseline')) return
+  picked = Number(card.dataset.id)
+  localStorage.setItem('trayClockPick', picked)
+  paintPick()
+})
+
+function paintPick() {
+  document.querySelectorAll('.card:not(.baseline)').forEach((c) => c.classList.toggle('picked', Number(c.dataset.id) === picked))
+  const o = OPTIONS.find((x) => x.id === picked && !x.baseline)
+  pickbar.style.display = o ? 'block' : 'none'
+  if (o) pickbar.textContent = `Picked #${o.id} — ${o.title}. Tell me "option ${o.id}".`
+}
+
+function tick() {
+  const shift = Number(document.getElementById('shift').value)
+  document.getElementById('shiftv').textContent = shift ? `${shift > 0 ? '+' : ''}${shift}h` : 'now'
+  const now = new Date(Date.now() + shift * 3600e3)
+  const n = Number(document.getElementById('zones').value)
+  const zones = ALL_ZONES.slice(0, n).map((z) => ({ ...z, p: parts(z.tz, now) }))
+  const ctx = { now, zones, local: zones[0].p }
+  const withStats = document.getElementById('stats').checked
+  document.querySelectorAll('.menubar.light').forEach((m) => { m.style.display = document.getElementById('light').checked ? '' : 'none' })
+
+  let base = 0
+  OPTIONS.forEach((o) => {
+    const card = list.querySelector(`[data-id="${o.id}"]`)
+    const html = (withStats ? statCells : '') + o.render(ctx)
+    card.querySelectorAll('.tray').forEach((t) => {
+      const prev = [...t.querySelectorAll('[data-k]')].map((f) => f.dataset.k)
+      t.innerHTML = html
+      t.querySelectorAll('[data-k]').forEach((f, i) => { if (prev[i] === f.dataset.k) f.classList.remove('fade') })
+    })
+    const w = Math.round(card.querySelector('.tray').getBoundingClientRect().width / 2)
+    if (o.baseline) base = w
+    const diff = w - base
+    card.querySelector('.width').innerHTML = o.baseline
+      ? `${w} pt wide`
+      : `${w} pt <span class="${diff <= 0 ? 'saved' : 'grew'}">${diff <= 0 ? '−' + Math.abs(diff) : '+' + diff} pt (${Math.round(Math.abs(diff) / base * 100)}% ${diff <= 0 ? 'narrower' : 'wider'})</span>`
+  })
+}
+
+document.querySelectorAll('.controls input, .controls select').forEach((el) => el.addEventListener('input', tick))
+paintPick()
+tick()
+setInterval(tick, 1000)
+</script>
+</body>
+</html>

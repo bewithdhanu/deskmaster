@@ -212,19 +212,19 @@ async function ensureBackupFolder(accessToken, folderName = 'DeskMaster Backups'
   return created.id || null
 }
 
-async function uploadZipFile(accessToken, folderId, zipPath, fileName) {
+async function uploadBackupFile(accessToken, folderId, filePath, fileName) {
   const metadata = JSON.stringify({
     name: fileName,
     parents: [folderId]
   })
-  const fileData = fs.readFileSync(zipPath)
+  const fileData = fs.readFileSync(filePath)
   const boundary = `deskmaster_${Date.now()}`
   const preamble = Buffer.from(
     `--${boundary}\r\n` +
     'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
     `${metadata}\r\n` +
     `--${boundary}\r\n` +
-    'Content-Type: application/zip\r\n\r\n',
+    'Content-Type: application/json\r\n\r\n',
     'utf8'
   )
   const closing = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8')
@@ -333,7 +333,7 @@ async function pruneOldBackups(accessToken, folderId) {
   }
 }
 
-async function uploadBackup({ clientId, clientSecret, refreshToken, zipPath, fileName }) {
+async function uploadBackup({ clientId, clientSecret, refreshToken, filePath, fileName }) {
   let step = 'Google authentication'
   try {
     const accessToken = await getAccessToken({ clientId, clientSecret, refreshToken })
@@ -343,7 +343,7 @@ async function uploadBackup({ clientId, clientSecret, refreshToken, zipPath, fil
     if (!folderId) throw new Error('Failed to create/find Drive backup folder')
 
     step = 'Drive file upload'
-    const file = await uploadZipFile(accessToken, folderId, zipPath, fileName)
+    const file = await uploadBackupFile(accessToken, folderId, filePath, fileName)
 
     step = 'Drive backup cleanup'
     await pruneOldBackups(accessToken, folderId)
