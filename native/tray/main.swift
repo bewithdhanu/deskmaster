@@ -428,8 +428,6 @@ final class ConverterModel: ObservableObject {
     @Published var twelveHour = true
     @Published var date = Date() // the instant; the pickers show it in `from`
     @Published var from: String { didSet { fromChanged(oldValue) } }
-    // The known list can lack aliases the system reports (e.g. Asia/Kolkata vs Asia/Calcutta)
-    private let allZones = Set(TimeZone.knownTimeZoneIdentifiers + ["UTC", TimeZone.current.identifier]).sorted()
 
     init() {
         from = UserDefaults.standard.string(forKey: "converterFrom") ?? TimeZone.current.identifier
@@ -439,10 +437,15 @@ final class ConverterModel: ObservableObject {
         let valid = config.clocks.filter { TimeZone(identifier: $0.tz) != nil }
         if clocks != valid { clocks = valid }
         if twelveHour != config.twelveHour { twelveHour = config.twelveHour }
+        if !clockZones.contains(from) { from = clockZones[0] }
     }
 
-    var clockZones: [String] { clocks.map(\.tz) }
-    var otherZones: [String] { allZones.filter { !clockZones.contains($0) } }
+    /// Source zones offered in the picker: the configured clocks only (local zone when none are set).
+    var clockZones: [String] {
+        var seen = Set<String>()
+        let zones = clocks.map(\.tz).filter { seen.insert($0).inserted }
+        return zones.isEmpty ? [TimeZone.current.identifier] : zones
+    }
 
     /// Picking a new source zone keeps the typed wall-clock time.
     private func fromChanged(_ old: String) {
@@ -507,8 +510,7 @@ struct ConverterView: View {
                     .environment(\.timeZone, TimeZone(identifier: model.from) ?? .current)
                     .environment(\.locale, Locale(identifier: model.twelveHour ? "en_US" : "en_GB"))
                     Picker("Time zone", selection: $model.from) {
-                        Section("Your clocks") { ForEach(model.clockZones, id: \.self) { Text(model.label($0)).tag($0) } }
-                        Section("All time zones") { ForEach(model.otherZones, id: \.self) { Text(model.label($0)).tag($0) } }
+                        ForEach(model.clockZones, id: \.self) { Text(model.label($0)).tag($0) }
                     }
                     .labelsHidden()
                 }
