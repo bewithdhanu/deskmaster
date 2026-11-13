@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MdHome, MdAccessTime, MdSettings, MdSpeed, MdContentPaste, MdSecurity, MdNotes, MdComputer, MdSmartToy, MdPerson, MdChevronLeft, MdChevronRight } from 'react-icons/md';
 
-const Navigation = ({ activeTab, onTabChange, uptimeKumaEnabled = true }) => {
+const Navigation = ({ activeTab, openTypes, onTabChange, uptimeKumaEnabled = true }) => {
   // Icons-only by default; expand to show labels
   const [expanded, setExpanded] = useState(false);
 
@@ -82,6 +82,9 @@ const Navigation = ({ activeTab, onTabChange, uptimeKumaEnabled = true }) => {
             >
               <span className="relative flex items-center justify-center flex-shrink-0 w-6">
                 {item.icon}
+                {openTypes?.has(item.id) && item.id !== activeTab ? (
+                  <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-500" aria-hidden="true" />
+                ) : null}
               </span>
               {expanded ? (
                 <span className="font-medium text-sm whitespace-nowrap truncate">{item.label}</span>

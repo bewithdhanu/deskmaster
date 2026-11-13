@@ -565,13 +565,14 @@ function createWindow() {
     width: initialBounds.width,
     height: initialBounds.height,
     show: false,
-    frame: true,
+    frame: false, // custom title bar = tab strip + window controls
     resizable: true,
     transparent: false,
     alwaysOnTop: false,
     skipTaskbar: false,
     title: 'DeskMaster - Desktop Productivity Tool',
     icon: path.join(__dirname, 'assets/icons/app-icon-256.png'),
+    trafficLightPosition: { x: 12, y: 12 },
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -2646,6 +2647,22 @@ ipcMain.on('save-timezones', (event, newTimezones) => {
 })
 
 // IPC handlers
+ipcMain.handle('window-minimize', () => {
+  if (win && !win.isDestroyed()) win.minimize()
+})
+ipcMain.handle('window-maximize', () => {
+  if (!win || win.isDestroyed()) return false
+  if (win.isMaximized()) win.unmaximize()
+  else win.maximize()
+  return win.isMaximized()
+})
+ipcMain.handle('window-close', () => {
+  if (win && !win.isDestroyed()) win.close()
+})
+ipcMain.handle('window-is-maximized', () => {
+  return Boolean(win && !win.isDestroyed() && win.isMaximized())
+})
+
 ipcMain.on("exit-app", () => {
   app.quit()
 })

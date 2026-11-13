@@ -707,7 +707,7 @@ const Authenticator = () => {
     return (
       <article
         key={item.id}
-        className="flex min-w-[240px] flex-1 basis-[260px] max-w-full flex-col overflow-hidden rounded-xl border border-theme bg-theme-card transition-shadow hover:shadow-sm sm:max-w-[320px]"
+        className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-theme bg-theme-card transition-shadow hover:shadow-sm"
       >
         <div className="h-1 w-full bg-theme-secondary" aria-hidden="true">
           <div
@@ -856,7 +856,7 @@ const Authenticator = () => {
   };
 
   return (
-    <div ref={panelRef} className="relative h-full overflow-auto p-4">
+    <div ref={panelRef} className="relative flex h-full min-h-0 flex-col overflow-hidden p-4">
       {showResumedNotice ? (
         <div className="absolute left-1/2 top-4 z-30 -translate-x-1/2 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-sm font-medium text-green-500 shadow-sm">
           Authenticator resumed
@@ -881,8 +881,8 @@ const Authenticator = () => {
         </div>
       ) : null}
 
-      <div className={isPaused ? 'pointer-events-none select-none blur-sm' : undefined}>
-      <div className="flex items-center justify-between mb-4 gap-3">
+      <div className={`flex min-h-0 flex-1 flex-col ${isPaused ? 'pointer-events-none select-none blur-sm' : ''}`}>
+      <div className="mb-4 flex flex-shrink-0 items-center justify-between gap-3">
         <h2 className="text-xl font-semibold text-theme-primary">
           {viewMode === 'trash' ? 'Trash' : 'Authenticator'}
         </h2>
@@ -954,7 +954,7 @@ const Authenticator = () => {
           <p className="text-theme-muted">No items match your search</p>
         </div>
       ) : (
-        <div className="flex max-h-[calc(100vh-200px)] flex-wrap content-start gap-3 overflow-y-auto pr-1">
+        <div className="grid min-h-0 flex-1 auto-rows-max grid-cols-[repeat(auto-fill,minmax(260px,1fr))] content-start gap-3 overflow-y-auto pr-1">
           {currentItems.map((item) => renderAuthenticatorCard(item))}
         </div>
       )}

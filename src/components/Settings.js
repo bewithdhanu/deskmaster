@@ -4,7 +4,8 @@ import TimezoneDropdown from './TimezoneDropdown';
 import { getIpcRenderer, isElectron } from '../utils/electron';
 import { openExternalUrl } from '../utils/openExternalUrl';
 import { getEnabledProviders, PROVIDER_META } from '../utils/agentProvidersClient';
-import { getRoute, navigate, subscribe, SETTINGS_SECTION_IDS } from '../utils/appRoute';
+import * as appRoute from '../utils/appRoute';
+import { SETTINGS_SECTION_IDS } from '../utils/appRoute';
 
 const ipcRenderer = getIpcRenderer();
 
@@ -119,7 +120,10 @@ const StatusPill = ({ tone = 'muted', children }) => {
   );
 };
 
-const Settings = () => {
+const Settings = ({ routeApi } = {}) => {
+  const getRoute = routeApi?.getRoute || appRoute.getRoute;
+  const navigate = routeApi?.navigate || appRoute.navigate;
+  const subscribe = routeApi?.subscribe || appRoute.subscribe;
   const [settings, setSettings] = useState({
     stats: {
       cpu: true,

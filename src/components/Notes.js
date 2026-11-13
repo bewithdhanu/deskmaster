@@ -16,7 +16,7 @@ import { CheckIcon, ChevronRightIcon } from 'lucide-react';
 import { OneNoteEditor } from '../vendor/onenote-style-editor/index.js';
 import { getIpcRenderer, isElectron } from '../utils/electron';
 import { aiEditText } from '../utils/textLlmClient';
-import { getRoute, navigate, subscribe } from '../utils/appRoute';
+import * as appRoute from '../utils/appRoute';
 import { DeskMasterFormattingToolbar } from './blocknote/MarkdownAiToolbarButtons.js';
 import './onenote-style-editor.css';
 
@@ -869,7 +869,10 @@ function TreeRow({
 
 const TEXT_AI_INITIAL = { open: false, busy: false, selection: '', history: [], prompt: '' };
 
-const Notes = () => {
+const Notes = ({ routeApi } = {}) => {
+  const getRoute = routeApi?.getRoute || appRoute.getRoute;
+  const navigate = routeApi?.navigate || appRoute.navigate;
+  const subscribe = routeApi?.subscribe || appRoute.subscribe;
   const [tree, setTree] = useState([]);
   const allIds = useMemo(() => flattenIds(tree).filter((id) => id !== ARCHIVE_ROOT_ID), [tree]);
   const [expanded, setExpanded] = useState(() => new Set());

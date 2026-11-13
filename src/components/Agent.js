@@ -21,7 +21,7 @@ import {
 } from 'react-icons/md';
 import { getIpcRenderer, isElectron } from '../utils/electron';
 import { getEnabledProviders, getProviderModel, PROVIDER_META, isProviderEnabled } from '../utils/agentProvidersClient';
-import { getRoute, navigate, subscribe } from '../utils/appRoute';
+import * as appRoute from '../utils/appRoute';
 import { readAttachmentFiles, MAX_CHAT_ATTACHMENTS } from '../utils/agentFileUpload';
 import AgentMarkdown from './agent/AgentMarkdown';
 import SaveToNotesDialog from './agent/SaveToNotesDialog';
@@ -59,7 +59,10 @@ function CapabilityMenuItem({ id, enabled, onToggle, disabled }) {
   );
 }
 
-const Agent = () => {
+const Agent = ({ routeApi } = {}) => {
+  const getRoute = routeApi?.getRoute || appRoute.getRoute;
+  const navigate = routeApi?.navigate || appRoute.navigate;
+  const subscribe = routeApi?.subscribe || appRoute.subscribe;
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [messages, setMessages] = useState([]);
