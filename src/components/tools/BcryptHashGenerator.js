@@ -171,7 +171,7 @@ const BcryptHashGenerator = ({ onClose, showGenerate = true, showVerify = true, 
                   className="w-full px-3 py-2 h-[38px] bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-muted focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-mono text-xs"
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs font-medium text-theme-primary mb-1">
                   Original Text
                 </label>
@@ -181,7 +181,7 @@ const BcryptHashGenerator = ({ onClose, showGenerate = true, showVerify = true, 
                     value={textToVerify}
                     onChange={(e) => setTextToVerify(e.target.value)}
                     placeholder="Text..."
-                    className="flex-1 px-3 py-2 h-[38px] bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-muted focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm"
+                    className="flex-1 min-w-0 px-3 py-2 h-[38px] bg-theme-secondary border border-theme rounded-lg text-theme-primary placeholder-theme-muted focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm"
                   />
                   <button
                     onClick={handleVerify}

@@ -259,9 +259,9 @@ function App() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-theme-primary text-theme-primary">
+    <div className="h-screen flex flex-row bg-theme-primary text-theme-primary">
       <Navigation activeTab={activeTab} onTabChange={handleTabChange} uptimeKumaEnabled={uptimeKumaEnabled} />
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-w-0">
         <div className={isHomeVisible ? 'h-full' : 'hidden'}>
           <Tools />
         </div>

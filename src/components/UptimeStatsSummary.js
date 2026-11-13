@@ -77,7 +77,7 @@ const UptimeStatsSummary = ({ monitors: providedMonitors, summary: providedSumma
   const message = providedError || error;
 
   return (
-    <div className="flex gap-3 overflow-x-auto">
+    <div className="flex gap-3 overflow-x-auto min-h-[4.5rem]">
       <UptimeStatCard label="Uptime Total" value={loading ? '...' : summary.total} detail={message || 'Monitored domains'} accentClass="border-slate-500" icon={MdSpeed} />
       <UptimeStatCard label="Uptime Online" value={loading ? '...' : summary.up} detail="Overall status UP" accentClass="border-green-500" icon={MdCheckCircle} />
       <UptimeStatCard label="Uptime Down" value={loading ? '...' : summary.down} detail="Overall status DOWN" accentClass="border-red-500" icon={MdWarning} />

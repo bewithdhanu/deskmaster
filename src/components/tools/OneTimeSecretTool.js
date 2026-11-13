@@ -171,7 +171,7 @@ const OneTimeSecretTool = ({ onClose }) => {
             </div>
             {secretKey && (
               <p className="text-xs text-theme-muted mt-1">
-                Secret Key: <span className="font-mono">{secretKey}</span>
+                Secret Key: <span className="font-mono break-all">{secretKey}</span>
               </p>
             )}
           </div>

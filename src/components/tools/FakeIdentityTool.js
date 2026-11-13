@@ -341,7 +341,7 @@ const FakeIdentityTool = ({ onClose, variant = 'widget' }) => {
         )}
 
         <div className="space-y-3 pr-4">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start justify-between gap-3 pr-3">
             <div>
               <div className="flex items-center gap-2 text-theme-primary font-semibold">
                 <MdPerson className="w-5 h-5 text-red-500" />
