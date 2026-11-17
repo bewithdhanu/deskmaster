@@ -1,3 +1,20 @@
 name = "deskmaster-web"
-pages_build_output_dir = "dist"
+main = "./worker.ts"
 compatibility_date = "2026-10-17"
+keep_vars = true
+
+# Vite build output — Deploy to Cloudflare / wrangler provision this automatically.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Placeholder IDs are replaced when someone uses Deploy to Cloudflare (auto-provision).
+[[kv_namespaces]]
+binding = "DATA"
+id = "00000000000000000000000000000000"
+preview_id = "00000000000000000000000000000000"
+
+# Secrets are prompted from .dev.vars.example during Deploy to Cloudflare.
+# Optional Access JWT validation: ACCESS_AUD, ACCESS_TEAM_DOMAIN
+# Local without Access: DEV_BYPASS_ACCESS=1

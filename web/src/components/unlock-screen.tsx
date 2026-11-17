@@ -1,12 +1,11 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from "react"
+import { useEffect, useState, type FormEvent } from "react"
 import {
   CloudIcon,
   EyeIcon,
   EyeOffIcon,
-  FileUpIcon,
   KeyRoundIcon,
   LockKeyholeIcon,
-  LogOutIcon,
+  Settings2Icon,
 } from "lucide-react"
 
 import { Credits, Logo } from "@/components/brand"
@@ -15,87 +14,86 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
-import { decryptBackup, isBackupEnvelope } from "@/lib/backup"
-import { downloadBackup, listBackups, signIn, type DriveBackup } from "@/lib/drive"
+import { getBackup, getMe, unlock as unlockApi, type DriveBackup, type Me } from "@/lib/api"
 import { backupLabel } from "@/lib/format"
-import type { Backup, Envelope } from "@/lib/types"
+import type { Backup } from "@/lib/types"
 
 type Props = {
   onUnlock: (data: Backup) => void
 }
 
 export function UnlockScreen({ onUnlock }: Props) {
-  const [clientId, setClientId] = useState("")
-  const [token, setToken] = useState<string | null>(null)
+  const [me, setMe] = useState<Me | null>(null)
   const [backups, setBackups] = useState<DriveBackup[]>([])
   const [backupId, setBackupId] = useState("")
-  const [localFile, setLocalFile] = useState<{ name: string; envelope: Envelope } | null>(null)
   const [passphrase, setPassphrase] = useState("")
   const [showPassphrase, setShowPassphrase] = useState(false)
-  const [busy, setBusy] = useState<"connect" | "unlock" | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const fileInput = useRef<HTMLInputElement>(null)
 
-  const hasSource = Boolean(localFile || backupId)
-
-  async function connect() {
-    setError("")
-    setBusy("connect")
-    try {
-      const accessToken = await signIn(clientId.trim())
-      const files = await listBackups(accessToken)
-      setToken(accessToken)
-      setBackups(files)
-      setBackupId(files[0]?.id ?? "")
-      setLocalFile(null)
-    } catch (err) {
-      setError((err as Error).message)
-    } finally {
-      setBusy(null)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        // Clear OAuth return flag from the URL without remounting
+        if (new URLSearchParams(window.location.search).get("drive") === "connected") {
+          window.history.replaceState(null, "", window.location.pathname)
+        }
+        const status = await getMe()
+        if (cancelled) return
+        setMe(status)
+        if (status.unlocked) {
+          try {
+            const { backup } = await getBackup("latest")
+            if (!cancelled) onUnlock(backup)
+            return
+          } catch {
+            // Session stale — show passphrase form
+          }
+        }
+      } catch (err) {
+        if (!cancelled) setError((err as Error).message)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
     }
-  }
-
-  function disconnect() {
-    setToken(null)
-    setBackups([])
-    setBackupId("")
-  }
-
-  async function openFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ""
-    if (!file) return
-    setError("")
-    try {
-      const parsed: unknown = JSON.parse(await file.text())
-      if (!isBackupEnvelope(parsed)) throw new Error("Choose a deskmaster-backup .enc.json file")
-      setLocalFile({ name: file.name, envelope: parsed })
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }
+  }, [onUnlock])
 
   async function unlock(event: FormEvent) {
     event.preventDefault()
-    if (!passphrase || !hasSource) return
+    if (!passphrase.trim()) return
     setError("")
-    setBusy("unlock")
+    setBusy(true)
     try {
-      const envelope = localFile?.envelope ?? (await downloadBackup(token!, backupId))
-      const data = await decryptBackup(envelope, passphrase)
+      const result = await unlockApi(passphrase.trim(), backupId || undefined)
+      setBackups(result.backups)
+      setBackupId(result.backupId)
       setPassphrase("")
-      onUnlock(data)
+      onUnlock(result.backup)
     } catch (err) {
       setError((err as Error).message)
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <Spinner className="size-6" />
+      </div>
+    )
+  }
+
+  const needsGoogleSecrets = me && !me.googleConfigured
+  const needsDrive = me && me.googleConfigured && !me.driveConnected
 
   return (
     <div className="relative flex min-h-svh flex-col items-center justify-center overflow-hidden px-4 py-10">
@@ -107,23 +105,61 @@ export function UnlockScreen({ onUnlock }: Props) {
           <Logo className="size-16 shadow-lg shadow-primary/30" />
           <div className="flex flex-col gap-1">
             <h1 className="text-2xl font-semibold tracking-tight">DeskMaster</h1>
-            <p className="text-sm text-muted-foreground">Your codes, notes and clipboard, from your latest Mac backup.</p>
+            <p className="text-sm text-muted-foreground">
+              Your codes, notes and clipboard — decrypted by your Cloudflare Worker after Access login.
+            </p>
           </div>
+          {me?.email ? (
+            <Badge variant="secondary" className="font-normal">
+              {me.email}
+            </Badge>
+          ) : null}
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle>Unlock your backup</CardTitle>
-            <CardDescription>Decrypted on this device only. Nothing is saved.</CardDescription>
+            <CardDescription>
+              Enter the Cloud Backup passphrase from DeskMaster. It stays in a browser session only — closing the browser locks again.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <form id="unlock" onSubmit={unlock}>
-              <FieldGroup>
-                {token ? (
-                  <Field>
-                    <FieldLabel htmlFor="backup">Backup</FieldLabel>
-                    {backups.length ? (
-                      <Select value={backupId} onValueChange={(value) => { setBackupId(value); setLocalFile(null) }}>
+            {needsGoogleSecrets ? (
+              <Alert>
+                <Settings2Icon />
+                <AlertTitle>Google OAuth not configured</AlertTitle>
+                <AlertDescription>
+                  Set <code className="text-xs">GOOGLE_CLIENT_ID</code> and{" "}
+                  <code className="text-xs">GOOGLE_CLIENT_SECRET</code> as Worker secrets (Deploy form or `wrangler secret put`), then reload.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            {needsDrive ? (
+              <div className="flex flex-col gap-3">
+                <Alert>
+                  <CloudIcon />
+                  <AlertTitle>Connect Google Drive</AlertTitle>
+                  <AlertDescription>
+                    One-time owner setup. DeskMaster will store a refresh token in your Cloudflare KV — not in the browser.
+                  </AlertDescription>
+                </Alert>
+                <Button asChild size="lg" className="w-full">
+                  <a href="/api/auth/google/start">
+                    <CloudIcon data-icon="inline-start" />
+                    Connect Google Drive
+                  </a>
+                </Button>
+              </div>
+            ) : null}
+
+            {!needsGoogleSecrets && !needsDrive ? (
+              <form id="unlock" onSubmit={unlock}>
+                <FieldGroup>
+                  {backups.length > 0 ? (
+                    <Field>
+                      <FieldLabel htmlFor="backup">Backup</FieldLabel>
+                      <Select value={backupId} onValueChange={setBackupId}>
                         <SelectTrigger id="backup" className="w-full">
                           <SelectValue placeholder="Choose a backup" />
                         </SelectTrigger>
@@ -138,97 +174,58 @@ export function UnlockScreen({ onUnlock }: Props) {
                           </SelectGroup>
                         </SelectContent>
                       </Select>
-                    ) : (
-                      <Alert>
-                        <CloudIcon />
-                        <AlertTitle>No encrypted backups yet</AlertTitle>
-                        <AlertDescription>
-                          In DeskMaster, set a backup passphrase under Settings, Cloud Backup, then choose Backup now.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    <FieldDescription className="flex items-center justify-between gap-2">
-                      <span>Google Drive connected</span>
-                      <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={disconnect}>
-                        <LogOutIcon data-icon="inline-start" />
-                        Disconnect
-                      </Button>
-                    </FieldDescription>
-                  </Field>
-                ) : (
+                      <FieldDescription>Leave as latest, or pick another after the first unlock.</FieldDescription>
+                    </Field>
+                  ) : null}
+
                   <Field>
-                    <FieldLabel htmlFor="client-id">Google OAuth client ID</FieldLabel>
-                    <Input
-                      id="client-id"
-                      value={clientId}
-                      onChange={(event) => setClientId(event.target.value)}
-                      placeholder="xxxx.apps.googleusercontent.com"
-                      autoCapitalize="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                    />
-                    <Button type="button" variant="secondary" disabled={!clientId.trim() || busy !== null} onClick={connect}>
-                      {busy === "connect" ? <Spinner data-icon="inline-start" /> : <CloudIcon data-icon="inline-start" />}
-                      Continue with Google
-                    </Button>
+                    <FieldLabel htmlFor="passphrase">Backup passphrase</FieldLabel>
+                    <InputGroup>
+                      <InputGroupAddon>
+                        <KeyRoundIcon />
+                      </InputGroupAddon>
+                      <InputGroupInput
+                        id="passphrase"
+                        type={showPassphrase ? "text" : "password"}
+                        value={passphrase}
+                        onChange={(event) => setPassphrase(event.target.value)}
+                        placeholder="Set in DeskMaster → Cloud Backup"
+                        autoComplete="current-password"
+                        autoFocus
+                      />
+                      <InputGroupAddon align="inline-end">
+                        <InputGroupButton
+                          size="icon-xs"
+                          aria-label={showPassphrase ? "Hide passphrase" : "Show passphrase"}
+                          onClick={() => setShowPassphrase((value) => !value)}
+                        >
+                          {showPassphrase ? <EyeOffIcon /> : <EyeIcon />}
+                        </InputGroupButton>
+                      </InputGroupAddon>
+                    </InputGroup>
                   </Field>
-                )}
 
-                {localFile ? (
-                  <Alert>
-                    <FileUpIcon />
-                    <AlertTitle>Using a file from this device</AlertTitle>
-                    <AlertDescription className="truncate">{localFile.name}</AlertDescription>
-                  </Alert>
-                ) : null}
-
-                <Field data-disabled={!hasSource || undefined}>
-                  <FieldLabel htmlFor="passphrase">Backup passphrase</FieldLabel>
-                  <InputGroup>
-                    <InputGroupAddon>
-                      <KeyRoundIcon />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                      id="passphrase"
-                      type={showPassphrase ? "text" : "password"}
-                      value={passphrase}
-                      onChange={(event) => setPassphrase(event.target.value)}
-                      placeholder="Set in DeskMaster settings"
-                      autoComplete="current-password"
-                      disabled={!hasSource}
-                    />
-                    <InputGroupAddon align="inline-end">
-                      <InputGroupButton
-                        size="icon-xs"
-                        aria-label={showPassphrase ? "Hide passphrase" : "Show passphrase"}
-                        onClick={() => setShowPassphrase((value) => !value)}
-                      >
-                        {showPassphrase ? <EyeOffIcon /> : <EyeIcon />}
-                      </InputGroupButton>
-                    </InputGroupAddon>
-                  </InputGroup>
-                </Field>
-
-                {error ? (
-                  <Alert variant="destructive">
-                    <AlertTitle>{error}</AlertTitle>
-                  </Alert>
-                ) : null}
-              </FieldGroup>
-            </form>
+                  {error ? (
+                    <Alert variant="destructive">
+                      <AlertTitle>{error}</AlertTitle>
+                    </Alert>
+                  ) : null}
+                </FieldGroup>
+              </form>
+            ) : error ? (
+              <Alert variant="destructive" className="mt-3">
+                <AlertTitle>{error}</AlertTitle>
+              </Alert>
+            ) : null}
           </CardContent>
-          <CardFooter className="flex-col gap-3">
-            <Button type="submit" form="unlock" size="lg" className="w-full" disabled={!passphrase || !hasSource || busy !== null}>
-              {busy === "unlock" ? <Spinner data-icon="inline-start" /> : <LockKeyholeIcon data-icon="inline-start" />}
-              {busy === "unlock" ? "Decrypting…" : "Unlock"}
-            </Button>
-            <Separator />
-            <Button type="button" variant="ghost" size="sm" onClick={() => fileInput.current?.click()}>
-              <FileUpIcon data-icon="inline-start" />
-              Open a backup file instead
-            </Button>
-            <input ref={fileInput} type="file" accept=".json,application/json" className="hidden" onChange={openFile} />
-          </CardFooter>
+          {!needsGoogleSecrets && !needsDrive ? (
+            <CardFooter>
+              <Button type="submit" form="unlock" size="lg" className="w-full" disabled={!passphrase.trim() || busy}>
+                {busy ? <Spinner data-icon="inline-start" /> : <LockKeyholeIcon data-icon="inline-start" />}
+                {busy ? "Decrypting…" : "Unlock"}
+              </Button>
+            </CardFooter>
+          ) : null}
         </Card>
         <Credits />
       </div>

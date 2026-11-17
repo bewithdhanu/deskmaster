@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { ClipboardIcon, ClockIcon, LockIcon, MoonIcon, NotebookTextIcon, ShieldCheckIcon, SunIcon } from "lucide-react"
 
 import { Credits, Logo } from "@/components/brand"
@@ -10,6 +10,7 @@ import { UnlockScreen } from "@/components/unlock-screen"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { lock as lockApi } from "@/lib/api"
 import { ago } from "@/lib/format"
 import type { Backup } from "@/lib/types"
 
@@ -29,19 +30,28 @@ export function App() {
   const [data, setData] = useState<Backup | null>(null)
   const [tab, setTab] = useState("codes")
 
+  const lock = useCallback(async () => {
+    setData(null)
+    try {
+      await lockApi()
+    } catch {
+      // Cookie clear is best-effort
+    }
+  }, [])
+
   useEffect(() => {
     if (!data) return
     let timer: ReturnType<typeof setTimeout> | undefined
     const onVisibility = () => {
       clearTimeout(timer)
-      if (document.visibilityState === "hidden") timer = setTimeout(() => setData(null), LOCK_AFTER_MS)
+      if (document.visibilityState === "hidden") timer = setTimeout(() => void lock(), LOCK_AFTER_MS)
     }
     document.addEventListener("visibilitychange", onVisibility)
     return () => {
       document.removeEventListener("visibilitychange", onVisibility)
       clearTimeout(timer)
     }
-  }, [data])
+  }, [data, lock])
 
   if (!data) {
     return (
@@ -71,7 +81,7 @@ export function App() {
               </span>
             </div>
             <ThemeToggle />
-            <Button variant="outline" size="sm" onClick={() => setData(null)}>
+            <Button variant="outline" size="sm" onClick={() => void lock()}>
               <LockIcon data-icon="inline-start" />
               Lock
             </Button>

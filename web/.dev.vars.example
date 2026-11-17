@@ -1,0 +1,11 @@
+# Required — Deploy to Cloudflare prompts for each uncommented key.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+SESSION_SECRET=
+
+# Optional — validate Cf-Access-Jwt-Assertion after you enable Access on the Worker hostname:
+# ACCESS_AUD=
+# ACCESS_TEAM_DOMAIN=
+
+# Local only — never uncomment for Deploy (would disable Access checks):
+# DEV_BYPASS_ACCESS=1

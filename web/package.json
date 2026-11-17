@@ -1,17 +1,34 @@
 {
   "name": "deskmaster-web",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:cf": "wrangler dev",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "node tests/core.test.ts",
-    "deploy": "npm run build && CLOUDFLARE_ACCOUNT_ID=58856e2f53d834ce5cea945b7dd23ee9 wrangler pages deploy dist --project-name deskmaster-web --branch main --commit-dirty=true"
+    "deploy": "npm run build && CLOUDFLARE_ACCOUNT_ID=58856e2f53d834ce5cea945b7dd23ee9 wrangler deploy"
+  },
+  "cloudflare": {
+    "bindings": {
+      "GOOGLE_CLIENT_ID": {
+        "description": "Google Cloud OAuth **Web** client ID (APIs & Services → Credentials). Authorized redirect URI must be `https://<your-worker-host>/api/auth/google/callback`."
+      },
+      "GOOGLE_CLIENT_SECRET": {
+        "description": "OAuth client secret for that same Web client. Used by the Worker to exchange the Drive connect code — never exposed to the browser."
+      },
+      "SESSION_SECRET": {
+        "description": "Long random string for unlock-session cookies. Generate with `openssl rand -hex 32`."
+      },
+      "DATA": {
+        "description": "KV namespace for the Google Drive refresh token and short-lived unlock sessions. Auto-provisioned on Deploy."
+      }
+    }
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -30,6 +47,7 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261117.1",
     "@eslint/js": "^10",
     "@types/node": "^24",
     "@types/react": "^19",
