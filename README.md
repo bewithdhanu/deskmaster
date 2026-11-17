@@ -186,9 +186,9 @@ Sidebar sections (each has its own URL under `#/settings/...`):
 - **Desktop app must be running** — the browser connects to the Electron backend
 
 ### 📱 **Phone Web App**
-- **Read-only access** to your Google Drive backup at [deskmaster-web.pages.dev](https://deskmaster-web.pages.dev): authenticator codes, notes and clipboard history
-- **Decrypted in the browser** with your Cloud Backup passphrase; nothing is sent to a server, and it locks after 3 minutes in the background
-- Source lives in [`web/`](web/README.md)
+- **Self-hosted** Cloudflare Worker + assets ([Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/bewithdhanu/deskmaster/tree/main/web) — prompts for Google OAuth + session secrets)
+- **Cloudflare Access** login; Worker fetches Drive backups and decrypts with your Cloud Backup passphrase (session only — closing the browser locks again)
+- Authenticator codes, notes, and clipboard — setup guide in [`web/`](web/README.md)
 
 ---
 

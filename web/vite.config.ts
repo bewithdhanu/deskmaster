@@ -13,4 +13,10 @@ export default defineConfig({
       "@": resolve(import.meta.dirname, "./src"),
     },
   },
+  // When using `npm run dev` alone, point /api at `wrangler dev` (e.g. --port 8788).
+  server: {
+    proxy: {
+      "/api": { target: "http://127.0.0.1:8788", changeOrigin: true },
+    },
+  },
 })
